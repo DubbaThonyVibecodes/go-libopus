@@ -1,5 +1,3 @@
-// Package celt is a mechanical port of libopus' celt/ directory (fixed-point
-// build). See PORTING.md at the module root for the conventions.
 package celt
 
 // C: celt/arch.h

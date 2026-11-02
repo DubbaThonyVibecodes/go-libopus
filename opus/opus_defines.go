@@ -1,6 +1,3 @@
-// Package opus is a mechanical port of libopus' src/ directory and public
-// headers: the Opus framing layer, encoder/decoder mode switching, the
-// multistream API and the repacketizer. See PORTING.md at the module root.
 package opus
 
 // C: include/opus_defines.h

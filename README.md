@@ -24,11 +24,13 @@ each supported minor has its own branch.
 | `libopus` (root) | – | Idiomatic wrapper |
 | `third_party/opus` | – | Upstream source, git submodule pinned to the ported release |
 | `tools/corpus` | – | Conformance-corpus generator (C oracle driver + Go orchestrator) |
+| `tools/bench` | – | Speed comparison with upstream C (`BENCHMARKS.md`) |
+| `docs/` | – | Usage guide |
 | `testdata/` | – | Committed conformance corpus, clips, RFC 6716 vectors |
 
 ## Status
 
-Tracks libopus **1.1.5** on `master` (fixed-point build); `release/1.0`
+Tracks libopus **1.1.5** on this branch (fixed-point build); `release/1.0`
 tracks 1.0.3. Encoder and decoder (SILK, CELT, hybrid, mode switching with
 redundancy, PLC, in-band FEC, DTX, multistream/surround, repacketizer,
 packet padding, packet helpers, the 1.1 tonality analysis and variable
@@ -39,21 +41,50 @@ outside the standard library and builds with `CGO_ENABLED=0`.
 
 | Branch / tag | libopus |
 |--------------|---------|
-| `master`, `release/1.1`, `v1.1.0` | 1.1.5 |
-| `release/1.0`, `v1.0.0` | 1.0.3 |
+| `release/1.1`, `v1.1.1` | 1.1.5 |
+| `release/1.0`, `v1.0.1` | 1.0.3 |
 
-Quick start:
+## Getting started
+
+```sh
+go get github.com/DubbaThonyVibecodes/go-libopus@v1.1
+```
 
 ```go
-enc, _ := libopus.NewEncoder(48000, 2, libopus.Audio)
-enc.SetBitrate(96000)
-pkt := make([]byte, libopus.MaxPacket)
-n, err := enc.Encode(pcm, pkt)          // pcm: 20 ms of interleaved int16
+import libopus "github.com/DubbaThonyVibecodes/go-libopus"
 
-dec, _ := libopus.NewDecoder(48000, 2)
-out := make([]int16, 5760*2)            // room for 120 ms
-m, err := dec.Decode(pkt[:n], out, false) // m samples per channel
+enc, err := libopus.NewEncoder(48000, 2, libopus.Audio)
+enc.SetBitrate(96000)
+packet := make([]byte, libopus.MaxPacket)
+n, err := enc.Encode(pcm, packet)              // pcm: 20 ms = 960×2 interleaved int16
+
+dec, err := libopus.NewDecoder(48000, 2)
+out := make([]int16, 5760*2)                   // room for the longest packet (120 ms)
+m, err := dec.Decode(packet[:n], out, false)   // m samples per channel
+lost, err := dec.Decode(nil, out[:960*2], false) // conceal a lost 20 ms packet
 ```
+
+## Documentation
+
+* **API reference:** `go doc github.com/DubbaThonyVibecodes/go-libopus` or
+  [pkg.go.dev](https://pkg.go.dev/github.com/DubbaThonyVibecodes/go-libopus@v1.1),
+  with runnable examples (encode/decode, packet loss and FEC, float input,
+  surround, repacketizing).
+  The reference follows the module version, so each `v1.Y` documents
+  exactly what libopus 1.Y offers.
+* **Guide:** [docs/guide.md](docs/guide.md) explains the concepts (sample
+  rates, frames, applications, bitrates), encoding and decoding, packet loss
+  handling, multichannel, packet manipulation, the C-to-Go mapping of the
+  low-level `opus` package, and what is out of scope (containers such as Ogg).
+* **Porting conventions:** [PORTING.md](PORTING.md).
+
+## Performance
+
+[BENCHMARKS.md](BENCHMARKS.md) compares this port with upstream C built from
+the same release, on identical workloads with identical output: the port
+runs at roughly 0.4–0.6× the speed of the equivalent C build (no SIMD),
+and still encodes stereo music tens of times faster than real time on one
+core. Reproduce with `make -C tools/bench && go run ./tools/bench`.
 
 ## Testing
 

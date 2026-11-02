@@ -1,12 +1,3 @@
-// Package libopus is an idiomatic Go wrapper around the mechanical libopus
-// port in the celt, silk and opus sub-packages. It is pure Go (CGO_ENABLED=0).
-//
-// The low-level opus package mirrors the C API one to one (Ctl requests,
-// negative error codes, C naming). This package exposes the same
-// functionality with Go types, errors and methods, without hiding any
-// configuration: everything reachable through opus_encoder_ctl /
-// opus_decoder_ctl has a typed method, and Ctl remains available as an
-// escape hatch.
 package libopus
 
 import (
