@@ -799,7 +799,7 @@ func (st *OpusMSEncoder) multistreamEncodeNative(copy_channel_in opus_copy_chann
 			return OPUS_INTERNAL_ERROR
 		}
 		length = rp.repacketizerOutRangeImpl(0, rp.RepacketizerGetNbFrames(),
-			data, max_data_bytes-int32(tot_size), b2i(s != st.layout.nb_streams-1), b2i(vbr == 0 && s == st.layout.nb_streams-1))
+			data, max_data_bytes-int32(tot_size), b2i(s != st.layout.nb_streams-1), b2i(vbr == 0 && s == st.layout.nb_streams-1), nil, 0)
 		data = data[length:]
 		tot_size += int(length)
 	}

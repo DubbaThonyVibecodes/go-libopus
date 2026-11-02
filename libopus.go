@@ -532,6 +532,12 @@ func (d *Decoder) PacketSamples(packet []byte) (int, error) {
 
 // ---- Packet helpers -------------------------------------------------------
 
+// PacketHasLBRR reports whether the packet carries SILK in-band FEC data
+// (LBRR) for the previous frame (libopus 1.5+).
+func PacketHasLBRR(packet []byte) bool {
+	return opus.PacketHasLbrr(packet, int32(len(packet))) > 0
+}
+
 // PacketBandwidth returns the bandwidth encoded in the packet's TOC byte.
 func PacketBandwidth(packet []byte) (Bandwidth, error) {
 	if len(packet) < 1 {

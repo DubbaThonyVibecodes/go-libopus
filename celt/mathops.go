@@ -101,6 +101,7 @@ func Log2(x int32) int16 {
 
 // K0 = 1, K1 = log(2), K2 = 3-4*log(2), K3 = 3*log(2) - 2
 const (
+	// (C #undefs D0..D3 right after celt_exp2_frac; they are package constants here.)
 	D0 = 16383
 	D1 = 22804
 	D2 = 14819

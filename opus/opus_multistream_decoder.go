@@ -115,7 +115,7 @@ func opus_multistream_packet_validate(data []byte, length int32, nb_streams int,
 			return OPUS_INVALID_PACKET
 		}
 		count = opus_packet_parse_impl(data, length, b2i(s != nb_streams-1), &toc, nil,
-			size[:], nil, &packet_offset)
+			size[:], nil, &packet_offset, nil, nil)
 		if count < 0 {
 			return count
 		}
@@ -173,7 +173,7 @@ func (st *OpusMSDecoder) MultistreamDecodeNative(data []byte, length int32, pcm 
 			return OPUS_INTERNAL_ERROR
 		}
 		packet_offset = 0
-		ret = dec.DecodeNative(data, length, buf, frame_size, decode_fec, b2i(s != st.layout.nb_streams-1), &packet_offset, soft_clip)
+		ret = dec.DecodeNative(data, length, buf, frame_size, decode_fec, b2i(s != st.layout.nb_streams-1), &packet_offset, soft_clip, nil, 0)
 		if do_plc == 0 {
 			data = data[packet_offset:]
 			length -= packet_offset

@@ -17,7 +17,7 @@ import (
 const (
 	maxPacket = 1500
 	maxFrame  = 960 * 6
-	maxCh     = 18
+	maxCh     = 36
 )
 
 func die(format string, a ...any) error { return fmt.Errorf("oracle: "+format, a...) }
@@ -1228,7 +1228,8 @@ func RunInfo(args []string, pkts []testvec.Packet) ([]string, error) {
 			off = payloadOffset
 		}
 		var sb strings.Builder
-		fmt.Fprintf(&sb, "P i=%d len=%d toc=%02x nf=%d bw=%d spf=%d nch=%d ns=%d dns=%d off=%d sizes=", count, ulen, toc, nf, bw, spf, nch, ns, dns, off)
+		lbrr := opus.PacketHasLbrr(data, ulen)
+		fmt.Fprintf(&sb, "P i=%d len=%d toc=%02x nf=%d bw=%d spf=%d nch=%d ns=%d dns=%d lbrr=%d off=%d sizes=", count, ulen, toc, nf, bw, spf, nch, ns, dns, lbrr, off)
 		if nf > 0 {
 			for j := 0; j < nf; j++ {
 				if j > 0 {

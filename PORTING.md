@@ -80,6 +80,17 @@ float API, so the float code that the fixed-point build compiles
   either libm or Go's `math`, so a last-ulp difference is possible in
   theory; the conformance corpus has not shown one.
 
+## Not ported: the DNN features of 1.5+
+
+libopus 1.5 added neural extensions (DRED, deep PLC, OSCE, the loss
+generator) under `dnn/`, all of which are opt-in at configure time
+(`--enable-dred`, `--enable-deep-plc`, `--enable-osce`) and default to off.
+The port follows the default build: the `dnn/` tree is not ported, the
+`#ifdef ENABLE_DRED` / `ENABLE_DEEP_PLC` / `ENABLE_OSCE` blocks are skipped,
+and the public DRED entry points behave as upstream's stubs do in that
+configuration (unimplemented / no-op). The bitstream and the output of the
+default build are unaffected by these features.
+
 ## What is *not* mechanical
 
 * Memory: no `get_size`/`init` split is needed in Go; `opus_encoder_create`

@@ -179,6 +179,7 @@ func (st *OpusEncoder) EncoderInit(Fs int32, channels int, application int) int 
 	st.silk_mode.PacketLossPercentage = 0
 	st.silk_mode.Complexity = 9
 	st.silk_mode.UseInBandFEC = 0
+	st.silk_mode.UseDRED = 0
 	st.silk_mode.UseDTX = 0
 	st.silk_mode.UseCBR = 0
 	st.silk_mode.ReducedDependency = 0
@@ -730,7 +731,7 @@ func compute_frame_energy(pcm []int16, frame_size int, channels int, arch int) i
 
 	// Compute the right shift required in the MAC to avoid an overflow
 	max_shift = int(celt.Ilog2(int32(length)))
-	shift = IMAX(0, (int(celt.Ilog2(sample_max))<<1)+max_shift-28)
+	shift = IMAX(0, (int(celt.Ilog2(1+sample_max))<<1)+max_shift-28)
 
 	// Compute the energy
 	for i = 0; i < length; i++ {
@@ -770,103 +771,6 @@ func decide_dtx_mode(activity int, // indicates if this frame contains speech/mu
 	}
 
 	return 0
-}
-
-// C: static opus_int32 encode_multiframe_packet(OpusEncoder *st, const opus_val16 *pcm, int nb_frames, int frame_size,
-//
-//	unsigned char *data, opus_int32 out_data_bytes, int to_celt, int lsb_depth, int float_api)
-func (st *OpusEncoder) encode_multiframe_packet(pcm []int16,
-	nb_frames int,
-	frame_size int,
-	data []byte,
-	out_data_bytes int32,
-	to_celt int,
-	lsb_depth int,
-	float_api int) int32 {
-	var i int
-	var ret int = 0
-	var bak_mode, bak_bandwidth, bak_channels, bak_to_mono int
-	var rp OpusRepacketizer
-	var max_header_bytes int
-	var bytes_per_frame int32
-	var cbr_bytes int32
-	var repacketize_len int32
-	var tmp_len int
-
-	// Worst cases:
-	// 2 frames: Code 2 with different compressed sizes
-	// >2 frames: Code 3 VBR
-	if nb_frames == 2 {
-		max_header_bytes = 3
-	} else {
-		max_header_bytes = 2 + (nb_frames-1)*2
-	}
-
-	if st.use_vbr != 0 || st.user_bitrate_bps == OPUS_BITRATE_MAX {
-		repacketize_len = out_data_bytes
-	} else {
-		cbr_bytes = 3 * st.bitrate_bps / (3 * 8 * st.Fs / int32(frame_size*nb_frames))
-		repacketize_len = IMIN(cbr_bytes, out_data_bytes)
-	}
-	bytes_per_frame = IMIN(1276, 1+(repacketize_len-int32(max_header_bytes))/int32(nb_frames))
-
-	// The C ALLOC would take a negative size here and opus_encode_native
-	// then rejects the buffer size; Go's make would panic, so clamp.
-	tmp_data := make([]byte, IMAX(0, nb_frames*int(bytes_per_frame)))
-	rp.RepacketizerInit()
-
-	bak_mode = st.user_forced_mode
-	bak_bandwidth = st.user_bandwidth
-	bak_channels = st.force_channels
-
-	st.user_forced_mode = st.mode
-	st.user_bandwidth = st.bandwidth
-	st.force_channels = st.stream_channels
-
-	bak_to_mono = st.silk_mode.ToMono
-	if bak_to_mono != 0 {
-		st.force_channels = 1
-	} else {
-		st.prev_channels = st.stream_channels
-	}
-
-	for i = 0; i < nb_frames; i++ {
-		st.silk_mode.ToMono = 0
-		st.nonfinal_frame = b2i(i < (nb_frames - 1))
-
-		// When switching from SILK/Hybrid to CELT, only ask for a switch at the last frame
-		if to_celt != 0 && i == nb_frames-1 {
-			st.user_forced_mode = MODE_CELT_ONLY
-		}
-
-		tmp_len = int(st.EncodeNative(pcm[i*(st.channels*frame_size):], frame_size,
-			tmp_data[i*int(bytes_per_frame):], bytes_per_frame, lsb_depth, nil, 0, 0, 0, 0,
-			nil, float_api))
-
-		if tmp_len < 0 {
-			return OPUS_INTERNAL_ERROR
-		}
-
-		ret = rp.RepacketizerCat(tmp_data[i*int(bytes_per_frame):], int32(tmp_len))
-
-		if ret < 0 {
-			return OPUS_INTERNAL_ERROR
-		}
-	}
-
-	ret32 := rp.repacketizerOutRangeImpl(0, nb_frames, data, repacketize_len, 0, b2i(st.use_vbr == 0))
-
-	if ret32 < 0 {
-		return OPUS_INTERNAL_ERROR
-	}
-
-	// Discard configs that were forced locally for the purpose of repacketization
-	st.user_forced_mode = bak_mode
-	st.user_bandwidth = bak_bandwidth
-	st.force_channels = bak_channels
-	st.silk_mode.ToMono = bak_to_mono
-
-	return ret32
 }
 
 // C: static int compute_redundancy_bytes(opus_int32 max_data_bytes, opus_int32 bitrate_bps, int frame_rate, int channels)
@@ -911,34 +815,23 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	var celt_enc *celt.CELTEncoder
 	var i int
 	var ret int = 0
-	var nBytes int32
-	var enc celt.EcEnc
-	var bytes_target int
 	var prefill int = 0
-	var start_band int = 0
 	var redundancy int = 0
-	var redundancy_bytes int = 0 // Number of bytes to use for redundancy frame
 	var celt_to_silk int = 0
-	var nb_compr_bytes int
 	var to_celt int = 0
-	var redundant_rng uint32 = 0
-	var cutoff_Hz, hp_freq_smth1 int32
 	var voice_est int // Probability of voice in Q7
 	var equiv_rate int32
-	var delay_compensation int
 	var frame_rate int
 	var max_rate int32 // Max bitrate we're allowed to use
 	var curr_bandwidth int
-	var HB_gain int16
 	var max_data_bytes int32 // Max number of bytes we're allowed to use
-	var total_buffer int
+	var cbr_bytes int32 = -1
 	var stereo_width int16
 	var celt_mode *celt.CELTMode
 	var analysis_info celt.AnalysisInfo
 	var analysis_read_pos_bak int = -1
 	var analysis_read_subframe_bak int = -1
 	var is_silence int = 0
-	var activity int = silk.VAD_NO_DECISION
 
 	max_data_bytes = IMIN(1276, out_data_bytes)
 
@@ -954,11 +847,6 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 
 	silk_enc = &st.silk_enc
 	celt_enc = &st.celt_enc
-	if st.application == OPUS_APPLICATION_RESTRICTED_LOWDELAY {
-		delay_compensation = 0
-	} else {
-		delay_compensation = st.delay_compensation
-	}
 
 	lsb_depth = IMIN(lsb_depth, st.lsb_depth)
 
@@ -985,17 +873,6 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	// Otherwise, preserve voice_ratio from the last non-silent frame
 	if is_silence == 0 {
 		st.voice_ratio = -1
-	}
-
-	if is_silence != 0 {
-		activity = b2i(is_silence == 0)
-	} else if analysis_info.Valid != 0 {
-		activity = b2i(analysis_info.Activity_probability >= silk.DTX_ACTIVITY_THRESHOLD)
-		if activity == 0 {
-			// Mark as active if this noise frame is sufficiently loud
-			var noise_energy int32 = compute_frame_energy(pcm, frame_size, st.channels, st.arch)
-			activity = b2i(float32(st.peak_signal_energy) < float32(PSEUDO_SNR_THRESHOLD*float32(noise_energy)))
-		}
 	}
 
 	st.detected_bandwidth = 0
@@ -1032,19 +909,17 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	} else {
 		stereo_width = 0
 	}
-	total_buffer = delay_compensation
 	st.bitrate_bps = st.user_bitrate_to_bitrate(frame_size, int(max_data_bytes))
 
 	frame_rate = int(st.Fs) / frame_size
 	if st.use_vbr == 0 {
-		var cbrBytes int
 		// Multiply by 12 to make sure the division is exact.
 		var frame_rate12 int = 12 * int(st.Fs) / frame_size
 		// We need to make sure that "int" values always fit in 16 bits.
-		cbrBytes = int(IMIN((12*st.bitrate_bps/8+int32(frame_rate12)/2)/int32(frame_rate12), max_data_bytes))
-		st.bitrate_bps = int32(cbrBytes) * int32(frame_rate12) * 8 / 12
+		cbr_bytes = IMIN((12*st.bitrate_bps/8+int32(frame_rate12)/2)/int32(frame_rate12), max_data_bytes)
+		st.bitrate_bps = cbr_bytes * int32(frame_rate12) * 8 / 12
 		// Make sure we provide at least one byte to avoid failing.
-		max_data_bytes = int32(IMAX(1, cbrBytes))
+		max_data_bytes = IMAX(1, cbr_bytes)
 	}
 	if max_data_bytes < 3 || st.bitrate_bps < int32(3*frame_rate*8) ||
 		(frame_rate < 50 && (max_data_bytes*int32(frame_rate) < 300 || st.bitrate_bps < 2400)) {
@@ -1404,6 +1279,14 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	if (frame_size > int(st.Fs/50) && (st.mode != MODE_SILK_ONLY)) || frame_size > 3*int(st.Fs)/50 {
 		var enc_frame_size int
 		var nb_frames int
+		var rp OpusRepacketizer
+		var max_header_bytes int
+		var repacketize_len int32
+		var max_len_sum int32
+		var tot_size int32 = 0
+		var curr_data []byte
+		var tmp_len int
+		var dtx_count int = 0
 
 		if st.mode == MODE_SILK_ONLY {
 			if frame_size == 2*int(st.Fs)/25 { // 80 ms -> 2x 40 ms
@@ -1420,14 +1303,155 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 		nb_frames = frame_size / enc_frame_size
 
 		if analysis_read_pos_bak != -1 {
+			// Reset analysis position to the beginning of the first frame so we
+			// can use it one frame at a time.
 			st.analysis.read_pos = analysis_read_pos_bak
 			st.analysis.read_subframe = analysis_read_subframe_bak
 		}
 
-		ret32 := st.encode_multiframe_packet(pcm, nb_frames, enc_frame_size, data,
-			out_data_bytes, to_celt, lsb_depth, float_api)
+		// Worst cases:
+		// 2 frames: Code 2 with different compressed sizes
+		// >2 frames: Code 3 VBR
+		if nb_frames == 2 {
+			max_header_bytes = 3
+		} else {
+			max_header_bytes = 2 + (nb_frames-1)*2
+		}
 
+		if st.use_vbr != 0 || st.user_bitrate_bps == OPUS_BITRATE_MAX {
+			repacketize_len = out_data_bytes
+		} else {
+			celt.Assert(cbr_bytes >= 0)
+			repacketize_len = IMIN(cbr_bytes, out_data_bytes)
+		}
+		max_len_sum = int32(nb_frames) + repacketize_len - int32(max_header_bytes)
+
+		tmp_data := make([]byte, max_len_sum)
+		curr_data = tmp_data
+		rp.RepacketizerInit()
+
+		bak_to_mono := st.silk_mode.ToMono
+		if bak_to_mono != 0 {
+			st.force_channels = 1
+		} else {
+			st.prev_channels = st.stream_channels
+		}
+
+		for i = 0; i < nb_frames; i++ {
+			var first_frame int
+			var frame_to_celt int
+			var frame_redundancy int
+			var curr_max int32
+			// Attempt DRED encoding until we have a non-DTX frame. In case of DTX refresh,
+			// that allows for DRED not to be in the first frame.
+			first_frame = b2i((i == 0) || (i == dtx_count))
+			st.silk_mode.ToMono = 0
+			st.nonfinal_frame = b2i(i < (nb_frames - 1))
+
+			// When switching from SILK/Hybrid to CELT, only ask for a switch at the last frame
+			frame_to_celt = b2i(to_celt != 0 && i == nb_frames-1)
+			frame_redundancy = b2i(redundancy != 0 && (frame_to_celt != 0 || (to_celt == 0 && i == 0)))
+
+			curr_max = IMIN(3*st.bitrate_bps/(3*8*st.Fs/int32(enc_frame_size)), max_len_sum/int32(nb_frames))
+			curr_max = IMIN(max_len_sum-tot_size, curr_max)
+			if analysis_read_pos_bak != -1 {
+				is_silence = IsDigitalSilence(pcm, frame_size, st.channels, lsb_depth)
+				// Get analysis for current frame.
+				st.analysis.TonalityGetInfo(&analysis_info, enc_frame_size)
+			}
+
+			tmp_len = int(st.opus_encode_frame_native(pcm[i*(st.channels*enc_frame_size):], enc_frame_size, curr_data, curr_max, float_api, first_frame,
+				&analysis_info,
+				is_silence,
+				frame_redundancy, celt_to_silk, prefill,
+				equiv_rate, frame_to_celt))
+			if tmp_len < 0 {
+				return OPUS_INTERNAL_ERROR
+			} else if tmp_len == 1 {
+				dtx_count++
+			}
+			ret = rp.RepacketizerCat(curr_data, int32(tmp_len))
+
+			if ret < 0 {
+				return OPUS_INTERNAL_ERROR
+			}
+			tot_size += int32(tmp_len)
+			curr_data = curr_data[tmp_len:]
+		}
+		ret32 := rp.repacketizerOutRangeImpl(0, nb_frames, data, repacketize_len, 0, b2i(st.use_vbr == 0 && (dtx_count != nb_frames)), nil, 0)
+		if ret32 < 0 {
+			ret32 = OPUS_INTERNAL_ERROR
+		}
+		st.silk_mode.ToMono = bak_to_mono
 		return ret32
+	} else {
+		ret32 := st.opus_encode_frame_native(pcm, frame_size, data, max_data_bytes, float_api, 1,
+			&analysis_info,
+			is_silence,
+			redundancy, celt_to_silk, prefill,
+			equiv_rate, to_celt)
+		return ret32
+	}
+}
+
+// C: static opus_int32 opus_encode_frame_native(OpusEncoder *st, const opus_val16 *pcm, int frame_size,
+//
+//	unsigned char *data, opus_int32 max_data_bytes,
+//	int float_api, int first_frame,
+//	AnalysisInfo *analysis_info, int is_silence,
+//	int redundancy, int celt_to_silk, int prefill,
+//	opus_int32 equiv_rate, int to_celt)
+func (st *OpusEncoder) opus_encode_frame_native(pcm []int16, frame_size int,
+	data []byte, max_data_bytes int32,
+	float_api int, first_frame int,
+	analysis_info *celt.AnalysisInfo, is_silence int,
+	redundancy int, celt_to_silk int, prefill int,
+	equiv_rate int32, to_celt int) int32 {
+	var silk_enc *silk.Encoder
+	var celt_enc *celt.CELTEncoder
+	var celt_mode *celt.CELTMode
+	var i int
+	var ret int = 0
+	var nBytes int32
+	var enc celt.EcEnc
+	var bytes_target int
+	var start_band int = 0
+	var redundancy_bytes int = 0 // Number of bytes to use for redundancy frame
+	var nb_compr_bytes int
+	var redundant_rng uint32 = 0
+	var cutoff_Hz int32
+	var hp_freq_smth1 int32
+	var HB_gain int16
+	var apply_padding int
+	var frame_rate int
+	var curr_bandwidth int
+	var delay_compensation int
+	var total_buffer int
+	var activity int = silk.VAD_NO_DECISION
+
+	st.rangeFinal = 0
+	silk_enc = &st.silk_enc
+	celt_enc = &st.celt_enc
+	celt_enc.Ctl(celt.CELT_GET_MODE_REQUEST, &celt_mode)
+	curr_bandwidth = st.bandwidth
+	if st.application == OPUS_APPLICATION_RESTRICTED_LOWDELAY {
+		delay_compensation = 0
+	} else {
+		delay_compensation = st.delay_compensation
+	}
+	total_buffer = delay_compensation
+
+	frame_rate = int(st.Fs) / frame_size
+
+	if is_silence != 0 {
+		activity = b2i(is_silence == 0)
+	} else if analysis_info.Valid != 0 {
+		activity = b2i(analysis_info.Activity_probability >= silk.DTX_ACTIVITY_THRESHOLD)
+		if activity == 0 {
+			// Mark as active if this noise frame is sufficiently loud
+			var noise_energy int32 = compute_frame_energy(pcm, frame_size, st.channels, st.arch)
+			activity = b2i(float32(st.peak_signal_energy) < float32(PSEUDO_SNR_THRESHOLD*float32(noise_energy)))
+		}
 	}
 
 	// For the first frame at a new SILK bandwidth
@@ -1435,7 +1459,7 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 		redundancy = 1
 		celt_to_silk = 1
 		st.silk_bw_switch = 0
-		// Do a prefill without reseting the sampling rate control.
+		// Do a prefill without resetting the sampling rate control.
 		prefill = 2
 	}
 
@@ -1481,6 +1505,8 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	} else {
 		dc_reject(pcm, 3, pcm_buf[total_buffer*st.channels:], st.hp_mem[:], frame_size, st.channels, st.Fs)
 	}
+	// FIXED_POINT: the float_api soft-clip block is not compiled; (void)float_api
+	_ = float_api
 
 	// SILK processing
 	HB_gain = celt.Q15ONE
@@ -1564,7 +1590,7 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 
 		st.silk_mode.MaxInternalSampleRate = 16000
 		if st.mode == MODE_SILK_ONLY {
-			var effective_max_rate int32 = max_rate
+			var effective_max_rate int32 = int32(frame_rate) * max_data_bytes * 8
 			if frame_rate > 50 {
 				effective_max_rate = effective_max_rate * 2 / 3
 			}
@@ -1592,8 +1618,14 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 			}
 		}
 		if st.silk_mode.UseCBR != 0 {
+			// When we're in CBR mode, but we have non-SILK data to encode, switch SILK to VBR with cap to
+			// save on complexity. Any variations will be absorbed by CELT and/or DRED and we can still
+			// produce a constant bitrate without wasting bits.
 			if st.mode == MODE_HYBRID {
-				st.silk_mode.MaxBits = IMIN(st.silk_mode.MaxBits, int(st.silk_mode.BitRate*int32(frame_size)/st.Fs))
+				// Allow SILK to steal up to 25% of the remaining bits
+				var other_bits int16 = int16(IMAX(0, st.silk_mode.MaxBits-int(st.silk_mode.BitRate*int32(frame_size)/st.Fs)))
+				st.silk_mode.MaxBits = IMAX(0, st.silk_mode.MaxBits-int(other_bits)*3/4)
+				st.silk_mode.UseCBR = 0
 			}
 		} else {
 			// Constrained VBR.
@@ -1683,25 +1715,11 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	celt_enc.Ctl(celt.OPUS_SET_BITRATE_REQUEST, int32(OPUS_BITRATE_MAX))
 	if st.mode != MODE_SILK_ONLY {
 		var celt_pred int32 = 2
-		celt_enc.Ctl(celt.OPUS_SET_VBR_REQUEST, int32(0))
 		// We may still decide to disable prediction later
 		if st.silk_mode.ReducedDependency != 0 {
 			celt_pred = 0
 		}
 		celt_enc.Ctl(celt.CELT_SET_PREDICTION_REQUEST, celt_pred)
-
-		if st.mode == MODE_HYBRID {
-			if st.use_vbr != 0 {
-				celt_enc.Ctl(celt.OPUS_SET_BITRATE_REQUEST, st.bitrate_bps-st.silk_mode.BitRate)
-				celt_enc.Ctl(celt.OPUS_SET_VBR_CONSTRAINT_REQUEST, int32(0))
-			}
-		} else {
-			if st.use_vbr != 0 {
-				celt_enc.Ctl(celt.OPUS_SET_VBR_REQUEST, int32(1))
-				celt_enc.Ctl(celt.OPUS_SET_VBR_CONSTRAINT_REQUEST, int32(st.vbr_constraint))
-				celt_enc.Ctl(celt.OPUS_SET_BITRATE_REQUEST, st.bitrate_bps)
-			}
-		}
 	}
 
 	tmp_prefill := make([]int16, st.channels*int(st.Fs)/400)
@@ -1800,7 +1818,7 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	}
 
 	if redundancy != 0 || st.mode != MODE_SILK_ONLY {
-		celt_enc.Ctl(celt.CELT_SET_ANALYSIS_REQUEST, &analysis_info)
+		celt_enc.Ctl(celt.CELT_SET_ANALYSIS_REQUEST, analysis_info)
 	}
 	if st.mode == MODE_HYBRID {
 		var info celt.SILKInfo
@@ -1826,6 +1844,19 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	celt_enc.Ctl(celt.CELT_SET_START_BAND_REQUEST, int32(start_band))
 
 	if st.mode != MODE_SILK_ONLY {
+		celt_enc.Ctl(celt.OPUS_SET_VBR_REQUEST, int32(st.use_vbr))
+		if st.mode == MODE_HYBRID {
+			if st.use_vbr != 0 {
+				celt_enc.Ctl(celt.OPUS_SET_BITRATE_REQUEST, st.bitrate_bps-st.silk_mode.BitRate)
+				celt_enc.Ctl(celt.OPUS_SET_VBR_CONSTRAINT_REQUEST, int32(0))
+			}
+		} else {
+			if st.use_vbr != 0 {
+				celt_enc.Ctl(celt.OPUS_SET_VBR_REQUEST, int32(1))
+				celt_enc.Ctl(celt.OPUS_SET_VBR_CONSTRAINT_REQUEST, int32(st.vbr_constraint))
+				celt_enc.Ctl(celt.OPUS_SET_BITRATE_REQUEST, st.bitrate_bps)
+			}
+		}
 		if st.mode != st.prev_mode && st.prev_mode > 0 {
 			var dummy [2]byte
 			celt_enc.Ctl(celt.OPUS_RESET_STATE)
@@ -1836,19 +1867,14 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 		}
 		// If false, we already busted the budget and we'll end up with a "PLC frame"
 		if enc.Tell() <= 8*nb_compr_bytes {
-			// Set the bitrate again if it was overridden in the redundancy code above
-			if redundancy != 0 && celt_to_silk != 0 && st.mode == MODE_HYBRID && st.use_vbr != 0 {
-				celt_enc.Ctl(celt.OPUS_SET_BITRATE_REQUEST, st.bitrate_bps-st.silk_mode.BitRate)
-			}
-			celt_enc.Ctl(celt.OPUS_SET_VBR_REQUEST, int32(st.use_vbr))
 			ret = celt_enc.EncodeWithEc(pcm_buf, frame_size, nil, nb_compr_bytes, &enc)
 			if ret < 0 {
 				return OPUS_INTERNAL_ERROR
 			}
 			// Put CELT->SILK redundancy data in the right place.
-			if redundancy != 0 && celt_to_silk != 0 && st.mode == MODE_HYBRID && st.use_vbr != 0 {
+			if redundancy != 0 && celt_to_silk != 0 && st.mode == MODE_HYBRID && nb_compr_bytes != ret {
 				copy(payload[ret:][:redundancy_bytes], payload[nb_compr_bytes:][:redundancy_bytes])
-				nb_compr_bytes = nb_compr_bytes + redundancy_bytes
+				nb_compr_bytes = ret + redundancy_bytes
 			}
 		}
 	}
@@ -1931,7 +1957,10 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	}
 	// Count ToC and redundancy
 	ret += 1 + redundancy_bytes
-	if st.use_vbr == 0 {
+	apply_padding = b2i(st.use_vbr == 0)
+	// ENABLE_DRED not defined: (void)first_frame
+	_ = first_frame
+	if apply_padding != 0 {
 		if PacketPad(data, int32(ret), max_data_bytes) != OPUS_OK {
 			return OPUS_INTERNAL_ERROR
 		}

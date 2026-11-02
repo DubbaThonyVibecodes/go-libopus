@@ -649,20 +649,20 @@ var layer2_bias = [2]int8{
 	14, 117,
 }
 
-var layer0 = DenseLayer{
+var layer0 = AnalysisDenseLayer{
 	layer0_bias[:],
 	layer0_weights[:],
 	25, 32, 0,
 }
 
-var layer1 = GRULayer{
+var layer1 = AnalysisGRULayer{
 	layer1_bias[:],
 	layer1_weights[:],
 	layer1_recur_weights[:],
 	32, 24,
 }
 
-var layer2 = DenseLayer{
+var layer2 = AnalysisDenseLayer{
 	layer2_bias[:],
 	layer2_weights[:],
 	24, 2, 1,

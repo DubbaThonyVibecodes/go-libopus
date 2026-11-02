@@ -63,7 +63,14 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 	var gain_lock = [MAX_NB_SUBFR]int{0}
 	var best_gain_mult [MAX_NB_SUBFR]int16
 	var best_sum [MAX_NB_SUBFR]int
+	var bits_margin int
 
+	/* For CBR, 5 bits below budget is close enough. For VBR, allow up to 25% below the cap if we initially busted the budget. */
+	if useCBR != 0 {
+		bits_margin = 5
+	} else {
+		bits_margin = maxBits / 4
+	}
 	/* This is totally unnecessary but many compilers (including gcc) are too dumb to realise it */
 	LastGainIndex_copy2, nBits_lower, nBits_upper, gainMult_lower, gainMult_upper = 0, 0, 0, 0, 0
 
@@ -242,7 +249,7 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 					gainMult_upper = int32(gainMult_Q8)
 					gainsID_upper = gainsID
 				}
-			} else if nBits < int32(maxBits)-5 {
+			} else if nBits < int32(maxBits-bits_margin) {
 				found_lower = 1
 				nBits_lower = nBits
 				gainMult_lower = int32(gainMult_Q8)
@@ -256,7 +263,7 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 					LastGainIndex_copy2 = psEnc.sShape.LastGainIndex
 				}
 			} else {
-				/* Within 5 bits of budget: close enough */
+				/* Close enough */
 				break
 			}
 
@@ -278,17 +285,10 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 			if (found_lower & found_upper) == 0 {
 				/* Adjust gain according to high-rate rate/distortion curve */
 				if nBits > int32(maxBits) {
-					if gainMult_Q8 < 16384 {
-						gainMult_Q8 *= 2
-					} else {
-						gainMult_Q8 = 32767
-					}
+					gainMult_Q8 = int16(min_32(1024, int32(gainMult_Q8)*3/2))
 				} else {
-					var gain_factor_Q16 int32
-					gain_factor_Q16 = Log2lin(LSHIFT(nBits-int32(maxBits), 7)/int32(psEnc.sCmn.frame_length) + SILK_FIX_CONST(16.0, 7))
-					gainMult_Q8 = int16(SMULWB(gain_factor_Q16, gainMult_Q8))
+					gainMult_Q8 = int16(max_32(64, int32(gainMult_Q8)*4/5))
 				}
-
 			} else {
 				/* Adjust gain by interpolating */
 				gainMult_Q8 = int16(gainMult_lower + DIV32_16(MUL(gainMult_upper-gainMult_lower, int32(maxBits)-nBits_lower), nBits_upper-nBits_lower))

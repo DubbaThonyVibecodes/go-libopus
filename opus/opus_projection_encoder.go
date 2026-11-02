@@ -136,6 +136,16 @@ func ProjectionAmbisonicsEncoderGetSize(channels int, mapping_family int) int32 
 		mixing_matrix_cols = MappingMatrixToaMixing.cols
 		demixing_matrix_rows = MappingMatrixToaDemixing.rows
 		demixing_matrix_cols = MappingMatrixToaDemixing.cols
+	} else if order_plus_one == 5 {
+		mixing_matrix_rows = MappingMatrixFourthoaMixing.rows
+		mixing_matrix_cols = MappingMatrixFourthoaMixing.cols
+		demixing_matrix_rows = MappingMatrixFourthoaDemixing.rows
+		demixing_matrix_cols = MappingMatrixFourthoaDemixing.cols
+	} else if order_plus_one == 6 {
+		mixing_matrix_rows = MappingMatrixFifthoaMixing.rows
+		mixing_matrix_cols = MappingMatrixFifthoaMixing.cols
+		demixing_matrix_rows = MappingMatrixFifthoaDemixing.rows
+		demixing_matrix_cols = MappingMatrixFifthoaDemixing.cols
 	} else {
 		return 0
 	}
@@ -202,6 +212,16 @@ func (st *OpusProjectionEncoder) ProjectionAmbisonicsEncoderInit(Fs int32,
 				MappingMatrixToaMixing.cols, MappingMatrixToaMixing.gain,
 				MappingMatrixToaMixingData[:],
 				int32(len(MappingMatrixToaMixingData)*2))
+		} else if order_plus_one == 5 {
+			mixing_matrix.MappingMatrixInit(MappingMatrixFourthoaMixing.rows,
+				MappingMatrixFourthoaMixing.cols, MappingMatrixFourthoaMixing.gain,
+				MappingMatrixFourthoaMixingData[:],
+				int32(len(MappingMatrixFourthoaMixingData)*2))
+		} else if order_plus_one == 6 {
+			mixing_matrix.MappingMatrixInit(MappingMatrixFifthoaMixing.rows,
+				MappingMatrixFifthoaMixing.cols, MappingMatrixFifthoaMixing.gain,
+				MappingMatrixFifthoaMixingData[:],
+				int32(len(MappingMatrixFifthoaMixingData)*2))
 		} else {
 			return OPUS_BAD_ARG
 		}
@@ -229,6 +249,16 @@ func (st *OpusProjectionEncoder) ProjectionAmbisonicsEncoderInit(Fs int32,
 				MappingMatrixToaDemixing.cols, MappingMatrixToaDemixing.gain,
 				MappingMatrixToaDemixingData[:],
 				int32(len(MappingMatrixToaDemixingData)*2))
+		} else if order_plus_one == 5 {
+			demixing_matrix.MappingMatrixInit(MappingMatrixFourthoaDemixing.rows,
+				MappingMatrixFourthoaDemixing.cols, MappingMatrixFourthoaDemixing.gain,
+				MappingMatrixFourthoaDemixingData[:],
+				int32(len(MappingMatrixFourthoaDemixingData)*2))
+		} else if order_plus_one == 6 {
+			demixing_matrix.MappingMatrixInit(MappingMatrixFifthoaDemixing.rows,
+				MappingMatrixFifthoaDemixing.cols, MappingMatrixFifthoaDemixing.gain,
+				MappingMatrixFifthoaDemixingData[:],
+				int32(len(MappingMatrixFifthoaDemixingData)*2))
 		} else {
 			return OPUS_BAD_ARG
 		}

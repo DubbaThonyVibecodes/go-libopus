@@ -368,12 +368,14 @@ func (psDec *DecoderState) PLCGlueFrames(frame []int16, length int) {
 				slope_Q16 = DIV32_16((int32(1)<<16)-gain_Q16, length)
 				/* Make slope 4x steeper to avoid missing onsets after DTX */
 				slope_Q16 = LSHIFT(slope_Q16, 2)
-
-				for i = 0; i < length; i++ {
-					frame[i] = int16(SMULWB(gain_Q16, frame[i]))
-					gain_Q16 += slope_Q16
-					if gain_Q16 > int32(1)<<16 {
-						break
+				/* C: #ifdef ENABLE_DEEP_PLC if ( psDec->sPLC.fs_kHz != 16 ) #endif -- unconditional here */
+				{
+					for i = 0; i < length; i++ {
+						frame[i] = int16(SMULWB(gain_Q16, frame[i]))
+						gain_Q16 += slope_Q16
+						if gain_Q16 > int32(1)<<16 {
+							break
+						}
 					}
 				}
 			}

@@ -437,6 +437,10 @@ func cases() []encCase {
 	for _, ch := range []int{4, 9, 16} {
 		ms(fmt.Sprintf("projection_fam3_%dch", ch), synth("sweep", 48000, ch), fmt.Sprintf("--app audio --bitrate %d --projection", 24000*ch), "--projection", loss(10, 60+ch), asFloat)
 	}
+	// libopus 1.5: fourth- and fifth-order ambisonics in the projection encoder
+	ms("projection_fam3_25ch", synth("multitone", 48000, 25), "--app audio --bitrate 400000 --projection", "--projection", loss(10, 85))
+	ms("projection_fam3_36ch", synth("bursts", 48000, 36), "--app audio --bitrate 576000 --framesize 10 --projection", "--projection")
+	ms("ambisonics_fam2_27ch", synth("pink", 48000, 27), "--app audio --bitrate 432000 --family 2", amb(27))
 	ms("projection_fam3_4ch_fs40_cbr", synth("bursts", 48000, 4), "--app audio --bitrate 128000 --cbr --framesize 40 --projection", "--projection")
 	ms("projection_fam3_9ch_lowdelay", synth("impulses", 48000, 9), "--app lowdelay --bitrate 256000 --projection", "--projection")
 

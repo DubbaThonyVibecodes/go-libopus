@@ -816,13 +816,13 @@ func median_of_3(x []int16) int16 {
 	return t0
 }
 
-// C: static opus_val16 dynalloc_analysis(const opus_val16 *bandLogE, const opus_val16 *bandLogE2,
+// C: static opus_val16 dynalloc_analysis(const opus_val16 *bandLogE, const opus_val16 *bandLogE2, const opus_val16 *oldBandE,
 //
 //	int nbEBands, int start, int end, int C, int *offsets, int lsb_depth, const opus_int16 *logN,
 //	int isTransient, int vbr, int constrained_vbr, const opus_int16 *eBands, int LM,
 //	int effectiveBytes, opus_int32 *tot_boost_, int lfe, opus_val16 *surround_dynalloc,
 //	AnalysisInfo *analysis, int *importance, int *spread_weight)
-func dynalloc_analysis(bandLogE, bandLogE2 []int16,
+func dynalloc_analysis(bandLogE, bandLogE2, oldBandE []int16,
 	nbEBands, start, end, C int, offsets []int, lsb_depth int, logN []int16,
 	isTransient, vbr, constrained_vbr int, eBands []int16, LM int,
 	effectiveBytes int, tot_boost_ *int32, lfe int, surround_dynalloc []int16,
@@ -832,6 +832,7 @@ func dynalloc_analysis(bandLogE, bandLogE2 []int16,
 	var maxDepth int16
 	follower := make([]int16, C*nbEBands)
 	noise_floor := make([]int16, C*nbEBands)
+	bandLogE3 := make([]int16, nbEBands)
 	clear(offsets[:nbEBands])
 	// Dynamic allocation code
 	maxDepth = -QCONST16(31.9, DB_SHIFT)
@@ -885,27 +886,39 @@ func dynalloc_analysis(bandLogE, bandLogE2 []int16,
 		//    printf("%d ", spread_weight[i]);
 		// printf("\n");
 	}
-	// Make sure that dynamic allocation can't make us bust the budget
-	if effectiveBytes > 50 && LM >= 1 && lfe == 0 {
+	// Make sure that dynamic allocation can't make us bust the budget.
+	// We enable the feature starting at 24 kb/s for 20-ms frames
+	// and 96 kb/s for 2.5 ms frames.
+	if effectiveBytes >= (30+5*LM) && lfe == 0 {
 		var last int = 0
 		c = 0
 		for {
 			var offset int16
 			var tmp int16
 			var f []int16
+			copy(bandLogE3[:end], bandLogE2[c*nbEBands:c*nbEBands+end])
+			if LM == 0 {
+				// For 2.5 ms frames, the first 8 bands have just one bin, so the
+				// energy is highly unreliable (high variance). For that reason,
+				// we take the max with the previous energy so that at least 2 bins
+				// are getting used.
+				for i = 0; i < IMIN(8, end); i++ {
+					bandLogE3[i] = MAX16(bandLogE2[c*nbEBands+i], oldBandE[c*nbEBands+i])
+				}
+			}
 			f = follower[c*nbEBands:]
-			f[0] = bandLogE2[c*nbEBands]
+			f[0] = bandLogE3[0]
 			for i = 1; i < end; i++ {
 				// The last band to be at least 3 dB higher than the previous one
 				// is the last we'll consider. Otherwise, we run into problems on
 				// bandlimited signals.
-				if bandLogE2[c*nbEBands+i] > bandLogE2[c*nbEBands+i-1]+QCONST16(.5, DB_SHIFT) {
+				if bandLogE3[i] > bandLogE3[i-1]+QCONST16(.5, DB_SHIFT) {
 					last = i
 				}
-				f[i] = MIN16(f[i-1]+QCONST16(1.5, DB_SHIFT), bandLogE2[c*nbEBands+i])
+				f[i] = MIN16(f[i-1]+QCONST16(1.5, DB_SHIFT), bandLogE3[i])
 			}
 			for i = last - 1; i >= 0; i-- {
-				f[i] = MIN16(f[i], MIN16(f[i+1]+QCONST16(2.0, DB_SHIFT), bandLogE2[c*nbEBands+i]))
+				f[i] = MIN16(f[i], MIN16(f[i+1]+QCONST16(2.0, DB_SHIFT), bandLogE3[i]))
 			}
 
 			// Combine with a median filter to avoid dynalloc triggering unnecessarily.
@@ -913,12 +926,12 @@ func dynalloc_analysis(bandLogE, bandLogE2 []int16,
 			// reduces the impact of the median filter and makes dynalloc use more bits.
 			offset = QCONST16(1.0, DB_SHIFT)
 			for i = 2; i < end-2; i++ {
-				f[i] = MAX16(f[i], median_of_5(bandLogE2[c*nbEBands+i-2:])-offset)
+				f[i] = MAX16(f[i], median_of_5(bandLogE3[i-2:])-offset)
 			}
-			tmp = median_of_3(bandLogE2[c*nbEBands:]) - offset
+			tmp = median_of_3(bandLogE3[0:]) - offset
 			f[0] = MAX16(f[0], tmp)
 			f[1] = MAX16(f[1], tmp)
-			tmp = median_of_3(bandLogE2[c*nbEBands+end-3:]) - offset
+			tmp = median_of_3(bandLogE3[end-3:]) - offset
 			f[end-2] = MAX16(f[end-2], tmp)
 			f[end-1] = MAX16(f[end-1], tmp)
 
@@ -1379,11 +1392,12 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		vbr_rate = 0
 		tmp = st.bitrate * int32(frame_size)
 		if tell > 1 {
-			tmp += tell
+			tmp += tell * mode.Fs
 		}
 		if st.bitrate != OPUS_BITRATE_MAX {
 			nbCompressedBytes = IMAX(2, IMIN(nbCompressedBytes,
 				int((tmp+4*mode.Fs)/(8*mode.Fs))-b2i(st.signalling != 0)))
+			enc.EncShrink(uint32(nbCompressedBytes))
 		}
 		effectiveBytes = nbCompressedBytes - nbFilledBytes
 	}
@@ -1689,7 +1703,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	importance := make([]int, nbEBands)
 	spread_weight := make([]int, nbEBands)
 
-	maxDepth = dynalloc_analysis(bandLogE, bandLogE2, nbEBands, start, end, C, offsets,
+	maxDepth = dynalloc_analysis(bandLogE, bandLogE2, oldBandE, nbEBands, start, end, C, offsets,
 		st.lsb_depth, mode.logN, isTransient, st.vbr, st.constrained_vbr,
 		eBands, LM, effectiveBytes, &tot_boost, st.lfe, surround_dynalloc, &st.analysis, importance, spread_weight)
 

@@ -175,14 +175,17 @@ func PacketGetSamplesPerFrame(data []byte, Fs int32) int {
 //
 //	int self_delimited, unsigned char *out_toc,
 //	const unsigned char *frames[48], opus_int16 size[48],
-//	int *payload_offset, opus_int32 *packet_offset)
+//	int *payload_offset, opus_int32 *packet_offset,
+//	const unsigned char **padding, opus_int32 *padding_len)
 //
 // frames may be nil; when given, frames[i] is set to the slice of data
-// starting at frame i (like the C pointer).
+// starting at frame i (like the C pointer). padding, when given, is set to
+// the slice of data starting at the padding section (padding_len bytes).
 func opus_packet_parse_impl(data []byte, length int32,
 	self_delimited int, out_toc *byte,
 	frames [][]byte, size []int16,
-	payload_offset *int, packet_offset *int32) int {
+	payload_offset *int, packet_offset *int32,
+	padding *[]byte, padding_len *int32) int {
 	var i, bytes int
 	var count int
 	var cbr int
@@ -340,6 +343,10 @@ func opus_packet_parse_impl(data []byte, length int32,
 		pos += int(size[i])
 	}
 
+	if padding != nil {
+		*padding = data0[pos:]
+		*padding_len = pad
+	}
 	if packet_offset != nil {
 		*packet_offset = pad + int32(pos)
 	}
@@ -358,7 +365,7 @@ func PacketParse(data []byte, length int32,
 	out_toc *byte, frames [][]byte,
 	size []int16, payload_offset *int) int {
 	return opus_packet_parse_impl(data, length, 0, out_toc,
-		frames, size, payload_offset, nil)
+		frames, size, payload_offset, nil, nil, nil)
 }
 
 // C: static OPUS_INLINE int align(int i)   (opus_private.h)

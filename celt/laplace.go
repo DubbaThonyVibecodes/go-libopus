@@ -104,3 +104,77 @@ func (dec *EcDec) LaplaceDecode(fs uint32, decay int) int {
 	dec.DecUpdate(fl, IMIN(fl+fs, 32768), 32768)
 	return val
 }
+
+// LaplaceEncodeP0 encodes a Laplace-distributed value with an explicit
+// probability p0 of zero and a geometric decay for the magnitude.
+//
+// C: void ec_laplace_encode_p0(ec_enc *enc, int value, opus_uint16 p0, opus_uint16 decay)
+func (enc *EcEnc) LaplaceEncodeP0(value int, p0 uint16, decay uint16) {
+	var s int
+	var sign_icdf [3]uint16
+	sign_icdf[0] = 32768 - p0
+	sign_icdf[1] = sign_icdf[0] / 2
+	sign_icdf[2] = 0
+	if value == 0 {
+		s = 0
+	} else if value > 0 {
+		s = 1
+	} else {
+		s = 2
+	}
+	enc.EncIcdf16(s, sign_icdf[:], 15)
+	value = ABS(value)
+	if value != 0 {
+		var i int
+		var icdf [8]uint16
+		icdf[0] = uint16(IMAX(7, int(decay)))
+		for i = 1; i < 7; i++ {
+			icdf[i] = uint16(IMAX(int32(7-i), (int32(icdf[i-1])*int32(decay))>>15))
+		}
+		icdf[7] = 0
+		value--
+		for {
+			enc.EncIcdf16(IMIN(value, 7), icdf[:], 15)
+			value -= 7
+			if value < 0 {
+				break
+			}
+		}
+	}
+}
+
+// LaplaceDecodeP0 decodes a value encoded with LaplaceEncodeP0.
+//
+// C: int ec_laplace_decode_p0(ec_dec *dec, opus_uint16 p0, opus_uint16 decay)
+func (dec *EcDec) LaplaceDecodeP0(p0 uint16, decay uint16) int {
+	var s int
+	var value int
+	var sign_icdf [3]uint16
+	sign_icdf[0] = 32768 - p0
+	sign_icdf[1] = sign_icdf[0] / 2
+	sign_icdf[2] = 0
+	s = dec.DecIcdf16(sign_icdf[:], 15)
+	if s == 2 {
+		s = -1
+	}
+	if s != 0 {
+		var i int
+		var v int
+		var icdf [8]uint16
+		icdf[0] = uint16(IMAX(7, int(decay)))
+		for i = 1; i < 7; i++ {
+			icdf[i] = uint16(IMAX(int32(7-i), (int32(icdf[i-1])*int32(decay))>>15))
+		}
+		icdf[7] = 0
+		value = 1
+		for {
+			v = dec.DecIcdf16(icdf[:], 15)
+			value += v
+			if v != 7 {
+				break
+			}
+		}
+		return s * value
+	}
+	return 0
+}

@@ -78,7 +78,7 @@ func resampling_factor(rate int32) int {
 //
 //	opus_val16 g10, opus_val16 g11, opus_val16 g12)
 //
-// C: #define comb_filter_const(y, x, T, N, g10, g11, g12, arch) ((void)(arch),comb_filter_const_c(y, x, T, N, g10, g11, g12))
+// C (pitch.h since 1.5): #define comb_filter_const(y, x, T, N, g10, g11, g12, arch) ((void)(arch),comb_filter_const_c(y, x, T, N, g10, g11, g12))
 func comb_filter_const(y []int32, yOff int, x []int32, xOff int, T, N int,
 	g10, g11, g12 int16, arch int) {
 	_ = arch

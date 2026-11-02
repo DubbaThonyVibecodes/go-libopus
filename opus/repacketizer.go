@@ -6,16 +6,18 @@ import "github.com/DubbaThonyVibecodes/go-libopus/celt"
 
 // OpusRepacketizer is the C struct OpusRepacketizer.
 type OpusRepacketizer struct {
-	toc       byte
-	nb_frames int
-	frames    [48][]byte
-	len       [48]int16
-	framesize int
+	toc         byte
+	nb_frames   int
+	frames      [48][]byte
+	len         [48]int16
+	framesize   int
+	paddings    [48][]byte
+	padding_len [48]int32
 }
 
 // C: int opus_repacketizer_get_size(void)
 func RepacketizerGetSize() int {
-	return 48*8 + 48*2 + 16 // sizeof(OpusRepacketizer) == 496 on a 64-bit platform, for API parity
+	return 48*8 + 48*2 + 16 + 48*8 + 48*4 // sizeof(OpusRepacketizer) == 1072 on a 64-bit platform, for API parity
 }
 
 // C: OpusRepacketizer *opus_repacketizer_init(OpusRepacketizer *rp)
@@ -58,12 +60,20 @@ func (rp *OpusRepacketizer) repacketizerCatImpl(data []byte, length int32, self_
 		return OPUS_INVALID_PACKET
 	}
 
-	ret = opus_packet_parse_impl(data, length, self_delimited, &tmp_toc, rp.frames[rp.nb_frames:], rp.len[rp.nb_frames:], nil, nil)
+	ret = opus_packet_parse_impl(data, length, self_delimited, &tmp_toc, rp.frames[rp.nb_frames:], rp.len[rp.nb_frames:],
+		nil, nil, &rp.paddings[rp.nb_frames], &rp.padding_len[rp.nb_frames])
 	if ret < 1 {
 		return ret
 	}
 
-	rp.nb_frames += curr_nb_frames
+	// set padding length to zero for all but the first frame
+	for curr_nb_frames > 1 {
+		rp.nb_frames++
+		rp.padding_len[rp.nb_frames] = 0
+		rp.paddings[rp.nb_frames] = nil
+		curr_nb_frames--
+	}
+	rp.nb_frames++
 	return OPUS_OK
 }
 
@@ -79,16 +89,20 @@ func (rp *OpusRepacketizer) RepacketizerGetNbFrames() int {
 
 // C: opus_int32 opus_repacketizer_out_range_impl(OpusRepacketizer *rp, int begin, int end,
 //
-//	unsigned char *data, opus_int32 maxlen, int self_delimited, int pad)
+//	unsigned char *data, opus_int32 maxlen, int self_delimited, int pad, const opus_extension_data *extensions, int nb_extensions)
 //
-// data may overlap the frames (in-place padding from PacketPad /
-// PacketUnpad); copy has memmove semantics like OPUS_MOVE.
-func (rp *OpusRepacketizer) repacketizerOutRangeImpl(begin, end int, data []byte, maxlen int32, self_delimited int, pad int) int32 {
+// data may overlap the frames (in-place unpadding from PacketUnpad /
+// MultistreamPacketUnpad); copy has memmove semantics like OPUS_MOVE.
+func (rp *OpusRepacketizer) repacketizerOutRangeImpl(begin, end int, data []byte, maxlen int32, self_delimited int, pad int, extensions []OpusExtensionData, nb_extensions int) int32 {
 	var i, count int
 	var tot_size int32
 	var length []int16
 	var frames [][]byte
 	var ptr int // index of the C `ptr` pointer in data
+	var ones_begin, ones_end int = 0, 0
+	var ext_begin, ext_len int = 0, 0
+	var ext_count, total_ext_count int
+	var all_extensions []OpusExtensionData
 
 	if begin < 0 || begin >= end || end > rp.nb_frames {
 		// fprintf(stderr, "%d %d %d\n", begin, end, rp->nb_frames);
@@ -102,6 +116,41 @@ func (rp *OpusRepacketizer) repacketizerOutRangeImpl(begin, end int, data []byte
 		tot_size = int32(1 + b2i(length[count-1] >= 252))
 	} else {
 		tot_size = 0
+	}
+
+	// figure out total number of extensions
+	total_ext_count = nb_extensions
+	for i = begin; i < end; i++ {
+		n := int(PacketExtensionsCount(rp.paddings[i], rp.padding_len[i]))
+		if n > 0 {
+			total_ext_count += n
+		}
+	}
+	if total_ext_count != 0 {
+		all_extensions = make([]OpusExtensionData, total_ext_count)
+	} else {
+		all_extensions = make([]OpusExtensionData, ALLOC_NONE)
+	}
+	// copy over any extensions that were passed in
+	for ext_count = 0; ext_count < nb_extensions; ext_count++ {
+		all_extensions[ext_count] = extensions[ext_count]
+	}
+
+	// incorporate any extensions from the repacketizer padding
+	for i = begin; i < end; i++ {
+		var j int
+		var frame_ext_count int32
+		frame_ext_count = int32(total_ext_count - ext_count)
+		ret := PacketExtensionsParse(rp.paddings[i], rp.padding_len[i],
+			all_extensions[ext_count:], &frame_ext_count)
+		if ret < 0 {
+			return OPUS_INTERNAL_ERROR
+		}
+		// renumber the extension frame numbers
+		for j = 0; j < int(frame_ext_count); j++ {
+			all_extensions[ext_count+j].Frame += i - begin
+		}
+		ext_count += int(frame_ext_count)
 	}
 
 	ptr = 0
@@ -133,7 +182,7 @@ func (rp *OpusRepacketizer) repacketizerOutRangeImpl(begin, end int, data []byte
 			ptr += encode_size(int(length[0]), data[ptr:])
 		}
 	}
-	if count > 2 || (pad != 0 && tot_size < maxlen) {
+	if count > 2 || (pad != 0 && tot_size < maxlen) || ext_count > 0 {
 		// Code 3
 		var vbr int
 		var pad_amount int = 0
@@ -181,10 +230,27 @@ func (rp *OpusRepacketizer) repacketizerOutRangeImpl(begin, end int, data []byte
 		} else {
 			pad_amount = 0
 		}
+		if ext_count > 0 {
+			// figure out how much space we need for the extensions
+			ext_len = int(PacketExtensionsGenerate(nil, maxlen-tot_size, all_extensions, int32(ext_count), 0))
+			if ext_len < 0 {
+				return int32(ext_len)
+			}
+			if pad == 0 {
+				pad_amount = ext_len + ext_len/254 + 1
+			}
+		}
 		if pad_amount != 0 {
 			var nb_255s int
 			data[1] |= 0x40
 			nb_255s = (pad_amount - 1) / 255
+			if int(tot_size)+ext_len+nb_255s+1 > int(maxlen) {
+				return OPUS_BUFFER_TOO_SMALL
+			}
+			ext_begin = int(tot_size) + pad_amount - ext_len
+			// Prepend 0x01 padding
+			ones_begin = int(tot_size) + nb_255s + 1
+			ones_end = int(tot_size) + pad_amount - ext_len
 			for i = 0; i < nb_255s; i++ {
 				data[ptr] = 255
 				ptr++
@@ -212,7 +278,14 @@ func (rp *OpusRepacketizer) repacketizerOutRangeImpl(begin, end int, data []byte
 		copy(data[ptr:ptr+int(length[i])], frames[i][:length[i]])
 		ptr += int(length[i])
 	}
-	if pad != 0 {
+	if ext_len > 0 {
+		ret := PacketExtensionsGenerate(data[ext_begin:], int32(ext_len), all_extensions, int32(ext_count), 0)
+		celt.Assert(int(ret) == ext_len)
+	}
+	for i = ones_begin; i < ones_end; i++ {
+		data[i] = 0x01
+	}
+	if pad != 0 && ext_count == 0 {
 		// Fill padding with zeros.
 		for ptr < int(maxlen) {
 			data[ptr] = 0
@@ -224,21 +297,22 @@ func (rp *OpusRepacketizer) repacketizerOutRangeImpl(begin, end int, data []byte
 
 // C: opus_int32 opus_repacketizer_out_range(OpusRepacketizer *rp, int begin, int end, unsigned char *data, opus_int32 maxlen)
 func (rp *OpusRepacketizer) RepacketizerOutRange(begin, end int, data []byte, maxlen int32) int32 {
-	return rp.repacketizerOutRangeImpl(begin, end, data, maxlen, 0, 0)
+	return rp.repacketizerOutRangeImpl(begin, end, data, maxlen, 0, 0, nil, 0)
 }
 
 // C: opus_int32 opus_repacketizer_out(OpusRepacketizer *rp, unsigned char *data, opus_int32 maxlen)
 func (rp *OpusRepacketizer) RepacketizerOut(data []byte, maxlen int32) int32 {
-	return rp.repacketizerOutRangeImpl(0, rp.nb_frames, data, maxlen, 0, 0)
+	return rp.repacketizerOutRangeImpl(0, rp.nb_frames, data, maxlen, 0, 0, nil, 0)
 }
 
-// PacketPad pads a packet in place to new_len bytes; data must have room
-// for new_len bytes.
+// PacketPadImpl pads a packet in place to new_len bytes, optionally
+// adding extensions; data must have room for new_len bytes.
 //
-// C: int opus_packet_pad(unsigned char *data, opus_int32 len, opus_int32 new_len)
-func PacketPad(data []byte, length int32, new_len int32) int {
+// C: opus_int32 opus_packet_pad_impl(unsigned char *data, opus_int32 len, opus_int32 new_len, int pad, const opus_extension_data  *extensions, int nb_extensions)
+func PacketPadImpl(data []byte, length int32, new_len int32, pad int, extensions []OpusExtensionData, nb_extensions int) int32 {
 	var rp OpusRepacketizer
 	var ret int32
+	var cpy []byte
 	if length < 1 {
 		return OPUS_BAD_ARG
 	}
@@ -247,14 +321,25 @@ func PacketPad(data []byte, length int32, new_len int32) int {
 	} else if length > new_len {
 		return OPUS_BAD_ARG
 	}
+	cpy = make([]byte, length)
 	rp.RepacketizerInit()
 	// Moving payload to the end of the packet so we can do in-place padding
-	copy(data[new_len-length:new_len], data[:length])
-	ret = int32(rp.RepacketizerCat(data[new_len-length:], length))
+	copy(cpy, data[:length])
+	ret = int32(rp.RepacketizerCat(cpy, length))
 	if ret != OPUS_OK {
-		return int(ret)
+		return ret
 	}
-	ret = rp.repacketizerOutRangeImpl(0, rp.nb_frames, data, new_len, 0, 1)
+	ret = rp.repacketizerOutRangeImpl(0, rp.nb_frames, data, new_len, 0, pad, extensions, nb_extensions)
+	return ret
+}
+
+// PacketPad pads a packet in place to new_len bytes; data must have room
+// for new_len bytes.
+//
+// C: int opus_packet_pad(unsigned char *data, opus_int32 len, opus_int32 new_len)
+func PacketPad(data []byte, length int32, new_len int32) int {
+	var ret int32
+	ret = PacketPadImpl(data, length, new_len, 1, nil, 0)
 	if ret > 0 {
 		return OPUS_OK
 	} else {
@@ -269,6 +354,7 @@ func PacketPad(data []byte, length int32, new_len int32) int {
 func PacketUnpad(data []byte, length int32) int32 {
 	var rp OpusRepacketizer
 	var ret int32
+	var i int
 	if length < 1 {
 		return OPUS_BAD_ARG
 	}
@@ -277,7 +363,12 @@ func PacketUnpad(data []byte, length int32) int32 {
 	if ret < 0 {
 		return ret
 	}
-	ret = rp.repacketizerOutRangeImpl(0, rp.nb_frames, data, length, 0, 0)
+	// Discard all padding and extensions.
+	for i = 0; i < rp.nb_frames; i++ {
+		rp.padding_len[i] = 0
+		rp.paddings[i] = nil
+	}
+	ret = rp.repacketizerOutRangeImpl(0, rp.nb_frames, data, length, 0, 0, nil, 0)
 	celt.Assert(ret > 0 && ret <= length)
 	return ret
 }
@@ -306,7 +397,7 @@ func MultistreamPacketPad(data []byte, length int32, new_len int32, nb_streams i
 			return OPUS_INVALID_PACKET
 		}
 		count = opus_packet_parse_impl(data, length, 1, &toc, nil,
-			size[:], nil, &packet_offset)
+			size[:], nil, &packet_offset, nil, nil)
 		if count < 0 {
 			return count
 		}
@@ -334,13 +425,14 @@ func MultistreamPacketUnpad(data []byte, length int32, nb_streams int) int32 {
 	// Unpad all frames
 	for s = 0; s < nb_streams; s++ {
 		var ret int32
+		var i int
 		self_delimited := b2i(s != nb_streams-1)
 		if length <= 0 {
 			return OPUS_INVALID_PACKET
 		}
 		rp.RepacketizerInit()
 		ret = int32(opus_packet_parse_impl(data, length, self_delimited, &toc, nil,
-			size[:], nil, &packet_offset))
+			size[:], nil, &packet_offset, nil, nil))
 		if ret < 0 {
 			return ret
 		}
@@ -348,7 +440,12 @@ func MultistreamPacketUnpad(data []byte, length int32, nb_streams int) int32 {
 		if ret < 0 {
 			return ret
 		}
-		ret = rp.repacketizerOutRangeImpl(0, rp.nb_frames, dst, length, self_delimited, 0)
+		// Discard all padding and extensions.
+		for i = 0; i < rp.nb_frames; i++ {
+			rp.padding_len[i] = 0
+			rp.paddings[i] = nil
+		}
+		ret = rp.repacketizerOutRangeImpl(0, rp.nb_frames, dst, length, self_delimited, 0, nil, 0)
 		if ret < 0 {
 			return ret
 		} else {

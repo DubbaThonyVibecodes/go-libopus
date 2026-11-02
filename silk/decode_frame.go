@@ -48,6 +48,14 @@ func (psDec *DecoderState) DecodeFrame(psRangeDec *celt.EcDec, pOut []int16, pN 
 		/********************************************************/
 		psDec.DecodeCore(psDecCtrl, pOut, pulses, arch)
 
+		/*************************/
+		/* Update output buffer. */
+		/*************************/
+		silk_assert(psDec.ltp_mem_length >= psDec.frame_length)
+		mv_len = psDec.ltp_mem_length - psDec.frame_length
+		copy(psDec.outBuf[:mv_len], psDec.outBuf[psDec.frame_length:psDec.frame_length+mv_len])
+		copy(psDec.outBuf[mv_len:mv_len+psDec.frame_length], pOut[:psDec.frame_length])
+
 		/********************************************************/
 		/* Update PLC state                                     */
 		/********************************************************/
@@ -62,15 +70,15 @@ func (psDec *DecoderState) DecodeFrame(psRangeDec *celt.EcDec, pOut []int16, pN 
 	} else {
 		/* Handle packet loss by extrapolation */
 		psDec.PLC(psDecCtrl, pOut, 1, arch)
-	}
 
-	/*************************/
-	/* Update output buffer. */
-	/*************************/
-	silk_assert(psDec.ltp_mem_length >= psDec.frame_length)
-	mv_len = psDec.ltp_mem_length - psDec.frame_length
-	copy(psDec.outBuf[:mv_len], psDec.outBuf[psDec.frame_length:psDec.frame_length+mv_len])
-	copy(psDec.outBuf[mv_len:mv_len+psDec.frame_length], pOut[:psDec.frame_length])
+		/*************************/
+		/* Update output buffer. */
+		/*************************/
+		silk_assert(psDec.ltp_mem_length >= psDec.frame_length)
+		mv_len = psDec.ltp_mem_length - psDec.frame_length
+		copy(psDec.outBuf[:mv_len], psDec.outBuf[psDec.frame_length:psDec.frame_length+mv_len])
+		copy(psDec.outBuf[mv_len:mv_len+psDec.frame_length], pOut[:psDec.frame_length])
+	}
 
 	/************************************************/
 	/* Comfort noise generation / estimation        */

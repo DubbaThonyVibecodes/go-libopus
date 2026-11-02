@@ -2,7 +2,7 @@ package celt
 
 // C: celt/celt_lpc.h, celt/celt_lpc.c
 
-const LPC_ORDER = 24
+const CELT_LPC_ORDER = 24
 
 // Lpc computes LPC coefficients from autocorrelation values.
 //
@@ -11,7 +11,7 @@ func Lpc(_lpc []int16, ac []int32, p int) {
 	var i, j int
 	var r int32
 	var error int32 = ac[0]
-	var lpc [LPC_ORDER]int32
+	var lpc [CELT_LPC_ORDER]int32
 
 	clear(lpc[:p])
 	if ac[0] != 0 {

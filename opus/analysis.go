@@ -935,9 +935,9 @@ func (tonal *TonalityAnalysisState) tonality_analysis(celt_mode *celt.CELTMode, 
 	features[23] = info.Tonality_slope + 0.069216
 	features[24] = tonal.lowECount - 0.067930
 
-	compute_dense(&layer0, layer_out[:], features[:])
-	compute_gru(&layer1, tonal.rnn_state[:], layer_out[:])
-	compute_dense(&layer2, frame_probs[:], tonal.rnn_state[:])
+	analysis_compute_dense(&layer0, layer_out[:], features[:])
+	analysis_compute_gru(&layer1, tonal.rnn_state[:], layer_out[:])
+	analysis_compute_dense(&layer2, frame_probs[:], tonal.rnn_state[:])
 
 	// Probability of speech or music vs noise
 	info.Activity_probability = frame_probs[1]

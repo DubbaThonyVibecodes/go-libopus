@@ -26,7 +26,7 @@
 
 #define MAX_PACKET 1500
 #define MAX_FRAME (960*6)
-#define MAX_CH 18
+#define MAX_CH 36
 
 static void die(const char *m) { fprintf(stderr, "gen: %s\n", m); exit(2); }
 static void dief(const char *m, const char *a) { fprintf(stderr, "gen: %s: %s\n", m, a); exit(2); }
@@ -711,7 +711,7 @@ static int cmd_info(int argc, char **argv) {
       nch = opus_packet_get_nb_channels(data);
       ns = opus_packet_get_nb_samples(data, ulen, rate);
       dns = opus_decoder_get_nb_samples(dec, data, ulen);
-      fprintf(ftr, "P i=%d len=%u toc=%02x nf=%d bw=%d spf=%d nch=%d ns=%d dns=%d off=%d sizes=", count, (unsigned)ulen, toc, nf, bw, spf, nch, ns, dns, nf > 0 ? payload_offset : -1);
+      fprintf(ftr, "P i=%d len=%u toc=%02x nf=%d bw=%d spf=%d nch=%d ns=%d dns=%d lbrr=%d off=%d sizes=", count, (unsigned)ulen, toc, nf, bw, spf, nch, ns, dns, opus_packet_has_lbrr(data, ulen), nf > 0 ? payload_offset : -1);
       if (nf > 0) for (j = 0; j < nf; j++) fprintf(ftr, "%s%d@%d", j ? "," : "", sizes[j], (int)(frames[j]-data));
       fprintf(ftr, "\n");
       count++;

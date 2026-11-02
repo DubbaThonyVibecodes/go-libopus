@@ -1452,7 +1452,7 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 	if encode != 0 && resynth != 0 {
 		lowband_scratch = _lowband_scratch
 	} else {
-		lowband_scratch = X_[M*int(eBands[m.nbEBands-1]):]
+		lowband_scratch = X_[M*int(eBands[m.effEBands-1]):]
 	}
 	X_save = make([]int16, resynth_alloc)
 	Y_save = make([]int16, resynth_alloc)

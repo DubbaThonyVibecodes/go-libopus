@@ -203,6 +203,7 @@ type PLCStruct struct {
 	fs_kHz            int
 	nb_subfr          int
 	subfr_length      int
+	enable_deep_plc   int
 }
 
 // CNGStruct is the C silk_CNG_struct: struct for CNG.
@@ -217,6 +218,8 @@ type CNGStruct struct {
 
 // DecoderState is the C silk_decoder_state.
 type DecoderState struct {
+	// C: #define SILK_DECODER_STATE_RESET_START prev_gain_Q16
+	// (ENABLE_OSCE is off, so this is the first field and ResetDecoder clears the whole struct.)
 	prev_gain_Q16           int32
 	exc_Q14                 [MAX_FRAME_LENGTH]int32
 	sLPC_Q14_buf            [MAX_LPC_ORDER]int32

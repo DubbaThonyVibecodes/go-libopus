@@ -18,7 +18,9 @@ type OpusDecoder struct {
 	Fs          int32 // Sampling rate (at the API level)
 	DecControl  silk.DecControlStruct
 	decode_gain int
+	complexity  int
 	arch        int
+	// LPCNetPLCState lpcnet exists only with ENABLE_DEEP_PLC.
 
 	// Everything beyond this point gets cleared on a reset (OPUS_DECODER_RESET_START)
 	stream_channels int
@@ -68,7 +70,7 @@ func DecoderGetSize(channels int) int {
 	}
 	silkDecSizeBytes = align(silkDecSizeBytes)
 	celtDecSizeBytes = celt.DecoderGetSize(channels)
-	return align(80) + silkDecSizeBytes + celtDecSizeBytes // sizeof(OpusDecoder) == 80 in the fixed-point build on x86-64
+	return align(88) + silkDecSizeBytes + celtDecSizeBytes // sizeof(OpusDecoder) == 88 in the fixed-point build on x86-64
 }
 
 // C: int opus_decoder_init(OpusDecoder *st, opus_int32 Fs, int channels)
@@ -83,6 +85,7 @@ func (st *OpusDecoder) DecoderInit(Fs int32, channels int) int {
 	*st = OpusDecoder{}
 	st.channels = channels
 	st.stream_channels = channels
+	st.complexity = 0
 
 	st.Fs = Fs
 	st.DecControl.API_sampleRate = st.Fs
@@ -104,6 +107,7 @@ func (st *OpusDecoder) DecoderInit(Fs int32, channels int) int {
 
 	st.prev_mode = 0
 	st.frame_size = int(Fs / 400)
+	// #ifdef ENABLE_DEEP_PLC: lpcnet_plc_init(&st->lpcnet) is not compiled in this build.
 	st.arch = celt.SelectArch()
 	return OPUS_OK
 }
@@ -296,7 +300,7 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 		}
 
 		if st.prev_mode == MODE_CELT_ONLY {
-			silk_dec.InitDecoder()
+			silk_dec.ResetDecoder()
 		}
 
 		// The SILK PLC cannot produce frames of less than 10 ms
@@ -320,18 +324,22 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 				st.DecControl.InternalSampleRate = 16000
 			}
 		}
+		st.DecControl.Enable_deep_plc = b2i(st.complexity >= 5)
+		// #ifdef ENABLE_OSCE: st->DecControl.osce_method is not compiled in this build.
 
 		if data == nil {
 			lost_flag = 1
 		} else {
-			lost_flag = 2 * decode_fec
+			lost_flag = 2 * b2i(decode_fec != 0)
 		}
 		decoded_samples = 0
 		for {
 			// Call SILK decoder
 			first_frame := b2i(decoded_samples == 0)
 			silk_ret = silk_dec.Decode(&st.DecControl,
-				lost_flag, first_frame, &dec, pcm_ptr, &silk_frame_size, st.arch)
+				lost_flag, first_frame, &dec, pcm_ptr, &silk_frame_size,
+				// #ifdef ENABLE_DEEP_PLC: &st->lpcnet is not passed in this build.
+				st.arch)
 			if silk_ret != 0 {
 				if lost_flag != 0 {
 					// PLC failure should not be fatal
@@ -451,8 +459,10 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 		if decode_fec == 0 {
 			cdata = data
 		}
-		celt_ret = celt_dec.DecodeWithEc(cdata,
-			int(length), pcm, celt_frame_size, &dec, celt_accum)
+		celt_ret = celt_dec.DecodeWithEcDred(cdata,
+			int(length), pcm, celt_frame_size, &dec, celt_accum,
+			// #ifdef ENABLE_DEEP_PLC: &st->lpcnet is not passed in this build.
+		)
 	} else {
 		silence := []byte{0xFF, 0xFF}
 		if celt_accum == 0 {
@@ -552,13 +562,13 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 // C: int opus_decode_native(OpusDecoder *st, const unsigned char *data,
 //
 //	opus_int32 len, opus_val16 *pcm, int frame_size, int decode_fec,
-//	int self_delimited, opus_int32 *packet_offset, int soft_clip)
+//	int self_delimited, opus_int32 *packet_offset, int soft_clip, const OpusDRED *dred, opus_int32 dred_offset)
 //
-// soft_clip is only used in the float build (#ifndef FIXED_POINT); it is
-// kept for signature parity.
+// soft_clip is only used in the float build (#ifndef FIXED_POINT) and dred /
+// dred_offset only with ENABLE_DRED; they are kept for signature parity.
 func (st *OpusDecoder) DecodeNative(data []byte,
 	length int32, pcm []int16, frame_size int, decode_fec int,
-	self_delimited int, packet_offset *int32, soft_clip int) int {
+	self_delimited int, packet_offset *int32, soft_clip int, dred *OpusDRED, dred_offset int32) int {
 	var i, nb_samples int
 	var count, offset int
 	var toc byte
@@ -573,6 +583,10 @@ func (st *OpusDecoder) DecodeNative(data []byte,
 	if (decode_fec != 0 || length == 0 || data == nil) && frame_size%int(st.Fs/400) != 0 {
 		return OPUS_BAD_ARG
 	}
+	// #ifdef ENABLE_DRED: the DRED feature feeding (lpcnet_plc_fec_*) is not
+	// compiled in this build.
+	_ = dred
+	_ = dred_offset
 	if length == 0 || data == nil {
 		var pcm_count int = 0
 		for {
@@ -599,7 +613,7 @@ func (st *OpusDecoder) DecodeNative(data []byte,
 	packet_stream_channels = PacketGetNbChannels(data)
 
 	count = opus_packet_parse_impl(data, length, self_delimited, &toc, nil,
-		size[:], &offset, packet_offset)
+		size[:], &offset, packet_offset, nil, nil)
 	if count < 0 {
 		return count
 	}
@@ -611,12 +625,12 @@ func (st *OpusDecoder) DecodeNative(data []byte,
 		var ret int
 		// If no FEC can be present, run the PLC (recursive call)
 		if frame_size < packet_frame_size || packet_mode == MODE_CELT_ONLY || st.mode == MODE_CELT_ONLY {
-			return st.DecodeNative(nil, 0, pcm, frame_size, 0, 0, nil, soft_clip)
+			return st.DecodeNative(nil, 0, pcm, frame_size, 0, 0, nil, soft_clip, nil, 0)
 		}
 		// Otherwise, run the PLC on everything except the size for which we might have FEC
 		duration_copy = st.last_packet_duration
 		if frame_size-packet_frame_size != 0 {
-			ret = st.DecodeNative(nil, 0, pcm, frame_size-packet_frame_size, 0, 0, nil, soft_clip)
+			ret = st.DecodeNative(nil, 0, pcm, frame_size-packet_frame_size, 0, 0, nil, soft_clip, nil, 0)
 			if ret < 0 {
 				st.last_packet_duration = duration_copy
 				return ret
@@ -674,7 +688,7 @@ func (st *OpusDecoder) Decode(data []byte,
 	if frame_size <= 0 {
 		return OPUS_BAD_ARG
 	}
-	return st.DecodeNative(data, length, pcm, frame_size, decode_fec, 0, nil, 0)
+	return st.DecodeNative(data, length, pcm, frame_size, decode_fec, 0, nil, 0, nil, 0)
 }
 
 // DecodeFloat is the float output variant (fixed-point build: converts).
@@ -699,7 +713,7 @@ func (st *OpusDecoder) DecodeFloat(data []byte,
 	celt.Assert(st.channels == 1 || st.channels == 2)
 	out := make([]int16, frame_size*st.channels)
 
-	ret = st.DecodeNative(data, length, out, frame_size, decode_fec, 0, nil, 0)
+	ret = st.DecodeNative(data, length, out, frame_size, decode_fec, 0, nil, 0, nil, 0)
 	if ret > 0 {
 		for i = 0; i < ret*st.channels; i++ {
 			pcm[i] = (1.0 / 32768.0) * float32(out[i])
@@ -724,6 +738,19 @@ func (st *OpusDecoder) Ctl(request int, args ...any) int {
 			return OPUS_BAD_ARG // goto bad_arg
 		}
 		*value = int32(st.bandwidth)
+	case OPUS_SET_COMPLEXITY_REQUEST:
+		value, ok := argInt32(args, 0)
+		if !ok || value < 0 || value > 10 {
+			return OPUS_BAD_ARG // goto bad_arg
+		}
+		st.complexity = int(value)
+		celt_dec.Ctl(celt.OPUS_SET_COMPLEXITY_REQUEST, value)
+	case OPUS_GET_COMPLEXITY_REQUEST:
+		value, ok := args[0].(*int32)
+		if !ok || value == nil {
+			return OPUS_BAD_ARG // goto bad_arg
+		}
+		*value = int32(st.complexity)
 	case OPUS_GET_FINAL_RANGE_REQUEST:
 		value, ok := args[0].(*uint32)
 		if !ok || value == nil {
@@ -743,9 +770,10 @@ func (st *OpusDecoder) Ctl(request int, args ...any) int {
 		st.rangeFinal = 0
 
 		celt_dec.Ctl(celt.OPUS_RESET_STATE)
-		silk_dec.InitDecoder()
+		silk_dec.ResetDecoder()
 		st.stream_channels = st.channels
 		st.frame_size = int(st.Fs / 400)
+		// #ifdef ENABLE_DEEP_PLC: lpcnet_plc_reset(&st->lpcnet) is not compiled in this build.
 	case OPUS_GET_SAMPLE_RATE_REQUEST:
 		value, ok := args[0].(*int32)
 		if !ok || value == nil {
@@ -792,6 +820,8 @@ func (st *OpusDecoder) Ctl(request int, args ...any) int {
 			return OPUS_BAD_ARG // goto bad_arg
 		}
 		ret = celt_dec.Ctl(celt.OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST, value)
+	// #ifdef USE_WEIGHTS_FILE: OPUS_SET_DNN_BLOB_REQUEST is not compiled in
+	// this build (falls through to OPUS_UNIMPLEMENTED).
 	default:
 		// fprintf(stderr, "unknown opus_decoder_ctl() request: %d", request);
 		ret = OPUS_UNIMPLEMENTED
@@ -885,7 +915,164 @@ func PacketGetNbSamples(packet []byte, length int32, Fs int32) int {
 	return samples
 }
 
+// PacketHasLbrr reports whether the packet contains SILK LBRR (in-band FEC)
+// data.
+//
+// C: int opus_packet_has_lbrr(const unsigned char packet[], opus_int32 len)
+func PacketHasLbrr(packet []byte, length int32) int {
+	var ret int
+	var frames [48][]byte
+	var size [48]int16
+	var packet_mode, packet_frame_size, packet_stream_channels int
+	var nb_frames int = 1
+	var lbrr int
+
+	packet_mode = opus_packet_get_mode(packet)
+	if packet_mode == MODE_CELT_ONLY {
+		return 0
+	}
+	packet_frame_size = PacketGetSamplesPerFrame(packet, 48000)
+	if packet_frame_size > 960 {
+		nb_frames = packet_frame_size / 960
+	}
+	packet_stream_channels = PacketGetNbChannels(packet)
+	ret = PacketParse(packet, length, nil, frames[:], size[:], nil)
+	if ret <= 0 {
+		return ret
+	}
+	lbrr = int(frames[0][0]>>(7-nb_frames)) & 0x1
+	if packet_stream_channels == 2 {
+		lbrr = b2i(lbrr != 0 || (int(frames[0][0]>>(6-2*nb_frames))&0x1) != 0)
+	}
+	return lbrr
+}
+
 // C: int opus_decoder_get_nb_samples(const OpusDecoder *dec, const unsigned char packet[], opus_int32 len)
 func (dec *OpusDecoder) DecoderGetNbSamples(packet []byte, length int32) int {
 	return PacketGetNbSamples(packet, length, dec.Fs)
+}
+
+// OpusDREDDecoder is the C struct OpusDREDDecoder (the RDOVAEDec model
+// field exists only with ENABLE_DRED).
+type OpusDREDDecoder struct {
+	loaded int
+	arch   int
+	magic  uint32
+}
+
+// OpusDRED is the C struct OpusDRED. Without ENABLE_DRED the C type is only
+// forward-declared (include/opus.h) and never allocated, so it is empty.
+type OpusDRED struct{}
+
+// VALIDATE_DRED_DECODER is a no-op: validate_dred_decoder() is only defined
+// with ENABLE_DRED.
+//
+// C: #define VALIDATE_DRED_DECODER(st)
+func VALIDATE_DRED_DECODER(st *OpusDREDDecoder) {}
+
+// DredDecoderGetSize returns the C allocation size (for API parity).
+//
+// C: int opus_dred_decoder_get_size(void)
+func DredDecoderGetSize() int {
+	return 12 // sizeof(OpusDREDDecoder) without ENABLE_DRED
+}
+
+// C: int opus_dred_decoder_init(OpusDREDDecoder *dec)
+func (dec *OpusDREDDecoder) DredDecoderInit() int {
+	var ret int = 0
+	dec.loaded = 0
+	// #if defined(ENABLE_DRED) && !defined(USE_WEIGHTS_FILE): init_rdovaedec() is not compiled in this build.
+	dec.arch = celt.SelectArch()
+	// To make sure nobody forgets to init, use a magic number.
+	dec.magic = 0xD8EDDEC0
+	if ret == 0 {
+		return OPUS_OK
+	}
+	return OPUS_UNIMPLEMENTED
+}
+
+// C: OpusDREDDecoder *opus_dred_decoder_create(int *error)
+func DredDecoderCreate(error *int) *OpusDREDDecoder {
+	var ret int
+	dec := new(OpusDREDDecoder)
+	ret = dec.DredDecoderInit()
+	if error != nil {
+		*error = ret
+	}
+	if ret != OPUS_OK {
+		dec = nil
+	}
+	return dec
+}
+
+// C: void opus_dred_decoder_destroy(OpusDREDDecoder *dec)
+func (dec *OpusDREDDecoder) DredDecoderDestroy() {
+	if dec != nil {
+		dec.magic = 0xDE57801D
+	}
+}
+
+// DredDecoderCtl is the C opus_dred_decoder_ctl. Without ENABLE_DRED every
+// request is unimplemented.
+//
+// C: int opus_dred_decoder_ctl(OpusDREDDecoder *dred_dec, int request, ...)
+func (dred_dec *OpusDREDDecoder) DredDecoderCtl(request int, args ...any) int {
+	_ = request
+	_ = args
+	return OPUS_UNIMPLEMENTED
+}
+
+// C: int opus_dred_get_size(void)
+func DredGetSize() int {
+	return 0
+}
+
+// C: OpusDRED *opus_dred_alloc(int *error)
+func DredAlloc(error *int) *OpusDRED {
+	if error != nil {
+		*error = OPUS_UNIMPLEMENTED
+	}
+	return nil
+}
+
+// C: void opus_dred_free(OpusDRED *dec)
+func DredFree(dec *OpusDRED) {
+	_ = dec
+}
+
+// C: int opus_dred_parse(OpusDREDDecoder *dred_dec, OpusDRED *dred, const unsigned char *data, opus_int32 len, opus_int32 max_dred_samples, opus_int32 sampling_rate, int *dred_end, int defer_processing)
+func (dred_dec *OpusDREDDecoder) DredParse(dred *OpusDRED, data []byte, length int32, max_dred_samples int32, sampling_rate int32, dred_end *int, defer_processing int) int {
+	_ = dred
+	_ = data
+	_ = length
+	_ = max_dred_samples
+	_ = sampling_rate
+	_ = defer_processing
+	_ = dred_end
+	return OPUS_UNIMPLEMENTED
+}
+
+// C: int opus_dred_process(OpusDREDDecoder *dred_dec, const OpusDRED *src, OpusDRED *dst)
+func (dred_dec *OpusDREDDecoder) DredProcess(src *OpusDRED, dst *OpusDRED) int {
+	_ = src
+	_ = dst
+	return OPUS_UNIMPLEMENTED
+}
+
+// C: int opus_decoder_dred_decode(OpusDecoder *st, const OpusDRED *dred, opus_int32 dred_offset, opus_int16 *pcm, opus_int32 frame_size)
+func (st *OpusDecoder) DecoderDredDecode(dred *OpusDRED, dred_offset int32, pcm []int16, frame_size int32) int {
+	_ = dred
+	_ = dred_offset
+	_ = pcm
+	_ = frame_size
+	return OPUS_UNIMPLEMENTED
+}
+
+// C: int opus_decoder_dred_decode_float(OpusDecoder *st, const OpusDRED *dred, opus_int32 dred_offset, float *pcm, opus_int32 frame_size)
+func (st *OpusDecoder) DecoderDredDecodeFloat(dred *OpusDRED, dred_offset int32, pcm []float32, frame_size int32) int {
+	_ = dred
+	_ = dred_offset
+	_ = pcm
+	_ = frame_size
+	return OPUS_UNIMPLEMENTED
 }

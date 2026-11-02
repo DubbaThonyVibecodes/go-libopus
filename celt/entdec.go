@@ -145,6 +145,31 @@ func (d *EcDec) DecIcdf(icdf []uint8, ftb uint) int {
 	return ret
 }
 
+// DecIcdf16 decodes a symbol given an "inverse" CDF table with 16-bit entries.
+// No call to DecUpdate() is necessary after this call.
+//
+// C: int ec_dec_icdf16(ec_dec *_this,const opus_uint16 *_icdf,unsigned _ftb)
+func (d *EcDec) DecIcdf16(icdf []uint16, ftb uint) int {
+	var r, dd, s, t uint32
+	var ret int
+	s = d.rng
+	dd = d.val
+	r = s >> ftb
+	ret = -1
+	for {
+		t = s
+		ret++
+		s = IMUL32(r, uint32(icdf[ret]))
+		if dd >= s {
+			break
+		}
+	}
+	d.val = dd - s
+	d.rng = t - s
+	d.decNormalize()
+	return ret
+}
+
 // C: opus_uint32 ec_dec_uint(ec_dec *_this,opus_uint32 _ft)
 func (d *EcDec) DecUint(ft uint32) uint32 {
 	var ft2, s uint32

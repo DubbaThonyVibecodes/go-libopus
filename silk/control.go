@@ -33,6 +33,8 @@ type EncControlStruct struct {
 	Complexity int
 	// I:   Flag to enable in-band Forward Error Correction (FEC); 0/1
 	UseInBandFEC int
+	// I:   Flag to enable in-band Deep REDundancy (DRED); 0/1
+	UseDRED int
 	// I:   Flag to actually code in-band Forward Error Correction (FEC) in the current packet; 0/1
 	LBRR_coded int
 	// I:   Flag to enable discontinuous transmission (DTX); 0/1
@@ -78,4 +80,6 @@ type DecControlStruct struct {
 	PayloadSize_ms int
 	// O:   Pitch lag of previous frame (0 if unvoiced), measured in samples at 48 kHz
 	PrevPitchLag int
+	// I:   Enable Deep PLC
+	Enable_deep_plc int
 }

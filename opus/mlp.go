@@ -1,7 +1,5 @@
 package opus
 
-import "math"
-
 // C: src/mlp.c, src/mlp.h
 
 // C: #define WEIGHTS_SCALE (1.f/128)
@@ -9,8 +7,8 @@ const WEIGHTS_SCALE float32 = 1.0 / 128
 
 const MAX_NEURONS = 32
 
-// DenseLayer is the C struct DenseLayer.
-type DenseLayer struct {
+// AnalysisDenseLayer is the C struct AnalysisDenseLayer.
+type AnalysisDenseLayer struct {
 	bias          []int8
 	input_weights []int8
 	nb_inputs     int
@@ -18,8 +16,8 @@ type DenseLayer struct {
 	sigmoid       int
 }
 
-// GRULayer is the C struct GRULayer.
-type GRULayer struct {
+// AnalysisGRULayer is the C struct AnalysisGRULayer.
+type AnalysisGRULayer struct {
 	bias              []int8
 	input_weights     []int8
 	recurrent_weights []int8
@@ -27,28 +25,24 @@ type GRULayer struct {
 	nb_neurons        int
 }
 
+// C: #define fmadd(a, b, c) ((a)*(b)+(c))
+func fmadd(a, b, c float32) float32 { return float32(a*b) + c }
+
 // C: static OPUS_INLINE float tansig_approx(float x)
 func tansig_approx(x float32) float32 {
-	var i int
-	var y, dy float32
-	var sign float32 = 1
-	// Tests are reversed to catch NaNs
-	if !(x < 8) {
-		return 1
-	}
-	if !(x > -8) {
-		return -1
-	}
-	if x < 0 {
-		x = -x
-		sign = -1
-	}
-	i = int(math.Floor(float64(float32(25*x) + 0.5)))
-	x -= float32(0.04 * float32(i))
-	y = tansig_table[i]
-	dy = 1 - float32(y*y)
-	y = y + float32(float32(x*dy)*(1-float32(y*x)))
-	return sign * y
+	const N0 float32 = 952.52801514
+	const N1 float32 = 96.39235687
+	const N2 float32 = 0.60863042
+	const D0 float32 = 952.72399902
+	const D1 float32 = 413.36801147
+	const D2 float32 = 11.88600922
+	var X2, num, den float32
+	X2 = x * x
+	num = fmadd(fmadd(N2, X2, N1), X2, N0)
+	den = fmadd(fmadd(D2, X2, D1), X2, D0)
+	num = num * x / den
+	// MAX32/MIN32 on floats (plain conditionals in the fixed-point arch.h)
+	return maxf(-1.0, minf(1.0, num))
 }
 
 // C: static OPUS_INLINE float sigmoid_approx(float x)
@@ -66,8 +60,8 @@ func gemm_accum(out []float32, weights []int8, rows int, cols int, col_stride in
 	}
 }
 
-// C: void compute_dense(const DenseLayer *layer, float *output, const float *input)
-func compute_dense(layer *DenseLayer, output []float32, input []float32) {
+// C: void analysis_compute_dense(const AnalysisDenseLayer *layer, float *output, const float *input)
+func analysis_compute_dense(layer *AnalysisDenseLayer, output []float32, input []float32) {
 	var i int
 	var N, M int
 	var stride int
@@ -92,8 +86,8 @@ func compute_dense(layer *DenseLayer, output []float32, input []float32) {
 	}
 }
 
-// C: void compute_gru(const GRULayer *gru, float *state, const float *input)
-func compute_gru(gru *GRULayer, state []float32, input []float32) {
+// C: void analysis_compute_gru(const AnalysisGRULayer *gru, float *state, const float *input)
+func analysis_compute_gru(gru *AnalysisGRULayer, state []float32, input []float32) {
 	var i int
 	var N, M int
 	var stride int

@@ -143,6 +143,21 @@ func (e *EcEnc) EncIcdf(s int, icdf []uint8, ftb uint) {
 	e.encNormalize()
 }
 
+// EncIcdf16 encodes a symbol given an "inverse" CDF table with 16-bit entries.
+//
+// C: void ec_enc_icdf16(ec_enc *_this,int _s,const opus_uint16 *_icdf,unsigned _ftb)
+func (e *EcEnc) EncIcdf16(s int, icdf []uint16, ftb uint) {
+	var r uint32
+	r = e.rng >> ftb
+	if s > 0 {
+		e.val += e.rng - IMUL32(r, uint32(icdf[s-1]))
+		e.rng = IMUL32(r, uint32(icdf[s-1])-uint32(icdf[s]))
+	} else {
+		e.rng -= IMUL32(r, uint32(icdf[s]))
+	}
+	e.encNormalize()
+}
+
 // C: void ec_enc_uint(ec_enc *_this,opus_uint32 _fl,opus_uint32 _ft)
 func (e *EcEnc) EncUint(fl, ft uint32) {
 	var ft2, fl2 uint32

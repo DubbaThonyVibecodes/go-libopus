@@ -14,6 +14,16 @@ import (
 /* Decoder functions */
 /*********************/
 
+// LoadOSCEModels is a no-op in this build (ENABLE_OSCE is not defined).
+//
+// C: opus_int silk_LoadOSCEModels(void *decState, const unsigned char *data, int len)
+func (decState *Decoder) LoadOSCEModels(data []byte, len int) int {
+	_ = decState
+	_ = data
+	_ = len
+	return SILK_NO_ERROR
+}
+
 // GetDecoderSize returns the C allocation size for API parity; the Go state
 // is allocated with new.
 //
@@ -28,11 +38,30 @@ func GetDecoderSize(decSizeBytes *int) int {
 
 /* Reset decoder state */
 //
+// C: opus_int silk_ResetDecoder(void *decState)
+func (decState *Decoder) ResetDecoder() int {
+	var n int
+	ret := SILK_NO_ERROR
+	channel_state := decState.channel_state[:]
+
+	for n = 0; n < DECODER_NUM_CHANNELS; n++ {
+		ret = channel_state[n].ResetDecoder()
+	}
+	decState.sStereo = StereoDecState{}
+	/* Not strictly needed, but it's cleaner that way */
+	decState.prev_decode_only_middle = 0
+
+	return ret
+}
+
 // C: opus_int silk_InitDecoder(void *decState)
 func (decState *Decoder) InitDecoder() int {
 	var n int
 	ret := SILK_NO_ERROR
 	channel_state := decState.channel_state[:]
+	/* C: #ifndef USE_WEIGHTS_FILE */
+	/* load osce models */
+	decState.LoadOSCEModels(nil, 0)
 
 	for n = 0; n < DECODER_NUM_CHANNELS; n++ {
 		ret = channel_state[n].InitDecoder()
@@ -234,6 +263,7 @@ func (decState *Decoder) Decode(decControl *DecControlStruct, lostFlag int, newP
 		has_side = b2i(psDec.prev_decode_only_middle == 0 ||
 			(decControl.NChannelsInternal == 2 && lostFlag == FLAG_DECODE_LBRR && channel_state[1].LBRR_flags[channel_state[1].nFramesDecoded] == 1))
 	}
+	channel_state[0].sPLC.enable_deep_plc = decControl.Enable_deep_plc
 	/* Call decoder for one frame */
 	for n = 0; n < int(decControl.NChannelsInternal); n++ {
 		if n == 0 || has_side != 0 {
