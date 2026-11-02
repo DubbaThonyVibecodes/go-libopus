@@ -3,9 +3,9 @@ package silk
 // C: silk/ana_filt_bank_1.c
 
 // Coefficients for 2-band filter bank based on first-order allpass filters
-// (C: static opus_int16 A_fb1_20 / A_fb1_21; unexported here)
-var a_fb1_20 int16 = 5394 << 1
-var a_fb1_21 int16 = -24290 /* (opus_int16)(20623 << 1) */
+// (C: static const opus_int16 A_fb1_20 / A_fb1_21; unexported here)
+const a_fb1_20 int16 = 5394 << 1
+const a_fb1_21 int16 = -24290 /* (opus_int16)(20623 << 1) */
 
 // Split signal into two decimated bands using first-order allpass filters
 //

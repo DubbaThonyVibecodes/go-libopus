@@ -40,6 +40,23 @@ func MULT32_32_Q31[A, B integer](a A, b B) int32 {
 	return int32((int64(a) * int64(b)) >> 31)
 }
 
+// 32x32 multiplication, followed by a 31-bit shift right (with rounding). Results fits in 32 bits
+//
+// C: MULT32_32_P31(a,b) ((opus_val32)SHR(1073741824+(opus_int64)(a)*(opus_int64)(b),31))   (OPUS_FAST_INT64)
+func MULT32_32_P31[A, B integer](a A, b B) int32 {
+	return int32((1073741824 + int64(a)*int64(b)) >> 31)
+}
+
+// C: MULT32_32_P31_ovflw(a,b) MULT32_32_P31(a,b)   (OPUS_FAST_INT64)
+func MULT32_32_P31_ovflw[A, B integer](a A, b B) int32 { return MULT32_32_P31(a, b) }
+
+// 32x32 multiplication, followed by a 32-bit shift right. Results fits in 32 bits
+//
+// C: MULT32_32_Q32(a,b) ((opus_val32)SHR((opus_int64)(a)*(opus_int64)(b),32))   (OPUS_FAST_INT64)
+func MULT32_32_Q32[A, B integer](a A, b B) int32 {
+	return int32((int64(a) * int64(b)) >> 32)
+}
+
 // C: QCONST16(x,bits) ((opus_val16)(.5+(x)*(((opus_val32)1)<<(bits))))
 // x is a float literal in C (single precision), the product is computed in
 // single precision and the .5 is added in double precision.
@@ -47,10 +64,22 @@ func QCONST16(x float32, bits uint) int16 {
 	return int16(0.5 + float64(x*float32(int32(1)<<bits)))
 }
 
-// C: QCONST32(x,bits) ((opus_val32)(.5+(x)*(((opus_val32)1)<<(bits))))
+// C: QCONST32(x,bits) ((opus_val32)(.5+(x)*(((opus_int64)1)<<(bits))))
 func QCONST32(x float32, bits uint) int32 {
+	return int32(0.5 + float64(x*float32(int64(1)<<bits)))
+}
+
+// Compile-time conversion of float constant to log gain value
+//
+// C: GCONST2(x,bits) ((celt_glog)(.5+(x)*(((celt_glog)1)<<(bits))))
+func GCONST2(x float32, bits uint) int32 {
 	return int32(0.5 + float64(x*float32(int32(1)<<bits)))
 }
+
+// Compile-time conversion of float constant to DB_SHIFT log gain value
+//
+// C: GCONST(x) GCONST2((x),DB_SHIFT)
+func GCONST(x float32) int32 { return GCONST2(x, DB_SHIFT) }
 
 // C: NEG16(x) (-(x))
 func NEG16[T integer](x T) T { return -x }
@@ -88,6 +117,11 @@ func VSHR32[T integer](a T, shift int) int32 {
 	}
 	return SHL32(a, -shift)
 }
+
+// Arithmetic shift-right of a 64-bit value
+//
+// C: SHR64(a,shift) ((a) >> (shift))
+func SHR64[T integer](a T, shift int) int64 { return int64(a) >> uint(shift) }
 
 // C: SHR(a,shift) ((a) >> (shift))
 func SHR[T integer](a T, shift int) int32 { return int32(a) >> uint(shift) }
@@ -162,6 +196,18 @@ func SUB32_ovflw[A, B integer](a A, b B) int32 { return int32(uint32(a) - uint32
 //
 // C: NEG32_ovflw(a) ((opus_val32)(0-(opus_uint32)(a)))
 func NEG32_ovflw[T integer](a T) int32 { return int32(0 - uint32(a)) }
+
+// 32-bit shift left, ignoring overflows
+//
+// C: SHL32_ovflw(a,shift) SHL32(a,shift)
+func SHL32_ovflw[T integer](a T, shift int) int32 { return SHL32(a, shift) }
+
+// 32-bit arithmetic shift right with rounding-to-nearest, ignoring overflows
+//
+// C: PSHR32_ovflw(a,shift) (SHR32(ADD32_ovflw(a, (EXTEND32(1)<<(shift)>>1)),shift))
+func PSHR32_ovflw[T integer](a T, shift int) int32 {
+	return SHR32(ADD32_ovflw(a, (int32(1)<<uint(shift))>>1), shift)
+}
 
 // C: MULT16_16_16(a,b) ((((opus_val16)(a))*((opus_val16)(b))))   (promoted to int)
 func MULT16_16_16[A, B integer](a A, b B) int32 { return int32(int16(a)) * int32(int16(b)) }

@@ -14,7 +14,10 @@ type KissFftCpx struct {
 	I int32
 }
 
-// kiss_twiddle_scalar is opus_int16.
+// kiss_twiddle_scalar is celt_coef (opus_int16 without ENABLE_QEXT);
+// COEF_SHIFT is 16.
+const COEF_SHIFT = 16
+
 type kiss_twiddle_cpx struct {
 	r int16
 	i int16
@@ -31,7 +34,7 @@ type arch_fft_state struct {
 // e.g. an fft of length 128 has 4 factors as far as kissfft is concerned: 4*4*4*2
 type kiss_fft_state struct {
 	nfft        int
-	scale       int16
+	scale       int16 // celt_coef
 	scale_shift int
 	shift       int
 	factors     [2 * MAXFACTORS]int16
@@ -52,6 +55,9 @@ const (
 
 // C: S_MUL(a,b) MULT16_32_Q15(b, a)
 func S_MUL(a int32, b int16) int32 { return MULT16_32_Q15(b, a) }
+
+// C: S_MUL2(a,b) MULT16_32_Q16(b, a)
+func S_MUL2(a int32, b int16) int32 { return MULT16_32_Q16(b, a) }
 
 // C: C_MUL(m,a,b)
 func C_MUL(a KissFftCpx, b kiss_twiddle_cpx) (m KissFftCpx) {
@@ -118,7 +124,7 @@ func kf_bfly2(Fout []KissFftCpx, m int, N int) {
 	_ = m
 	{
 		var tw int16
-		tw = QCONST16(0.7071067812, 15)
+		tw = int16(QCONST32(0.7071067812, COEF_SHIFT-1))
 		// We know that m==4 here because the radix-2 is just after a radix-4
 		celt_assert(m == 4)
 		fo := 0
@@ -135,7 +141,7 @@ func kf_bfly2(Fout []KissFftCpx, m int, N int) {
 			C_ADDTO(&Fout[fo+1], t)
 
 			t.R = Fout2[2].I
-			t.I = -Fout2[2].R
+			t.I = NEG32_ovflw(Fout2[2].R)
 			Fout2[2] = C_SUB(Fout[fo+2], t)
 			C_ADDTO(&Fout[fo+2], t)
 
@@ -214,7 +220,7 @@ func kf_bfly3(Fout_beg []KissFftCpx, fstride int, st *kiss_fft_state, m, N, mm i
 	var epi3 kiss_twiddle_cpx
 
 	// epi3.r = -16384; // Unused
-	epi3.i = -28378
+	epi3.i = int16(-QCONST32(0.86602540, COEF_SHIFT-1))
 	for i = 0; i < N; i++ {
 		Fout := Fout_beg[i*mm:]
 		tw1, tw2 := 0, 0
@@ -259,10 +265,10 @@ func kf_bfly5(Fout_beg []KissFftCpx, fstride int, st *kiss_fft_state, m, N, mm i
 	var tw []kiss_twiddle_cpx
 	var ya, yb kiss_twiddle_cpx
 
-	ya.r = 10126
-	ya.i = -31164
-	yb.r = -26510
-	yb.i = -19261
+	ya.r = int16(QCONST32(0.30901699, COEF_SHIFT-1))
+	ya.i = int16(-QCONST32(0.95105652, COEF_SHIFT-1))
+	yb.r = int16(-QCONST32(0.80901699, COEF_SHIFT-1))
+	yb.i = int16(-QCONST32(0.58778525, COEF_SHIFT-1))
 	tw = st.twiddles
 
 	for i = 0; i < N; i++ {
@@ -321,10 +327,30 @@ func opus_fft_free_arch_c(st *kiss_fft_state) {
 	_ = st
 }
 
+// C: static void fft_downshift(kiss_fft_cpx *x, int N, int *total, int step)   (FIXED_POINT)
+func fft_downshift(x []KissFftCpx, N int, total *int, step int) {
+	var shift int
+	shift = IMIN(step, *total)
+	*total -= shift
+	if shift == 1 {
+		var i int
+		for i = 0; i < N; i++ {
+			x[i].R = SHR32(x[i].R, 1)
+			x[i].I = SHR32(x[i].I, 1)
+		}
+	} else if shift > 0 {
+		var i int
+		for i = 0; i < N; i++ {
+			x[i].R = PSHR32(x[i].R, shift)
+			x[i].I = PSHR32(x[i].I, shift)
+		}
+	}
+}
+
 // FftImpl runs the butterflies in place on an already bit-reversed buffer.
 //
-// C: void opus_fft_impl(const kiss_fft_state *st,kiss_fft_cpx *fout)
-func FftImpl(st *kiss_fft_state, fout []KissFftCpx) {
+// C: void opus_fft_impl(const kiss_fft_state *st,kiss_fft_cpx *fout ARG_FIXED(int downshift))
+func FftImpl(st *kiss_fft_state, fout []KissFftCpx, downshift int) {
 	var m2, m int
 	var p int
 	var L int
@@ -359,16 +385,21 @@ func FftImpl(st *kiss_fft_state, fout []KissFftCpx) {
 		}
 		switch st.factors[2*i] {
 		case 2:
+			fft_downshift(fout, st.nfft, &downshift, 1)
 			kf_bfly2(fout, m, fstride[i])
 		case 4:
+			fft_downshift(fout, st.nfft, &downshift, 2)
 			kf_bfly4(fout, fstride[i]<<uint(shift), st, m, fstride[i], m2)
 		case 3:
+			fft_downshift(fout, st.nfft, &downshift, 2)
 			kf_bfly3(fout, fstride[i]<<uint(shift), st, m, fstride[i], m2)
 		case 5:
+			fft_downshift(fout, st.nfft, &downshift, 3)
 			kf_bfly5(fout, fstride[i]<<uint(shift), st, m, fstride[i], m2)
 		}
 		m = m2
 	}
+	fft_downshift(fout, st.nfft, &downshift, downshift)
 }
 
 // Fft performs a forward FFT on a complex input buffer (fin must not alias fout).
@@ -388,10 +419,10 @@ func Fft(st *kiss_fft_state, fin, fout []KissFftCpx, arch int) {
 	// Bit-reverse the input
 	for i = 0; i < st.nfft; i++ {
 		var x KissFftCpx = fin[i]
-		fout[st.bitrev[i]].R = SHR32(MULT16_32_Q16(scale, x.R), scale_shift)
-		fout[st.bitrev[i]].I = SHR32(MULT16_32_Q16(scale, x.I), scale_shift)
+		fout[st.bitrev[i]].R = S_MUL2(x.R, scale)
+		fout[st.bitrev[i]].I = S_MUL2(x.I, scale)
 	}
-	FftImpl(st, fout)
+	FftImpl(st, fout, scale_shift)
 }
 
 // IfftImpl is the inverse counterpart of FftImpl.
@@ -406,7 +437,7 @@ func IfftImpl(st *kiss_fft_state, fout []KissFftCpx) {
 	for i = 0; i < st.nfft; i++ {
 		fout[i].I = -fout[i].I
 	}
-	FftImpl(st, fout)
+	FftImpl(st, fout, 0)
 	for i = 0; i < st.nfft; i++ {
 		fout[i].I = -fout[i].I
 	}
@@ -427,7 +458,7 @@ func Ifft(st *kiss_fft_state, fin, fout []KissFftCpx, arch int) {
 	for i = 0; i < st.nfft; i++ {
 		fout[i].I = -fout[i].I
 	}
-	FftImpl(st, fout)
+	FftImpl(st, fout, 0)
 	for i = 0; i < st.nfft; i++ {
 		fout[i].I = -fout[i].I
 	}

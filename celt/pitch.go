@@ -81,18 +81,21 @@ func celt_fir5(x []int16, num []int16, N int) {
 // PitchDownsample downsamples x by 2 (summing channels) into x_lp and applies a
 // 4th-order LPC whitening filter.
 //
-// C: void pitch_downsample(celt_sig * OPUS_RESTRICT x[], opus_val16 * OPUS_RESTRICT x_lp, int len, int C, int arch)
-func PitchDownsample(x [][]int32, x_lp []int16, length, C int, arch int) {
+// C: void pitch_downsample(celt_sig * OPUS_RESTRICT x[], opus_val16 * OPUS_RESTRICT x_lp, int len, int C, int factor, int arch)
+func PitchDownsample(x [][]int32, x_lp []int16, length, C int, factor int, arch int) {
 	var i int
 	var ac [5]int32
 	var tmp int16 = Q15ONE
 	var lpc [4]int16
 	var lpc2 [5]int16
 	var c1 int16 = QCONST16(.8, 15)
+	var offset int
 	var shift int
-	var maxabs int32 = Maxabs32(x[0], length)
+	var maxabs int32
+	offset = factor / 2
+	maxabs = Maxabs32(x[0], length*factor)
 	if C == 2 {
-		var maxabs_1 int32 = Maxabs32(x[1], length)
+		var maxabs_1 int32 = Maxabs32(x[1], length*factor)
 		maxabs = MAX32(maxabs, maxabs_1)
 	}
 	if maxabs < 1 {
@@ -105,19 +108,19 @@ func PitchDownsample(x [][]int32, x_lp []int16, length, C int, arch int) {
 	if C == 2 {
 		shift++
 	}
-	for i = 1; i < length>>1; i++ {
-		x_lp[i] = int16(SHR32(x[0][(2*i-1)], shift+2) + SHR32(x[0][(2*i+1)], shift+2) + SHR32(x[0][2*i], shift+1))
+	for i = 1; i < length; i++ {
+		x_lp[i] = int16(SHR32(x[0][(factor*i-offset)], shift+2) + SHR32(x[0][(factor*i+offset)], shift+2) + SHR32(x[0][factor*i], shift+1))
 	}
-	x_lp[0] = int16(SHR32(x[0][1], shift+2) + SHR32(x[0][0], shift+1))
+	x_lp[0] = int16(SHR32(x[0][offset], shift+2) + SHR32(x[0][0], shift+1))
 	if C == 2 {
-		for i = 1; i < length>>1; i++ {
-			x_lp[i] += int16(SHR32(x[1][(2*i-1)], shift+2) + SHR32(x[1][(2*i+1)], shift+2) + SHR32(x[1][2*i], shift+1))
+		for i = 1; i < length; i++ {
+			x_lp[i] += int16(SHR32(x[1][(factor*i-offset)], shift+2) + SHR32(x[1][(factor*i+offset)], shift+2) + SHR32(x[1][factor*i], shift+1))
 		}
-		x_lp[0] += int16(SHR32(x[1][1], shift+2) + SHR32(x[1][0], shift+1))
+		x_lp[0] += int16(SHR32(x[1][offset], shift+2) + SHR32(x[1][0], shift+1))
 	}
 
 	Autocorr(x_lp, ac[:], nil, 0,
-		4, length>>1, arch)
+		4, length, arch)
 
 	// Noise floor -40 dB
 	ac[0] += SHR32(ac[0], 13)
@@ -138,7 +141,7 @@ func PitchDownsample(x [][]int32, x_lp []int16, length, C int, arch int) {
 	lpc2[2] = int16(int32(lpc[2]) + MULT16_16_Q15(c1, lpc[1]))
 	lpc2[3] = int16(int32(lpc[3]) + MULT16_16_Q15(c1, lpc[2]))
 	lpc2[4] = int16(MULT16_16_Q15(c1, lpc[3]))
-	celt_fir5(x_lp, lpc2[:], length>>1)
+	celt_fir5(x_lp, lpc2[:], length)
 }
 
 // XcorrKernel is the kernel you really want to optimize. It gets used a lot
@@ -324,7 +327,7 @@ func PitchSearch(x_lp []int16, y []int16, length, max_pitch int, pitch *int, arc
 
 	xmax = Maxabs16(x_lp4, length>>2)
 	ymax = Maxabs16(y_lp4, lag>>2)
-	shift = int(Ilog2(MAX32(1, MAX32(xmax, ymax)))) - 11
+	shift = int(Ilog2(MAX32(1, MAX32(xmax, ymax)))) - 14 + int(Ilog2(int32(length)))/2
 	if shift > 0 {
 		for j = 0; j < length>>2; j++ {
 			x_lp4[j] = int16(SHR16(x_lp4[j], shift))
@@ -405,7 +408,7 @@ func compute_pitch_gain(xy, xx, yy int32) int16 {
 	den = RsqrtNorm(x2y2)
 	g = MULT16_32_Q15(den, xy)
 	g = VSHR32(g, (shift>>1)-1)
-	return EXTRACT16(MIN32(g, int32(Q15ONE)))
+	return EXTRACT16(MAX32(int32(-Q15ONE), MIN32(g, int32(Q15ONE))))
 }
 
 var second_check = [16]int{0, 0, 3, 2, 3, 2, 5, 2, 3, 2, 3, 2, 5, 2, 3, 2}

@@ -55,6 +55,15 @@ static uint32_t crc_s16(const opus_int16 *p, int n) {
    return c ^ 0xFFFFFFFFu;
 }
 
+static uint32_t crc_s32(const opus_int32 *p, int n) {
+   uint32_t c = 0xFFFFFFFFu;
+   int i, k;
+   for (i = 0; i < n; i++) {
+      uint32_t v = (uint32_t)p[i];
+      for (k = 0; k < 4; k++) { c = crc_table[(c ^ (v & 0xFF)) & 0xFF] ^ (c >> 8); v >>= 8; }
+   }
+   return c ^ 0xFFFFFFFFu;
+}
 static uint32_t crc_bytes(const unsigned char *p, int n) {
    uint32_t c = 0xFFFFFFFFu;
    int i;
@@ -104,6 +113,8 @@ static int parse_app(const char *s) {
    if (!strcmp(s, "voip")) return OPUS_APPLICATION_VOIP;
    if (!strcmp(s, "audio")) return OPUS_APPLICATION_AUDIO;
    if (!strcmp(s, "lowdelay")) return OPUS_APPLICATION_RESTRICTED_LOWDELAY;
+   if (!strcmp(s, "silk")) return OPUS_APPLICATION_RESTRICTED_SILK; /* libopus 1.6 */
+   if (!strcmp(s, "celt")) return OPUS_APPLICATION_RESTRICTED_CELT;
    dief("bad application", s); return 0;
 }
 static int parse_signal(const char *s) {
@@ -323,7 +334,8 @@ static int cmd_enc(int argc, char **argv) {
    int rate = 48000, ch = 1, app = OPUS_APPLICATION_AUDIO, bitrate = 64000, frame_size = -1;
    int vbr = 1, cvbr = 0, bw = OPUS_AUTO, maxbw = OPUS_AUTO, complexity = 10, fec = 0, lossperc = 0, dtx = 0;
    int forcech = OPUS_AUTO, sig = OPUS_AUTO, lsbdepth = 16, maxpayload = MAX_PACKET, mode = OPUS_AUTO;
-   int voiceratio = -1, framedur = OPUS_FRAMESIZE_ARG, nopred = 0, remaining = 0, nophaseinv = 0;
+   int voiceratio = -1, framedur = OPUS_FRAMESIZE_ARG, nopred = 0, remaining = 0, nophaseinv = 0, pcm24 = 0;
+   opus_int32 *in32 = NULL;
    int sweep_bps = 0, sweep_max = 0, sweep_min = 0, random_framesize = 0, random_fec = 0;
    const int (*mode_list)[4] = NULL; int nb_modes = 0;
    struct sched sched[MAX_SCHED]; int nsched = 0;
@@ -363,6 +375,7 @@ static int cmd_enc(int argc, char **argv) {
       else if (!strcmp(a, "--framedur")) framedur = parse_framedur(NEXT);
       else if (!strcmp(a, "--nopred")) nopred = 1;
       else if (!strcmp(a, "--nophaseinv")) nophaseinv = 1;
+      else if (!strcmp(a, "--pcm24")) pcm24 = 1; /* libopus 1.6: 24-bit API (samples << 8) */
       else if (!strcmp(a, "--sweep")) sweep_bps = atoi(NEXT);
       else if (!strcmp(a, "--sweep-max")) sweep_max = atoi(NEXT);
       else if (!strcmp(a, "--random-framesize")) random_framesize = 1;
@@ -476,6 +489,7 @@ static int cmd_enc(int argc, char **argv) {
       mode_switch_time = (int)(size/sizeof(short)/ch/nb_modes);
    }
    in = malloc(sizeof(opus_int16)*MAX_FRAME*ch);
+   in32 = malloc(sizeof(opus_int32)*MAX_FRAME*ch);
    data = malloc(MAX_PACKET);
 
    while (!stop) {
@@ -509,7 +523,13 @@ static int cmd_enc(int argc, char **argv) {
          for (i = read*ch; i < frame_size*ch; i++) in[i] = 0;
          stop = 1;
       }
-      if (g_proj) len = opus_projection_encode((OpusProjectionEncoder*)enc, in, frame_size, data, maxpayload);
+      if (pcm24) {
+         for (i = 0; i < frame_size*ch; i++) in32[i] = (opus_int32)in[i] << 8;
+         if (g_proj) len = opus_projection_encode24((OpusProjectionEncoder*)enc, in32, frame_size, data, maxpayload);
+         else if (ms) len = opus_multistream_encode24((OpusMSEncoder*)enc, in32, frame_size, data, maxpayload);
+         else len = opus_encode24((OpusEncoder*)enc, in32, frame_size, data, maxpayload);
+      }
+      else if (g_proj) len = opus_projection_encode((OpusProjectionEncoder*)enc, in, frame_size, data, maxpayload);
       else if (ms) len = opus_multistream_encode((OpusMSEncoder*)enc, in, frame_size, data, maxpayload);
       else len = opus_encode((OpusEncoder*)enc, in, frame_size, data, maxpayload);
       if (len < 0) { fprintf(ftr, "E i=%d err=%d\n", count, len); fprintf(stderr, "gen: opus_encode: %s\n", opus_strerror(len)); break; }
@@ -542,13 +562,14 @@ static int cmd_enc(int argc, char **argv) {
    }
 #undef SET
    if (g_proj) opus_projection_encoder_destroy((OpusProjectionEncoder*)enc); else if (ms) opus_multistream_encoder_destroy((OpusMSEncoder*)enc); else opus_encoder_destroy((OpusEncoder*)enc);
-   fclose(fin); fclose(fpkt); fclose(ftr); free(in); free(data);
+   fclose(fin); fclose(fpkt); fclose(ftr); free(in); free(in32); free(data);
    return 0;
 }
 
 /* ---- dec ----------------------------------------------------------------- */
 static int cmd_dec(int argc, char **argv) {
-   int rate = 48000, ch = 1, lossperc = 0, fec = 0, gain = 0, use_float = 0, nophaseinv = 0;
+   int rate = 48000, ch = 1, lossperc = 0, fec = 0, gain = 0, use_float = 0, nophaseinv = 0, pcm24 = 0, ignoreext = 0;
+   opus_int32 *out32 = NULL;
    int ms = 0, streams = 0, coupled = 0; unsigned char mapping[MAX_CH]; int nmap = 0;
    struct sched sched[MAX_SCHED]; int nsched = 0;
    const char *pkt_path = NULL, *trace_path = NULL, *out_path = NULL;
@@ -569,6 +590,8 @@ static int cmd_dec(int argc, char **argv) {
       else if (!strcmp(a, "--skip")) skip = atoi(NEXT);
       else if (!strcmp(a, "--float")) use_float = 1;
       else if (!strcmp(a, "--nophaseinv")) nophaseinv = 1;
+      else if (!strcmp(a, "--pcm24")) pcm24 = 1;
+      else if (!strcmp(a, "--ignore-ext")) ignoreext = 1;
       else if (!strcmp(a, "--projection")) { ms = 1; g_proj = 1; }
       else if (!strcmp(a, "--seed")) lcg_state = (uint32_t)strtoul(NEXT, NULL, 0);
       else if (!strcmp(a, "--sched")) nsched = parse_sched(NEXT, sched, rate);
@@ -610,16 +633,20 @@ static int cmd_dec(int argc, char **argv) {
 #define GET_DUR(pv) SET(OPUS_GET_LAST_PACKET_DURATION(pv))
    if (gain) SET(OPUS_SET_GAIN(gain));
    if (nophaseinv) SET(OPUS_SET_PHASE_INVERSION_DISABLED(nophaseinv));
+   if (ignoreext) SET(OPUS_SET_IGNORE_EXTENSIONS(ignoreext));
    {
       int v;
       SET(OPUS_GET_SAMPLE_RATE(&v)); fprintf(ftr, "H fs=%d", v);
       SET(OPUS_GET_GAIN(&v)); fprintf(ftr, " gain=%d", v);
-      SET(OPUS_GET_PHASE_INVERSION_DISABLED(&v)); fprintf(ftr, " phaseinv=%d\n", v);
+      SET(OPUS_GET_PHASE_INVERSION_DISABLED(&v)); fprintf(ftr, " phaseinv=%d", v);
+      if (!ms) { SET(OPUS_GET_IGNORE_EXTENSIONS(&v)); fprintf(ftr, " ignoreext=%d", v); } /* multistream ctl lacks it in 1.6 */
+      fprintf(ftr, "\n");
    }
    data[0] = malloc(MAX_PACKET); data[1] = malloc(MAX_PACKET);
    len[0] = len[1] = 0; enc_rng[0] = enc_rng[1] = 0;
    out = malloc(sizeof(opus_int16)*MAX_FRAME*ch);
    if (use_float) outf = malloc(sizeof(float)*MAX_FRAME*ch);
+   if (pcm24) out32 = malloc(sizeof(opus_int32)*MAX_FRAME*ch);
 
    for (;;) {
       uint32_t ulen, urng; int n, s_i, dur, pitch, dbw, decode_fec = 0; opus_uint32 drng;
@@ -653,7 +680,12 @@ static int cmd_dec(int argc, char **argv) {
          else { n = MAX_FRAME; pkt = data[toggle]; pktlen = len[toggle]; }
       }
       if (pkt == NULL) pktlen = 0;
-      if (use_float) {
+      if (pcm24) {
+         if (g_proj) n = opus_projection_decode24((OpusProjectionDecoder*)dec, pkt, pktlen, out32, n, decode_fec);
+         else if (ms) n = opus_multistream_decode24((OpusMSDecoder*)dec, pkt, pktlen, out32, n, decode_fec);
+         else n = opus_decode24((OpusDecoder*)dec, pkt, pktlen, out32, n, decode_fec);
+         if (n > 0) for (i = 0; i < n*ch; i++) out[i] = (opus_int16)(out32[i] >> 8);
+      } else if (use_float) {
          if (g_proj) n = opus_projection_decode_float((OpusProjectionDecoder*)dec, pkt, pktlen, outf, n, decode_fec);
          else if (ms) n = opus_multistream_decode_float((OpusMSDecoder*)dec, pkt, pktlen, outf, n, decode_fec);
          else n = opus_decode_float((OpusDecoder*)dec, pkt, pktlen, outf, n, decode_fec);
@@ -672,7 +704,7 @@ static int cmd_dec(int argc, char **argv) {
          fprintf(ftr, "D i=%d lost=%d fec=%d err=%d\n", count, lost, decode_fec, n);
       } else {
          fprintf(ftr, "D i=%d lost=%d fec=%d n=%d rng=%08x bw=%d dur=%d pitch=%d crc=%08x\n",
-                 count, lost, decode_fec, n, (unsigned)drng, dbw, dur, pitch, (unsigned)crc_s16(out, n*ch));
+                 count, lost, decode_fec, n, (unsigned)drng, dbw, dur, pitch, pcm24 ? (unsigned)crc_s32(out32, n*ch) : (unsigned)crc_s16(out, n*ch));
          if (fout && n > skip) write_s16(fout, out + skip*ch, (n-skip)*ch);
          if (n < skip) skip -= n; else skip = 0;
       }
@@ -682,7 +714,7 @@ static int cmd_dec(int argc, char **argv) {
 #undef GET_DUR
    if (g_proj) opus_projection_decoder_destroy((OpusProjectionDecoder*)dec); else if (ms) opus_multistream_decoder_destroy((OpusMSDecoder*)dec); else opus_decoder_destroy((OpusDecoder*)dec);
    fclose(fpkt); fclose(ftr); if (fout) fclose(fout);
-   free(data[0]); free(data[1]); free(out); free(outf);
+   free(data[0]); free(data[1]); free(out); free(outf); free(out32);
    return 0;
 }
 

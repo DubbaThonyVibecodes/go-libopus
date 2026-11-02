@@ -48,6 +48,10 @@ func parseApp(s string) (int32, error) {
 		return opus.OPUS_APPLICATION_AUDIO, nil
 	case "lowdelay":
 		return opus.OPUS_APPLICATION_RESTRICTED_LOWDELAY, nil
+	case "silk":
+		return opus.OPUS_APPLICATION_RESTRICTED_SILK, nil
+	case "celt":
+		return opus.OPUS_APPLICATION_RESTRICTED_CELT, nil
 	}
 	return 0, die("bad application %q", s)
 }
@@ -289,6 +293,7 @@ func parseSched(s string, rate int) ([]sched, error) {
 type encoder interface {
 	Ctl(request int, args ...any) int
 	encode(pcm []int16, frameSize int, data []byte, maxBytes int) int
+	encode24(pcm []int32, frameSize int, data []byte, maxBytes int) int
 }
 
 type elemEnc struct{ *opus.OpusEncoder }
@@ -296,17 +301,26 @@ type elemEnc struct{ *opus.OpusEncoder }
 func (e elemEnc) encode(pcm []int16, frameSize int, data []byte, maxBytes int) int {
 	return int(e.Encode(pcm, frameSize, data, int32(maxBytes)))
 }
+func (e elemEnc) encode24(pcm []int32, frameSize int, data []byte, maxBytes int) int {
+	return int(e.Encode24(pcm, frameSize, data, int32(maxBytes)))
+}
 
 type msEnc struct{ *opus.OpusMSEncoder }
 
 func (e msEnc) encode(pcm []int16, frameSize int, data []byte, maxBytes int) int {
 	return e.MultistreamEncode(pcm, frameSize, data, int32(maxBytes))
 }
+func (e msEnc) encode24(pcm []int32, frameSize int, data []byte, maxBytes int) int {
+	return e.MultistreamEncode24(pcm, frameSize, data, int32(maxBytes))
+}
 
 type projEnc struct{ *opus.OpusProjectionEncoder }
 
 func (e projEnc) encode(pcm []int16, frameSize int, data []byte, maxBytes int) int {
 	return e.ProjectionEncode(pcm, frameSize, data, int32(maxBytes))
+}
+func (e projEnc) encode24(pcm []int32, frameSize int, data []byte, maxBytes int) int {
+	return e.ProjectionEncode24(pcm, frameSize, data, int32(maxBytes))
 }
 
 // getDemixingMatrix mirrors get_demixing_matrix in gen.c: the demixing matrix
@@ -413,7 +427,7 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 	complexity := int32(10)
 	fec, lossperc, dtx := int32(0), int32(0), int32(0)
 	framedur, nopred, nophaseinv := int32(opus.OPUS_FRAMESIZE_ARG), int32(0), int32(0)
-	proj := false
+	proj, pcm24 := false, false
 	remaining := 0
 	forcech := int32(opus.OPUS_AUTO)
 	sig := int32(opus.OPUS_AUTO)
@@ -490,6 +504,8 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 			nopred = 1
 		case "--nophaseinv":
 			nophaseinv = 1
+		case "--pcm24":
+			pcm24 = true
 		case "--voiceratio":
 			voiceratio = int32(atoi(next()))
 		case "--sweep":
@@ -805,7 +821,16 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 			clear(buf[read*ch : frameSize*ch])
 			stop = true
 		}
-		length := enc.encode(buf[:frameSize*ch], frameSize, data, maxpayload)
+		var length int
+		if pcm24 {
+			in32 := make([]int32, frameSize*ch)
+			for i := range in32 {
+				in32[i] = int32(buf[i]) << 8
+			}
+			length = enc.encode24(in32, frameSize, data, maxpayload)
+		} else {
+			length = enc.encode(buf[:frameSize*ch], frameSize, data, maxpayload)
+		}
 		if length < 0 {
 			res.Trace = append(res.Trace, fmt.Sprintf("E i=%d err=%d", count, length))
 			break
@@ -882,6 +907,7 @@ type decoder interface {
 	Ctl(request int, args ...any) int
 	decode(data []byte, length int, pcm []int16, frameSize int, decodeFec int) int
 	decodeFloat(data []byte, length int, pcm []float32, frameSize int, decodeFec int) int
+	decode24(data []byte, length int, pcm []int32, frameSize int, decodeFec int) int
 }
 
 type elemDec struct{ *opus.OpusDecoder }
@@ -891,6 +917,9 @@ func (d elemDec) decode(data []byte, length int, pcm []int16, frameSize int, dec
 }
 func (d elemDec) decodeFloat(data []byte, length int, pcm []float32, frameSize int, decodeFec int) int {
 	return d.DecodeFloat(data, int32(length), pcm, frameSize, decodeFec)
+}
+func (d elemDec) decode24(data []byte, length int, pcm []int32, frameSize int, decodeFec int) int {
+	return d.Decode24(data, int32(length), pcm, frameSize, decodeFec)
 }
 
 type msDec struct{ *opus.OpusMSDecoder }
@@ -903,6 +932,9 @@ func (d projDec) decode(data []byte, length int, pcm []int16, frameSize int, dec
 func (d projDec) decodeFloat(data []byte, length int, pcm []float32, frameSize int, decodeFec int) int {
 	return d.ProjectionDecodeFloat(data, int32(length), pcm, frameSize, decodeFec)
 }
+func (d projDec) decode24(data []byte, length int, pcm []int32, frameSize int, decodeFec int) int {
+	return d.ProjectionDecode24(data, int32(length), pcm, frameSize, decodeFec)
+}
 
 func (d msDec) decode(data []byte, length int, pcm []int16, frameSize int, decodeFec int) int {
 	return d.MultistreamDecode(data, int32(length), pcm, frameSize, decodeFec)
@@ -910,13 +942,16 @@ func (d msDec) decode(data []byte, length int, pcm []int16, frameSize int, decod
 func (d msDec) decodeFloat(data []byte, length int, pcm []float32, frameSize int, decodeFec int) int {
 	return d.MultistreamDecodeFloat(data, int32(length), pcm, frameSize, decodeFec)
 }
+func (d msDec) decode24(data []byte, length int, pcm []int32, frameSize int, decodeFec int) int {
+	return d.MultistreamDecode24(data, int32(length), pcm, frameSize, decodeFec)
+}
 
 // RunDec mirrors cmd_dec in gen.c.
 func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 	rate, ch := 48000, 1
 	lossperc, fec, gain, skip := 0, 0, int32(0), 0
-	useFloat := false
-	nophaseinv := int32(0)
+	useFloat, pcm24 := false, false
+	nophaseinv, ignoreext := int32(0), int32(0)
 	ms, proj := false, false
 	streams, coupled := 0, 0
 	var mapping []byte
@@ -950,6 +985,10 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 			useFloat = true
 		case "--nophaseinv":
 			nophaseinv = 1
+		case "--pcm24":
+			pcm24 = true
+		case "--ignore-ext":
+			ignoreext = 1
 		case "--seed":
 			v, _ := strconv.ParseUint(next(), 0, 32)
 			lcg.State = uint32(v)
@@ -1022,6 +1061,11 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 			return nil, err
 		}
 	}
+	if ignoreext != 0 {
+		if err := set(opus.OPUS_SET_IGNORE_EXTENSIONS_REQUEST, ignoreext); err != nil {
+			return nil, err
+		}
+	}
 	{
 		var v int32
 		if err := set(opus.OPUS_GET_SAMPLE_RATE_REQUEST, &v); err != nil {
@@ -1035,7 +1079,14 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 		if err := set(opus.OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST, &v); err != nil {
 			return nil, err
 		}
-		res.Trace = append(res.Trace, fmt.Sprintf("%s phaseinv=%d", line, v))
+		line += fmt.Sprintf(" phaseinv=%d", v)
+		if !ms { // the multistream ctl lacks it in 1.6
+			if err := set(opus.OPUS_GET_IGNORE_EXTENSIONS_REQUEST, &v); err != nil {
+				return nil, err
+			}
+			line += fmt.Sprintf(" ignoreext=%d", v)
+		}
+		res.Trace = append(res.Trace, line)
 	}
 	getDur := func() (int32, error) {
 		var v int32
@@ -1045,6 +1096,10 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 	var data [2][]byte
 	var length [2]int
 	out := make([]int16, maxFrame*ch)
+	var out32 []int32
+	if pcm24 {
+		out32 = make([]int32, maxFrame*ch)
+	}
 	var outf []float32
 	if useFloat {
 		outf = make([]float32, maxFrame*ch)
@@ -1123,7 +1178,14 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 		if pkt == nil {
 			pktlen = 0
 		}
-		if useFloat {
+		if pcm24 {
+			n = dec.decode24(pkt, pktlen, out32, n, decodeFec)
+			if n > 0 {
+				for i := 0; i < n*ch; i++ {
+					out[i] = int16(out32[i] >> 8)
+				}
+			}
+		} else if useFloat {
 			n = dec.decodeFloat(pkt, pktlen, outf, n, decodeFec)
 			if n > 0 {
 				for i := 0; i < n*ch; i++ {
@@ -1166,7 +1228,16 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 		if n < 0 {
 			res.Trace = append(res.Trace, fmt.Sprintf("D i=%d lost=%d fec=%d err=%d", count, b2i(lost), decodeFec, n))
 		} else {
-			crc := crc32.ChecksumIEEE(testvec.S16Bytes(out[:n*ch]))
+			var crc uint32
+			if pcm24 {
+				b := make([]byte, 4*n*ch)
+				for i, v := range out32[:n*ch] {
+					b[4*i], b[4*i+1], b[4*i+2], b[4*i+3] = byte(v), byte(v>>8), byte(v>>16), byte(v>>24)
+				}
+				crc = crc32.ChecksumIEEE(b)
+			} else {
+				crc = crc32.ChecksumIEEE(testvec.S16Bytes(out[:n*ch]))
+			}
 			res.Trace = append(res.Trace, fmt.Sprintf("D i=%d lost=%d fec=%d n=%d rng=%08x bw=%d dur=%d pitch=%d crc=%08x",
 				count, b2i(lost), decodeFec, n, drng, dbw, dur, pitch, crc))
 			if n > skip {

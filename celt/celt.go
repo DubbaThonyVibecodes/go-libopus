@@ -4,7 +4,26 @@ package celt
 // (celt_encoder.go) and the decoder (celt_decoder.go).
 
 // PACKAGE_VERSION mirrors the upstream version this port tracks.
-const PACKAGE_VERSION = "1.3.1"
+const PACKAGE_VERSION = "1.6.1"
+
+// C: #define QEXT_EXTENSION_ID 124
+const QEXT_EXTENSION_ID = 124
+
+// C: static OPUS_INLINE opus_int32 bits_to_bitrate(opus_int32 bits, opus_int32 Fs, opus_int32 frame_size)
+func BitsToBitrate(bits, Fs, frame_size int32) int32 {
+	return bits * (6 * Fs / frame_size) / 6
+}
+
+// C: static OPUS_INLINE opus_int32 bitrate_to_bits(opus_int32 bitrate, opus_int32 Fs, opus_int32 frame_size)
+func BitrateToBits(bitrate, Fs, frame_size int32) int32 {
+	return bitrate * 6 / (6 * Fs / frame_size)
+}
+
+// C: #define QEXT_SCALE(x) (x)   (no ENABLE_QEXT)
+func QEXT_SCALE[T integer](x T) T { return x }
+
+// C: #define QEXT_SCALE2(x, qext_scale) (x)   (no ENABLE_QEXT)
+func QEXT_SCALE2[T, S integer](x T, qext_scale S) T { return x }
 
 // AnalysisInfo is the C struct AnalysisInfo (celt.h). It is filled by the
 // opus package's analysis code (analysis.c) and passed to the CELT encoder
@@ -76,7 +95,7 @@ func resampling_factor(rate int32) int {
 //
 // C: static void comb_filter_const_c(opus_val32 *y, opus_val32 *x, int T, int N,
 //
-//	opus_val16 g10, opus_val16 g11, opus_val16 g12)
+//	celt_coef g10, celt_coef g11, celt_coef g12)
 //
 // C (pitch.h since 1.5): #define comb_filter_const(y, x, T, N, g10, g11, g12, arch) ((void)(arch),comb_filter_const_c(y, x, T, N, g10, g11, g12))
 func comb_filter_const(y []int32, yOff int, x []int32, xOff int, T, N int,
@@ -91,9 +110,11 @@ func comb_filter_const(y []int32, yOff int, x []int32, xOff int, T, N int,
 	for i = 0; i < N; i++ {
 		x0 = x[xOff+i-T+2]
 		y[yOff+i] = x[xOff+i] +
-			MULT16_32_Q15(g10, x2) +
-			MULT16_32_Q15(g11, ADD32(x1, x3)) +
-			MULT16_32_Q15(g12, ADD32(x0, x4))
+			MULT_COEF_32(g10, x2) +
+			MULT_COEF_32(g11, ADD32(x1, x3)) +
+			MULT_COEF_32(g12, ADD32(x0, x4))
+		// A bit of bias seems to help here.
+		y[yOff+i] = SUB32(y[yOff+i], 1)
 		y[yOff+i] = SATURATE(y[yOff+i], SIG_SAT)
 		x4 = x3
 		x3 = x2
@@ -115,7 +136,7 @@ var comb_gains = [3][3]int16{
 // C: void comb_filter(opus_val32 *y, opus_val32 *x, int T0, int T1, int N,
 //
 //	opus_val16 g0, opus_val16 g1, int tapset0, int tapset1,
-//	const opus_val16 *window, int overlap, int arch)
+//	const celt_coef *window, int overlap, int arch)
 func comb_filter(y []int32, yOff int, x []int32, xOff int, T0, T1, N int,
 	g0, g1 int16, tapset0, tapset1 int,
 	window []int16, overlap int, arch int) {
@@ -136,12 +157,12 @@ func comb_filter(y []int32, yOff int, x []int32, xOff int, T0, T1, N int,
 	// to have then be at least 2 to avoid processing garbage data.
 	T0 = IMAX(T0, COMBFILTER_MINPERIOD)
 	T1 = IMAX(T1, COMBFILTER_MINPERIOD)
-	g00 = int16(MULT16_16_P15(g0, gains[tapset0][0]))
-	g01 = int16(MULT16_16_P15(g0, gains[tapset0][1]))
-	g02 = int16(MULT16_16_P15(g0, gains[tapset0][2]))
-	g10 = int16(MULT16_16_P15(g1, gains[tapset1][0]))
-	g11 = int16(MULT16_16_P15(g1, gains[tapset1][1]))
-	g12 = int16(MULT16_16_P15(g1, gains[tapset1][2]))
+	g00 = int16(MULT_COEF_TAPS(g0, gains[tapset0][0]))
+	g01 = int16(MULT_COEF_TAPS(g0, gains[tapset0][1]))
+	g02 = int16(MULT_COEF_TAPS(g0, gains[tapset0][2]))
+	g10 = int16(MULT_COEF_TAPS(g1, gains[tapset1][0]))
+	g11 = int16(MULT_COEF_TAPS(g1, gains[tapset1][1]))
+	g12 = int16(MULT_COEF_TAPS(g1, gains[tapset1][2]))
 	x1 = x[xOff-T1+1]
 	x2 = x[xOff-T1]
 	x3 = x[xOff-T1-1]
@@ -153,14 +174,16 @@ func comb_filter(y []int32, yOff int, x []int32, xOff int, T0, T1, N int,
 	for i = 0; i < overlap; i++ {
 		var f int16
 		x0 = x[xOff+i-T1+2]
-		f = int16(MULT16_16_Q15(window[i], window[i]))
+		f = int16(MULT_COEF(window[i], window[i]))
 		y[yOff+i] = x[xOff+i] +
-			MULT16_32_Q15(MULT16_16_Q15(int32(Q15ONE)-int32(f), g00), x[xOff+i-T0]) +
-			MULT16_32_Q15(MULT16_16_Q15(int32(Q15ONE)-int32(f), g01), ADD32(x[xOff+i-T0+1], x[xOff+i-T0-1])) +
-			MULT16_32_Q15(MULT16_16_Q15(int32(Q15ONE)-int32(f), g02), ADD32(x[xOff+i-T0+2], x[xOff+i-T0-2])) +
-			MULT16_32_Q15(MULT16_16_Q15(f, g10), x2) +
-			MULT16_32_Q15(MULT16_16_Q15(f, g11), ADD32(x1, x3)) +
-			MULT16_32_Q15(MULT16_16_Q15(f, g12), ADD32(x0, x4))
+			MULT_COEF_32(MULT_COEF(int32(COEF_ONE)-int32(f), g00), x[xOff+i-T0]) +
+			MULT_COEF_32(MULT_COEF(int32(COEF_ONE)-int32(f), g01), ADD32(x[xOff+i-T0+1], x[xOff+i-T0-1])) +
+			MULT_COEF_32(MULT_COEF(int32(COEF_ONE)-int32(f), g02), ADD32(x[xOff+i-T0+2], x[xOff+i-T0-2])) +
+			MULT_COEF_32(MULT_COEF(f, g10), x2) +
+			MULT_COEF_32(MULT_COEF(f, g11), ADD32(x1, x3)) +
+			MULT_COEF_32(MULT_COEF(f, g12), ADD32(x0, x4))
+		// A bit of bias seems to help here.
+		y[yOff+i] = SUB32(y[yOff+i], 3)
 		y[yOff+i] = SATURATE(y[yOff+i], SIG_SAT)
 		x4 = x3
 		x3 = x2

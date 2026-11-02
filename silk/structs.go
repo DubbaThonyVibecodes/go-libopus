@@ -191,7 +191,7 @@ type EncoderState struct {
 // PLCStruct is the C silk_PLC_struct: struct for Packet Loss Concealment.
 type PLCStruct struct {
 	pitchL_Q8         int32            // Pitch lag to use for voiced concealment
-	LTPCoef_Q14       [LTP_ORDER]int16 // LTP coeficients to use for voiced concealment
+	LTPCoef_Q14       [LTP_ORDER]int16 // LTP coefficients to use for voiced concealment
 	prevLPC_Q12       [MAX_LPC_ORDER]int16
 	last_frame_lost   int   // Was previous frame lost
 	rand_seed         int32 // Seed for unvoiced signal generation

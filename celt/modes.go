@@ -6,6 +6,8 @@ package celt
 
 const MAX_PERIOD = 1024
 
+const DEC_PITCH_BUF_SIZE = 2048
+
 // C: PulseCache
 type PulseCache struct {
 	size  int
@@ -32,7 +34,7 @@ type CELTMode struct {
 	allocVectors   []uint8 // Number of bits in each band for several rates
 	logN           []int16
 
-	window []int16
+	window []int16 // celt_coef
 	mdct   mdct_lookup
 	cache  PulseCache
 }

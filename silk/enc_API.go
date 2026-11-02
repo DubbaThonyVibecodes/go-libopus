@@ -12,13 +12,17 @@ import (
 /* Encoder functions                    */
 /****************************************/
 
-// C: opus_int silk_Get_Encoder_Size(opus_int *encSizeBytes)
+// C: opus_int silk_Get_Encoder_Size(opus_int *encSizeBytes, opus_int channels)
 //
 // O    Returns error code
-func GetEncoderSize(encSizeBytes *int) int {
+func GetEncoderSize(encSizeBytes *int, channels int) int {
 	var ret int = SILK_NO_ERROR
 
 	*encSizeBytes = int(unsafe.Sizeof(Encoder{}))
+	/* Skip second encoder state for mono. */
+	if channels == 1 {
+		*encSizeBytes -= int(unsafe.Sizeof(EncoderStateFIX{}))
+	}
 
 	return ret
 }
@@ -27,19 +31,27 @@ func GetEncoderSize(encSizeBytes *int) int {
 /* Init or Reset encoder */
 /*************************/
 //
-// C: opus_int silk_InitEncoder(void *encState, int arch, silk_EncControlStruct *encStatus)
+// C: opus_int silk_InitEncoder(void *encState, int channels, int arch, silk_EncControlStruct *encStatus)
 //
 // O    Returns error code
-func (encState *Encoder) InitEncoder(arch int, encStatus *EncControlStruct) int {
+func (encState *Encoder) InitEncoder(channels int, arch int, encStatus *EncControlStruct) int {
 	var psEnc *Encoder
 	var n int
 	var ret int = SILK_NO_ERROR
 
 	psEnc = encState
 
-	/* Reset encoder */
-	*psEnc = Encoder{}
-	for n = 0; n < ENCODER_NUM_CHANNELS; n++ {
+	/* Reset encoder. Skip second encoder state for mono. */
+	/* C: silk_memset( psEnc, 0, sizeof( silk_encoder ) - (channels==1)*sizeof( silk_encoder_state_Fxx ) );
+	   state_Fxx is the last member, so for mono state_Fxx[ 1 ] is left untouched. */
+	if channels == 1 {
+		state_Fxx1 := psEnc.state_Fxx[1]
+		*psEnc = Encoder{}
+		psEnc.state_Fxx[1] = state_Fxx1
+	} else {
+		*psEnc = Encoder{}
+	}
+	for n = 0; n < channels; n++ {
 		ret += psEnc.state_Fxx[n].InitEncoder(arch)
 		if ret != 0 {
 			silk_assert(false)
@@ -98,10 +110,10 @@ func queryEncoder(encState *Encoder, encStatus *EncControlStruct) int {
 /* Note: if prefillFlag is set, the input must contain 10 ms of audio, irrespective of what                     */
 /* encControl->payloadSize_ms is set to                                                                         */
 //
-// C: opus_int silk_Encode(void *encState, silk_EncControlStruct *encControl, const opus_int16 *samplesIn, opus_int nSamplesIn, ec_enc *psRangeEnc, opus_int32 *nBytesOut, const opus_int prefillFlag, opus_int activity)
+// C: opus_int silk_Encode(void *encState, silk_EncControlStruct *encControl, const opus_res *samplesIn, opus_int nSamplesIn, ec_enc *psRangeEnc, opus_int32 *nBytesOut, const opus_int prefillFlag, opus_int activity)
 //
 // O    Returns error code
-func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16, nSamplesIn int, psRangeEnc *celt.EcEnc, nBytesOut *int32, prefillFlag int, activity int) int {
+func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int32, nSamplesIn int, psRangeEnc *celt.EcEnc, nBytesOut *int32, prefillFlag int, activity int) int {
 	var n, i, nBits, flags int
 	var tmp_payloadSize_ms, tmp_complexity, ret int = 0, 0, 0
 	var nSamplesToBuffer, nSamplesToBufferMax, nBlocksOf10ms int
@@ -113,13 +125,15 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 	var buf []int16
 	var transition, curr_block, tot_blocks int
 
+	silk_assert(int(encControl.NChannelsAPI) >= int(encControl.NChannelsInternal) && int(encControl.NChannelsAPI) >= psEnc.nChannelsInternal)
 	if encControl.ReducedDependency != 0 {
-		psEnc.state_Fxx[0].sCmn.first_frame_after_reset = 1
-		psEnc.state_Fxx[1].sCmn.first_frame_after_reset = 1
+		for n = 0; n < int(encControl.NChannelsAPI); n++ {
+			psEnc.state_Fxx[n].sCmn.first_frame_after_reset = 1
+		}
 	}
-	psEnc.state_Fxx[1].sCmn.nFramesEncoded = 0
-	psEnc.state_Fxx[0].sCmn.nFramesEncoded = 0
-
+	for n = 0; n < int(encControl.NChannelsAPI); n++ {
+		psEnc.state_Fxx[n].sCmn.nFramesEncoded = 0
+	}
 	/* Check values in encoder control structure */
 	if ret = CheckControlInput(encControl); ret != 0 {
 		silk_assert(false)
@@ -237,7 +251,7 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 		if encControl.NChannelsAPI == 2 && encControl.NChannelsInternal == 2 {
 			id := psEnc.state_Fxx[0].sCmn.nFramesEncoded
 			for n = 0; n < nSamplesFromInput; n++ {
-				buf[n] = samplesIn[2*n]
+				buf[n] = celt.RES2INT16(samplesIn[2*n])
 			}
 			/* Making sure to start both resamplers from the same state when switching from mono to stereo */
 			if psEnc.nPrevChannelsInternal == 1 && id == 0 {
@@ -251,7 +265,7 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 			nSamplesToBuffer = psEnc.state_Fxx[1].sCmn.frame_length - psEnc.state_Fxx[1].sCmn.inputBufIx
 			nSamplesToBuffer = min(nSamplesToBuffer, 10*nBlocksOf10ms*psEnc.state_Fxx[1].sCmn.fs_kHz)
 			for n = 0; n < nSamplesFromInput; n++ {
-				buf[n] = samplesIn[2*n+1]
+				buf[n] = celt.RES2INT16(samplesIn[2*n+1])
 			}
 			ret += psEnc.state_Fxx[1].sCmn.resampler_state.Resampler(
 				psEnc.state_Fxx[1].sCmn.inputBuf[psEnc.state_Fxx[1].sCmn.inputBufIx+2:], buf, int32(nSamplesFromInput))
@@ -260,7 +274,7 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 		} else if encControl.NChannelsAPI == 2 && encControl.NChannelsInternal == 1 {
 			/* Combine left and right channels before resampling */
 			for n = 0; n < nSamplesFromInput; n++ {
-				sum = int32(samplesIn[2*n]) + int32(samplesIn[2*n+1])
+				sum = int32(celt.RES2INT16(samplesIn[2*n] + samplesIn[2*n+1]))
 				buf[n] = int16(RSHIFT_ROUND(sum, 1))
 			}
 			ret += psEnc.state_Fxx[0].sCmn.resampler_state.Resampler(
@@ -278,7 +292,9 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 			psEnc.state_Fxx[0].sCmn.inputBufIx += nSamplesToBuffer
 		} else {
 			silk_assert(encControl.NChannelsAPI == 1 && encControl.NChannelsInternal == 1)
-			copy(buf[:nSamplesFromInput], samplesIn[:nSamplesFromInput])
+			for n = 0; n < nSamplesFromInput; n++ {
+				buf[n] = celt.RES2INT16(samplesIn[n])
+			}
 			ret += psEnc.state_Fxx[0].sCmn.resampler_state.Resampler(
 				psEnc.state_Fxx[0].sCmn.inputBuf[psEnc.state_Fxx[0].sCmn.inputBufIx+2:], buf, int32(nSamplesFromInput))
 			psEnc.state_Fxx[0].sCmn.inputBufIx += nSamplesToBuffer

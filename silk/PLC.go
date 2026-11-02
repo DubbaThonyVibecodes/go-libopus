@@ -105,7 +105,7 @@ func plcUpdate(
 		clear(psPLC.LTPCoef_Q14[:])
 	}
 
-	/* Save LPC coeficients */
+	/* Save LPC coefficients */
 	copy(psPLC.prevLPC_Q12[:psDec.LPC_order], psDecCtrl.PredCoef_Q12[1][:psDec.LPC_order])
 	psPLC.prevLTP_scale_Q14 = int16(psDecCtrl.LTP_scale_Q14)
 
@@ -198,7 +198,7 @@ func plcConceal(
 	/* LPC concealment. Apply BWE to previous LPC */
 	Bwexpander(psPLC.prevLPC_Q12[:], psDec.LPC_order, SILK_FIX_CONST(BWE_COEF, 16))
 
-	/* Preload LPC coeficients to array on stack. Gives small performance gain */
+	/* Preload LPC coefficients to array on stack. Gives small performance gain */
 	copy(A_Q12[:psDec.LPC_order], psPLC.prevLPC_Q12[:psDec.LPC_order])
 
 	/* First Lost frame */

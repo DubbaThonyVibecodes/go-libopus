@@ -88,7 +88,7 @@ func (psDec *DecoderState) DecodeIndices(psRangeDec *celt.EcDec, FrameIndex int,
 		}
 		psDec.ec_prevLagIndex = psDec.indices.lagIndex
 
-		/* Get countour index */
+		/* Get contour index */
 		psDec.indices.contourIndex = int8(psRangeDec.DecIcdf(psDec.pitch_contour_iCDF, 8))
 
 		/********************/

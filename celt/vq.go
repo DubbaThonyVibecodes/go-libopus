@@ -1,34 +1,83 @@
 package celt
 
 // C: celt/vq.h, celt/vq.c — vector quantisation of the residual.
+// celt_norm is opus_val32 (int32) since 1.6, in Q(NORM_SHIFT) = Q24.
+
+// C: void norm_scaleup(celt_norm *X, int N, int shift)   (FIXED_POINT)
+func NormScaleup(X []int32, N int, shift int) {
+	var i int
+	celt_assert(shift >= 0)
+	if shift <= 0 {
+		return
+	}
+	for i = 0; i < N; i++ {
+		X[i] = SHL32(X[i], shift)
+	}
+}
+
+// C: void norm_scaledown(celt_norm *X, int N, int shift)   (FIXED_POINT)
+func NormScaledown(X []int32, N int, shift int) {
+	var i int
+	celt_assert(shift >= 0)
+	if shift <= 0 {
+		return
+	}
+	for i = 0; i < N; i++ {
+		X[i] = PSHR32(X[i], shift)
+	}
+}
+
+// C: opus_val32 celt_inner_prod_norm(const celt_norm *x, const celt_norm *y, int len, int arch)   (FIXED_POINT)
+func InnerProdNorm(x, y []int32, length int, arch int) int32 {
+	var i int
+	var sum int32 = 0
+	_ = arch
+	for i = 0; i < length; i++ {
+		sum += x[i] * y[i]
+	}
+	return sum
+}
+
+// C: opus_val32 celt_inner_prod_norm_shift(const celt_norm *x, const celt_norm *y, int len, int arch)   (FIXED_POINT)
+func InnerProdNormShift(x, y []int32, length int, arch int) int32 {
+	var i int
+	var sum int64 = 0
+	_ = arch
+	for i = 0; i < length; i++ {
+		sum += int64(x[i]) * int64(y[i])
+	}
+	return int32(sum >> (2 * (NORM_SHIFT - 14)))
+}
 
 // C: static void exp_rotation1(celt_norm *X, int len, int stride, opus_val16 c, opus_val16 s)
-func exp_rotation1(X []int16, length, stride int, c, s int16) {
+func exp_rotation1(X []int32, length, stride int, c, s int16) {
 	var i int
 	var ms int16
 	Xptr := X
 	ms = NEG16(s)
+	NormScaledown(X, length, NORM_SHIFT-14)
 	for i = 0; i < length-stride; i++ {
-		var x1, x2 int16
+		var x1, x2 int32
 		x1 = Xptr[0]
 		x2 = Xptr[stride]
-		Xptr[stride] = EXTRACT16(PSHR32(MAC16_16(MULT16_16(c, x2), s, x1), 15))
-		Xptr[0] = EXTRACT16(PSHR32(MAC16_16(MULT16_16(c, x1), ms, x2), 15))
+		Xptr[stride] = int32(EXTRACT16(PSHR32(MAC16_16(MULT16_16(c, x2), s, x1), 15)))
+		Xptr[0] = int32(EXTRACT16(PSHR32(MAC16_16(MULT16_16(c, x1), ms, x2), 15)))
 		Xptr = Xptr[1:]
 	}
 	p := length - 2*stride - 1
 	for i = length - 2*stride - 1; i >= 0; i-- {
-		var x1, x2 int16
+		var x1, x2 int32
 		x1 = X[p]
 		x2 = X[p+stride]
-		X[p+stride] = EXTRACT16(PSHR32(MAC16_16(MULT16_16(c, x2), s, x1), 15))
-		X[p] = EXTRACT16(PSHR32(MAC16_16(MULT16_16(c, x1), ms, x2), 15))
+		X[p+stride] = int32(EXTRACT16(PSHR32(MAC16_16(MULT16_16(c, x2), s, x1), 15)))
+		X[p] = int32(EXTRACT16(PSHR32(MAC16_16(MULT16_16(c, x1), ms, x2), 15)))
 		p--
 	}
+	NormScaleup(X, length, NORM_SHIFT-14)
 }
 
 // C: void exp_rotation(celt_norm *X, int len, int dir, int stride, int K, int spread)
-func ExpRotation(X []int16, length, dir, stride, K, spread int) {
+func ExpRotation(X []int32, length, dir, stride, K, spread int) {
 	var SPREAD_FACTOR = [3]int{15, 10, 5}
 	var i int
 	var c, s int16
@@ -73,22 +122,21 @@ func ExpRotation(X []int16, length, dir, stride, K, spread int) {
 	}
 }
 
-// Takes the pitch vector and the decoded residual vector, computes the gain
-// that will give ||p+g*y||=1 and mixes the residual with the pitch.
+// Normalizes the decoded integer pvq codeword to unit norm.
 //
-// C: static void normalise_residual(int * OPUS_RESTRICT iy, celt_norm * OPUS_RESTRICT X, int N, opus_val32 Ryy, opus_val16 gain)
-func normalise_residual(iy []int, X []int16, N int, Ryy int32, gain int16) {
+// C: static void normalise_residual(int * OPUS_RESTRICT iy, celt_norm * OPUS_RESTRICT X, int N, opus_val32 Ryy, opus_val32 gain, int shift)
+func normalise_residual(iy []int, X []int32, N int, Ryy int32, gain int32, shift int) {
 	var i, k int
 	var t int32
-	var g int16
+	var g int32
 
 	k = int(Ilog2(Ryy)) >> 1
-	t = VSHR32(Ryy, 2*(k-7))
-	g = int16(MULT16_16_P15(RsqrtNorm(t), gain))
-
+	t = VSHR32(Ryy, 2*(k-7)-15)
+	g = MULT32_32_Q31(RsqrtNorm32(t), gain)
 	i = 0
+	_ = shift
 	for {
-		X[i] = EXTRACT16(PSHR32(MULT16_16(g, iy[i]), k+1))
+		X[i] = VSHR32(MULT16_32_Q15(iy[i], g), k+15-NORM_SHIFT)
 		i++
 		if i >= N {
 			break
@@ -132,16 +180,20 @@ func extract_collapse_mask(iy []int, N, B int) uint32 {
 
 // C: opus_val16 op_pvq_search_c(celt_norm *X, int *iy, int K, int N, int arch)
 // C: #define op_pvq_search(x, iy, K, N, arch) (op_pvq_search_c(x, iy, K, N, arch))
-func OpPvqSearch(X []int16, iy []int, K, N int, arch int) int16 {
+func OpPvqSearch(X []int32, iy []int, K, N int, arch int) int16 {
 	var i, j int
 	var pulsesLeft int
 	var sum, xy int32
 	var yy int16
 
 	_ = arch
-	y := make([]int16, N)
+	y := make([]int32, N)
 	signx := make([]int, N)
-
+	{
+		var shift int = (int(Ilog2(1+InnerProdNormShift(X, X, N, arch))) + 1) / 2
+		shift = IMAX(0, shift+(NORM_SHIFT-14)-14)
+		NormScaledown(X, N, shift)
+	}
 	// Get rid of the sign
 	sum = 0
 	j = 0
@@ -179,7 +231,7 @@ func OpPvqSearch(X []int16, iy []int, K, N int, arch int) int16 {
 		}
 		// If X is too small, just replace it with a pulse at 0
 		if sum <= int32(K) {
-			X[0] = QCONST16(1.0, 14)
+			X[0] = int32(QCONST16(1.0, 14))
 			j = 1
 			for {
 				X[j] = 0
@@ -195,7 +247,7 @@ func OpPvqSearch(X []int16, iy []int, K, N int, arch int) int16 {
 		for {
 			// It's really important to round *towards zero* here
 			iy[j] = int(MULT16_16_Q15(X[j], rcp))
-			y[j] = int16(iy[j])
+			y[j] = int32(iy[j])
 			yy = int16(MAC16_16(yy, y[j], y[j]))
 			xy = MAC16_16(xy, X[j], y[j])
 			y[j] *= 2
@@ -301,9 +353,9 @@ func OpPvqSearch(X []int16, iy []int, K, N int, arch int) int16 {
 // equal to 1. This is the function that will typically require the most CPU.
 // Returns a mask indicating which blocks in the band received pulses.
 //
-// C: unsigned alg_quant(celt_norm *X, int N, int K, int spread, int B, ec_enc *enc, opus_val16 gain, int resynth, int arch)
-func AlgQuant(X []int16, N, K, spread, B int, enc *EcEnc, gain int16, resynth int, arch int) uint32 {
-	var yy int16
+// C: unsigned alg_quant(celt_norm *X, int N, int K, int spread, int B, ec_enc *enc, opus_val32 gain, int resynth ARG_QEXT(ec_enc *ext_enc) ARG_QEXT(int extra_bits), int arch)
+func AlgQuant(X []int32, N, K, spread, B int, enc *EcEnc, gain int32, resynth int, arch int) uint32 {
+	var yy int32
 	var collapse_mask uint32
 
 	celt_assert2(K > 0, "alg_quant() needs at least one pulse")
@@ -314,77 +366,83 @@ func AlgQuant(X []int16, N, K, spread, B int, enc *EcEnc, gain int16, resynth in
 
 	ExpRotation(X, N, 1, B, K, spread)
 
-	yy = OpPvqSearch(X, iy, K, N, arch)
-
-	EncodePulses(iy, N, K, enc)
+	{
+		yy = int32(OpPvqSearch(X, iy, K, N, arch))
+		collapse_mask = extract_collapse_mask(iy, N, B)
+		EncodePulses(iy, N, K, enc)
+		if resynth != 0 {
+			normalise_residual(iy, X, N, yy, gain, 0)
+		}
+	}
 
 	if resynth != 0 {
-		normalise_residual(iy, X, N, int32(yy), gain)
 		ExpRotation(X, N, -1, B, K, spread)
 	}
 
-	collapse_mask = extract_collapse_mask(iy, N, B)
 	return collapse_mask
 }
 
 // AlgUnquant decodes a pulse vector and combines the result with the pitch
 // vector to produce the final normalised signal in the current band.
 //
-// C: unsigned alg_unquant(celt_norm *X, int N, int K, int spread, int B, ec_dec *dec, opus_val16 gain)
-func AlgUnquant(X []int16, N, K, spread, B int, dec *EcDec, gain int16) uint32 {
+// C: unsigned alg_unquant(celt_norm *X, int N, int K, int spread, int B, ec_dec *dec, opus_val32 gain ARG_QEXT(ec_enc *ext_dec) ARG_QEXT(int extra_bits))
+func AlgUnquant(X []int32, N, K, spread, B int, dec *EcDec, gain int32) uint32 {
 	var Ryy int32
 	var collapse_mask uint32
+	var yy_shift int = 0
 	celt_assert2(K > 0, "alg_unquant() needs at least one pulse")
 	celt_assert2(N > 1, "alg_unquant() needs at least two dimensions")
 	iy := make([]int, N)
 	Ryy = DecodePulses(iy, N, K, dec)
-	normalise_residual(iy, X, N, Ryy, gain)
+	normalise_residual(iy, X, N, Ryy, gain, yy_shift)
 	ExpRotation(X, N, -1, B, K, spread)
 	collapse_mask = extract_collapse_mask(iy, N, B)
 	return collapse_mask
 }
 
-// C: void renormalise_vector(celt_norm *X, int N, opus_val16 gain, int arch)
-func RenormaliseVector(X []int16, N int, gain int16, arch int) {
+// C: void renormalise_vector(celt_norm *X, int N, opus_val32 gain, int arch)
+func RenormaliseVector(X []int32, N int, gain int32, arch int) {
 	var i, k int
 	var E int32
 	var g int16
 	var t int32
-	E = EPSILON + InnerProd(X, X, N, arch)
+	NormScaledown(X, N, NORM_SHIFT-14)
+	E = EPSILON + InnerProdNorm(X, X, N, arch)
 	k = int(Ilog2(E)) >> 1
 	t = VSHR32(E, 2*(k-7))
-	g = int16(MULT16_16_P15(RsqrtNorm(t), gain))
+	g = int16(MULT32_32_Q31(RsqrtNorm(t), gain))
 
 	for i = 0; i < N; i++ {
-		X[i] = EXTRACT16(PSHR32(MULT16_16(g, X[i]), k+1))
+		X[i] = int32(EXTRACT16(PSHR32(MULT16_16(g, X[i]), k+15-14)))
 	}
+	NormScaleup(X, N, NORM_SHIFT-14)
 	// return celt_sqrt(E);
 }
 
-// C: int stereo_itheta(const celt_norm *X, const celt_norm *Y, int stereo, int N, int arch)
-func StereoItheta(X, Y []int16, stereo, N int, arch int) int {
-	var i, itheta int
-	var mid, side int16
+// C: opus_int32 stereo_itheta(const celt_norm *X, const celt_norm *Y, int stereo, int N, int arch)
+func StereoItheta(X, Y []int32, stereo, N int, arch int) int32 {
+	var i int
+	var itheta int32
+	var mid, side int32
 	var Emid, Eside int32
 
-	Emid = EPSILON
-	Eside = EPSILON
+	Emid = 0
+	Eside = 0
 	if stereo != 0 {
 		for i = 0; i < N; i++ {
-			var m, s int16
-			m = ADD16(SHR16(X[i], 1), SHR16(Y[i], 1))
-			s = int16(SUB16(SHR16(X[i], 1), SHR16(Y[i], 1)))
+			var m, s int32
+			m = PSHR32(ADD32(X[i], Y[i]), NORM_SHIFT-13)
+			s = PSHR32(SUB32(X[i], Y[i]), NORM_SHIFT-13)
 			Emid = MAC16_16(Emid, m, m)
 			Eside = MAC16_16(Eside, s, s)
 		}
 	} else {
-		Emid += InnerProd(X, X, N, arch)
-		Eside += InnerProd(Y, Y, N, arch)
+		Emid += InnerProdNormShift(X, X, N, arch)
+		Eside += InnerProdNormShift(Y, Y, N, arch)
 	}
-	mid = int16(Sqrt(Emid))
-	side = int16(Sqrt(Eside))
-	// 0.63662 = 2/pi
-	itheta = int(MULT16_16_Q15(QCONST16(0.63662, 15), Atan2p(side, mid)))
+	mid = Sqrt32(Emid)
+	side = Sqrt32(Eside)
+	itheta = Atan2pNorm(side, mid)
 
 	return itheta
 }

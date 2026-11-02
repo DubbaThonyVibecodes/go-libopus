@@ -53,7 +53,6 @@ type EncoderControlFIX struct {
 
 // Encoder is the C silk_encoder: encoder super struct.
 type Encoder struct {
-	state_Fxx                 [ENCODER_NUM_CHANNELS]EncoderStateFIX
 	sStereo                   StereoEncState
 	nBitsUsedLBRR             int32
 	nBitsExceeded             int32
@@ -63,6 +62,8 @@ type Encoder struct {
 	timeSinceSwitchAllowed_ms int
 	allowBandwidthSwitch      int
 	prev_decode_only_middle   int
+	/* This needs to be last so we can skip the second state for mono. */
+	state_Fxx [ENCODER_NUM_CHANNELS]EncoderStateFIX
 }
 
 // VariableHPSmth1Q15 returns state_Fxx[0].sCmn.variable_HP_smth1_Q15 (read

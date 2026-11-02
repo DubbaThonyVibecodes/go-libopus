@@ -16,9 +16,9 @@ type OpusProjectionEncoder struct {
 	ms_encoder      OpusMSEncoder
 }
 
-// C: static void opus_projection_copy_channel_in_float(opus_val16 *dst, int dst_stride, const void *src, int src_stride, int src_channel, int frame_size, void *user_data)
+// C: static void opus_projection_copy_channel_in_float(opus_res *dst, int dst_stride, const void *src, int src_stride, int src_channel, int frame_size, void *user_data)
 func opus_projection_copy_channel_in_float(
-	dst []int16,
+	dst []int32,
 	dst_stride int,
 	src any,
 	src_stride int,
@@ -29,9 +29,9 @@ func opus_projection_copy_channel_in_float(
 		src.([]float32), src_stride, dst, src_channel, dst_stride, frame_size)
 }
 
-// C: static void opus_projection_copy_channel_in_short(opus_val16 *dst, int dst_stride, const void *src, int src_stride, int src_channel, int frame_size, void *user_data)
+// C: static void opus_projection_copy_channel_in_short(opus_res *dst, int dst_stride, const void *src, int src_stride, int src_channel, int frame_size, void *user_data)
 func opus_projection_copy_channel_in_short(
-	dst []int16,
+	dst []int32,
 	dst_stride int,
 	src any,
 	src_stride int,
@@ -40,6 +40,19 @@ func opus_projection_copy_channel_in_short(
 	user_data any) {
 	user_data.(*MappingMatrix).MappingMatrixMultiplyChannelInShort(
 		src.([]int16), src_stride, dst, src_channel, dst_stride, frame_size)
+}
+
+// C: static void opus_projection_copy_channel_in_int24(opus_res *dst, int dst_stride, const void *src, int src_stride, int src_channel, int frame_size, void *user_data)
+func opus_projection_copy_channel_in_int24(
+	dst []int32,
+	dst_stride int,
+	src any,
+	src_stride int,
+	src_channel int,
+	frame_size int,
+	user_data any) {
+	user_data.(*MappingMatrix).MappingMatrixMultiplyChannelInInt24(
+		src.([]int32), src_stride, dst, src_channel, dst_stride, frame_size)
 }
 
 // C: static int get_order_plus_one_from_channels(int channels, int *order_plus_one)
@@ -331,13 +344,23 @@ func (st *OpusProjectionEncoder) ProjectionEncode(pcm []int16,
 		max_data_bytes, 16, DownmixInt, 0, st.get_mixing_matrix())
 }
 
-// C: int opus_projection_encode_float(OpusProjectionEncoder *st, const float *pcm, int frame_size, unsigned char *data, opus_int32 max_data_bytes)   (FIXED_POINT)
+// C: int opus_projection_encode24(OpusProjectionEncoder *st, const opus_int32 *pcm, int frame_size, unsigned char *data, opus_int32 max_data_bytes)
+func (st *OpusProjectionEncoder) ProjectionEncode24(pcm []int32,
+	frame_size int, data []byte,
+	max_data_bytes int32) int {
+	// Note: upstream passes downmix_int (not downmix_int24) here.
+	return st.get_multistream_encoder().multistreamEncodeNative(
+		opus_projection_copy_channel_in_int24, pcm, frame_size, data,
+		max_data_bytes, celt.MAX_ENCODING_DEPTH, DownmixInt, 0, st.get_mixing_matrix())
+}
+
+// C: int opus_projection_encode_float(OpusProjectionEncoder *st, const float *pcm, int frame_size, unsigned char *data, opus_int32 max_data_bytes)
 func (st *OpusProjectionEncoder) ProjectionEncodeFloat(pcm []float32,
 	frame_size int, data []byte,
 	max_data_bytes int32) int {
 	return st.get_multistream_encoder().multistreamEncodeNative(
 		opus_projection_copy_channel_in_float, pcm, frame_size, data,
-		max_data_bytes, 16, DownmixFloat, 1, st.get_mixing_matrix())
+		max_data_bytes, celt.MAX_ENCODING_DEPTH, DownmixFloat, 1, st.get_mixing_matrix())
 }
 
 // ProjectionEncoderDestroy frees the state (no-op in Go; kept for API parity).

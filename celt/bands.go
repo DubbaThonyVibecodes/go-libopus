@@ -75,46 +75,32 @@ func ComputeBandEnergies(m *CELTMode, X []int32, bandE []int32, end, C, LM int, 
 
 			maxval = Maxabs32(X[c*N+(int(eBands[i])<<uint(LM)):], int(eBands[i+1]-eBands[i])<<uint(LM))
 			if maxval > 0 {
-				shift := int(Ilog2(maxval)) - 14 + (((int(m.logN[i]) >> BITRES) + LM + 1) >> 1)
+				shift := IMAX(0, 30-int(Ilog2(maxval+(maxval>>14)+1))-((((int(m.logN[i])+7)>>BITRES)+LM+1)>>1))
 				j = int(eBands[i]) << uint(LM)
-				if shift > 0 {
-					for {
-						sum = MAC16_16(sum, EXTRACT16(SHR32(X[j+c*N], shift)),
-							EXTRACT16(SHR32(X[j+c*N], shift)))
-						j++
-						if j >= int(eBands[i+1])<<uint(LM) {
-							break
-						}
-					}
-				} else {
-					for {
-						sum = MAC16_16(sum, EXTRACT16(SHL32(X[j+c*N], -shift)),
-							EXTRACT16(SHL32(X[j+c*N], -shift)))
-						j++
-						if j >= int(eBands[i+1])<<uint(LM) {
-							break
-						}
+				for {
+					var x int32 = SHL32(X[j+c*N], shift)
+					sum = ADD32(sum, MULT32_32_Q31(x, x))
+					j++
+					if j >= int(eBands[i+1])<<uint(LM) {
+						break
 					}
 				}
-				// We're adding one here to ensure the normalized band isn't larger than unity norm
-				bandE[i+c*m.nbEBands] = EPSILON + VSHR32(EXTEND32(Sqrt(sum)), -shift)
+				bandE[i+c*m.nbEBands] = MAX32(maxval, PSHR32(Sqrt32(SHR32(sum, 1)), shift))
 			} else {
 				bandE[i+c*m.nbEBands] = EPSILON
 			}
-			// printf ("%f ", bandE[i+c*m->nbEBands]);
 		}
 		c++
 		if c >= C {
 			break
 		}
 	}
-	// printf ("\n");
 }
 
 // NormaliseBands normalises each band such that the energy is one.
 //
 // C: void normalise_bands(const CELTMode *m, const celt_sig * OPUS_RESTRICT freq, celt_norm * OPUS_RESTRICT X, const celt_ener *bandE, int end, int C, int M)
-func NormaliseBands(m *CELTMode, freq []int32, X []int16, bandE []int32, end, C, M int) {
+func NormaliseBands(m *CELTMode, freq []int32, X []int32, bandE []int32, end, C, M int) {
 	var i, c, N int
 	eBands := m.eBands
 	N = M * m.shortMdctSize
@@ -122,15 +108,21 @@ func NormaliseBands(m *CELTMode, freq []int32, X []int16, bandE []int32, end, C,
 	for {
 		i = 0
 		for {
-			var g int16
 			var j, shift int
-			var E int16
-			shift = int(Zlog2(bandE[i+c*m.nbEBands])) - 13
-			E = int16(VSHR32(bandE[i+c*m.nbEBands], shift))
-			g = EXTRACT16(Rcp(SHL32(E, 3)))
+			var E int32
+			var g int32
+			E = bandE[i+c*m.nbEBands]
+			// For very low energies, we need this to make sure not to prevent energy rounding from
+			// blowing up the normalized signal.
+			if E < 10 {
+				E += EPSILON
+			}
+			shift = 30 - int(Zlog2(E))
+			E = SHL32(E, shift)
+			g = RcpNorm32(E)
 			j = M * int(eBands[i])
 			for {
-				X[j+c*N] = int16(MULT16_16_Q15(VSHR32(freq[j+c*N], shift-1), g))
+				X[j+c*N] = PSHR32(MULT32_32_Q31(g, SHL32(freq[j+c*N], shift)), 30-NORM_SHIFT)
 				j++
 				if j >= M*int(eBands[i+1]) {
 					break
@@ -152,13 +144,13 @@ func NormaliseBands(m *CELTMode, freq []int32, X []int16, bandE []int32, end, C,
 //
 // C: void denormalise_bands(const CELTMode *m, const celt_norm * OPUS_RESTRICT X,
 //
-//	celt_sig * OPUS_RESTRICT freq, const opus_val16 *bandLogE, int start,
+//	celt_sig * OPUS_RESTRICT freq, const celt_glog *bandLogE, int start,
 //	int end, int M, int downsample, int silence)
-func DenormaliseBands(m *CELTMode, X []int16, freq []int32, bandLogE []int16, start, end, M, downsample, silence int) {
+func DenormaliseBands(m *CELTMode, X []int32, freq []int32, bandLogE []int32, start, end, M, downsample, silence int) {
 	var i, N int
 	var bound int
 	var f []int32
-	var x []int16
+	var x []int32
 	eBands := m.eBands
 	N = M * m.shortMdctSize
 	bound = M * int(eBands[end])
@@ -173,55 +165,46 @@ func DenormaliseBands(m *CELTMode, X []int16, freq []int32, bandLogE []int16, st
 	f = freq
 	x = X[M*int(eBands[start]):]
 	fi, xi := 0, 0
-	for i = 0; i < M*int(eBands[start]); i++ {
-		f[fi] = 0
-		fi++
+	if start != 0 {
+		for i = 0; i < M*int(eBands[start]); i++ {
+			f[fi] = 0
+			fi++
+		}
+	} else {
+		fi += M * int(eBands[start])
 	}
 	for i = start; i < end; i++ {
 		var j, band_end int
-		var g int16
-		var lg int16
+		var g int32
+		var lg int32
 		var shift int
 		j = M * int(eBands[i])
 		band_end = M * int(eBands[i+1])
-		lg = SATURATE16(ADD32(bandLogE[i], SHL32(int32(eMeans[i]), 6)))
+		lg = ADD32(bandLogE[i], SHL32(int32(eMeans[i]), DB_SHIFT-4))
 		// Handle the integer part of the log energy
-		shift = 16 - int(lg>>DB_SHIFT)
-		if shift > 31 {
+		shift = 17 - int(lg>>DB_SHIFT)
+		if shift >= 31 {
 			shift = 0
 			g = 0
 		} else {
 			// Handle the fractional part.
-			g = int16(Exp2Frac(lg & ((1 << DB_SHIFT) - 1)))
+			g = SHL32(Exp2DbFrac(lg&((1<<DB_SHIFT)-1)), 2)
 		}
 		// Handle extreme gains with negative shift.
 		if shift < 0 {
-			// For shift <= -2 and g > 16384 we'd be likely to overflow, so we're
+			// To avoid overflow, we're
 			// capping the gain here, which is equivalent to a cap of 18 on lg.
 			// This shouldn't trigger unless the bitstream is already corrupted.
-			if shift <= -2 {
-				g = 16384
-				shift = -2
-			}
-			for {
-				f[fi] = SHL32(MULT16_16(x[xi], g), -shift)
-				fi++
-				xi++
-				j++
-				if j >= band_end {
-					break
-				}
-			}
-		} else {
-			// Be careful of the fixed-point "else" just above when changing this code
-			for {
-				f[fi] = SHR32(MULT16_16(x[xi], g), shift)
-				fi++
-				xi++
-				j++
-				if j >= band_end {
-					break
-				}
+			g = 2147483647
+			shift = 0
+		}
+		for {
+			f[fi] = PSHR32(MULT32_32_Q31(SHL32(x[xi], 30-NORM_SHIFT), g), shift)
+			fi++
+			xi++
+			j++
+			if j >= band_end {
+				break
 			}
 		}
 	}
@@ -234,11 +217,11 @@ func DenormaliseBands(m *CELTMode, X []int16, freq []int32, bandLogE []int16, st
 // C: void anti_collapse(const CELTMode *m, celt_norm *X_,
 //
 //	unsigned char *collapse_masks, int LM, int C, int size, int start,
-//	int end, const opus_val16 *logE, const opus_val16 *prev1logE,
-//	const opus_val16 *prev2logE, const int *pulses, opus_uint32 seed,
-//	int arch)
-func AntiCollapse(m *CELTMode, X_ []int16, collapse_masks []uint8, LM, C, size int,
-	start, end int, logE, prev1logE, prev2logE []int16, pulses []int, seed uint32, arch int) {
+//	int end, const celt_glog *logE, const celt_glog *prev1logE,
+//	const celt_glog *prev2logE, const int *pulses, opus_uint32 seed,
+//	int encode, int arch)
+func AntiCollapse(m *CELTMode, X_ []int32, collapse_masks []uint8, LM, C, size int,
+	start, end int, logE, prev1logE, prev2logE []int32, pulses []int, seed uint32, encode int, arch int) {
 	var c, i, j, k int
 	for i = start; i < end; i++ {
 		var N0 int
@@ -264,31 +247,31 @@ func AntiCollapse(m *CELTMode, X_ []int16, collapse_masks []uint8, LM, C, size i
 
 		c = 0
 		for {
-			var X []int16
-			var prev1, prev2 int16
+			var X []int32
+			var prev1, prev2 int32
 			var Ediff int32
-			var r int16
+			var r int32
 			var renormalize int = 0
 			prev1 = prev1logE[c*m.nbEBands+i]
 			prev2 = prev2logE[c*m.nbEBands+i]
-			if C == 1 {
-				prev1 = MAX16(prev1, prev1logE[m.nbEBands+i])
-				prev2 = MAX16(prev2, prev2logE[m.nbEBands+i])
+			if encode == 0 && C == 1 {
+				prev1 = MAXG(prev1, prev1logE[m.nbEBands+i])
+				prev2 = MAXG(prev2, prev2logE[m.nbEBands+i])
 			}
-			Ediff = EXTEND32(logE[c*m.nbEBands+i]) - EXTEND32(MIN16(prev1, prev2))
+			Ediff = logE[c*m.nbEBands+i] - MING(prev1, prev2)
 			Ediff = MAX32(0, Ediff)
 
-			if Ediff < 16384 {
-				var r32 int32 = SHR32(Exp2(-EXTRACT16(Ediff)), 1)
-				r = int16(2 * MIN16(16383, r32))
+			if Ediff < GCONST(16.0) {
+				var r32 int32 = SHR32(Exp2Db(-Ediff), 1)
+				r = 2 * MIN16(16383, r32)
 			} else {
 				r = 0
 			}
 			if LM == 3 {
-				r = int16(MULT16_16_Q14(23170, MIN32(23169, int32(r))))
+				r = MULT16_16_Q14(23170, MIN32(23169, r))
 			}
-			r = int16(SHR16(MIN16(thresh, r), 1))
-			r = int16(SHR32(MULT16_16_Q15(sqrt_1, r), shift))
+			r = SHR16(MIN16(int32(thresh), r), 1)
+			r = VSHR32(MULT16_16_Q15(sqrt_1, r), shift+14-NORM_SHIFT)
 
 			X = X_[c*size+(int(m.eBands[i])<<uint(LM)):]
 			for k = 0; k < 1<<uint(LM); k++ {
@@ -308,7 +291,7 @@ func AntiCollapse(m *CELTMode, X_ []int16, collapse_masks []uint8, LM, C, size i
 			}
 			// We just added some energy, so we need to renormalise
 			if renormalize != 0 {
-				RenormaliseVector(X, N0<<uint(LM), Q15ONE, arch)
+				RenormaliseVector(X, N0<<uint(LM), Q31ONE, arch)
 			}
 			c++
 			if c >= C {
@@ -340,7 +323,7 @@ func compute_channel_weights(Ex, Ey int32, w *[2]int16) {
 }
 
 // C: static void intensity_stereo(const CELTMode *m, celt_norm * OPUS_RESTRICT X, const celt_norm * OPUS_RESTRICT Y, const celt_ener *bandE, int bandID, int N)
-func intensity_stereo(m *CELTMode, X, Y []int16, bandE []int32, bandID, N int) {
+func intensity_stereo(m *CELTMode, X, Y []int32, bandE []int32, bandID, N int) {
 	i := bandID
 	var j int
 	var a1, a2 int16
@@ -350,46 +333,44 @@ func intensity_stereo(m *CELTMode, X, Y []int16, bandE []int32, bandID, N int) {
 	left = int16(VSHR32(bandE[i], shift))
 	right = int16(VSHR32(bandE[i+m.nbEBands], shift))
 	norm = int16(EPSILON + Sqrt(EPSILON+MULT16_16(left, left)+MULT16_16(right, right)))
-	a1 = DIV32_16(SHL32(EXTEND32(left), 14), norm)
-	a2 = DIV32_16(SHL32(EXTEND32(right), 14), norm)
+	left = int16(MIN32(int32(left), int32(norm)-1))
+	right = int16(MIN32(int32(right), int32(norm)-1))
+	a1 = DIV32_16(SHL32(EXTEND32(left), 15), norm)
+	a2 = DIV32_16(SHL32(EXTEND32(right), 15), norm)
 	for j = 0; j < N; j++ {
-		var r, l int16
-		l = X[j]
-		r = Y[j]
-		X[j] = EXTRACT16(SHR32(MAC16_16(MULT16_16(a1, l), a2, r), 14))
+		X[j] = ADD32(MULT16_32_Q15(a1, X[j]), MULT16_32_Q15(a2, Y[j]))
 		// Side is not encoded, no need to calculate
 	}
 }
 
 // C: static void stereo_split(celt_norm * OPUS_RESTRICT X, celt_norm * OPUS_RESTRICT Y, int N)
-func stereo_split(X, Y []int16, N int) {
+func stereo_split(X, Y []int32, N int) {
 	var j int
 	for j = 0; j < N; j++ {
 		var r, l int32
-		l = MULT16_16(QCONST16(.70710678, 15), X[j])
-		r = MULT16_16(QCONST16(.70710678, 15), Y[j])
-		X[j] = EXTRACT16(SHR32(ADD32(l, r), 15))
-		Y[j] = EXTRACT16(SHR32(SUB32(r, l), 15))
+		l = MULT32_32_Q31(QCONST32(.70710678, 31), X[j])
+		r = MULT32_32_Q31(QCONST32(.70710678, 31), Y[j])
+		X[j] = ADD32(l, r)
+		Y[j] = SUB32(r, l)
 	}
 }
 
-// C: static void stereo_merge(celt_norm * OPUS_RESTRICT X, celt_norm * OPUS_RESTRICT Y, opus_val16 mid, int N, int arch)
-func stereo_merge(X, Y []int16, mid int16, N int, arch int) {
+// C: static void stereo_merge(celt_norm * OPUS_RESTRICT X, celt_norm * OPUS_RESTRICT Y, opus_val32 mid, int N, int arch)
+func stereo_merge(X, Y []int32, mid int32, N int, arch int) {
 	var j int
 	var xp, side int32 = 0, 0
 	var El, Er int32
-	var mid2 int16
 	var kl, kr int
 	var t, lgain, rgain int32
 
 	// Compute the norm of X+Y and X-Y as |X|^2 + |Y|^2 +/- sum(xy)
-	DualInnerProd(Y, X, Y, N, &xp, &side, arch)
+	xp = InnerProdNormShift(Y, X, N, arch)
+	side = InnerProdNormShift(Y, Y, N, arch)
 	// Compensating for the mid normalization
-	xp = MULT16_32_Q15(mid, xp)
+	xp = MULT32_32_Q31(mid, xp)
 	// mid and side are in Q15, not Q14 like X and Y
-	mid2 = int16(SHR16(mid, 1))
-	El = MULT16_16(mid2, mid2) + side - 2*xp
-	Er = MULT16_16(mid2, mid2) + side + 2*xp
+	El = SHR32(MULT32_32_Q31(mid, mid), 3) + side - 2*xp
+	Er = SHR32(MULT32_32_Q31(mid, mid), 3) + side + 2*xp
 	if Er < QCONST32(6e-4, 28) || El < QCONST32(6e-4, 28) {
 		copy(Y[:N], X[:N])
 		return
@@ -397,10 +378,10 @@ func stereo_merge(X, Y []int16, mid int16, N int, arch int) {
 
 	kl = int(Ilog2(El)) >> 1
 	kr = int(Ilog2(Er)) >> 1
-	t = VSHR32(El, (kl-7)<<1)
-	lgain = int32(RsqrtNorm(t))
-	t = VSHR32(Er, (kr-7)<<1)
-	rgain = int32(RsqrtNorm(t))
+	t = VSHR32(El, (kl<<1)-29)
+	lgain = RsqrtNorm32(t)
+	t = VSHR32(Er, (kr<<1)-29)
+	rgain = RsqrtNorm32(t)
 
 	if kl < 7 {
 		kl = 7
@@ -410,12 +391,12 @@ func stereo_merge(X, Y []int16, mid int16, N int, arch int) {
 	}
 
 	for j = 0; j < N; j++ {
-		var r, l int16
+		var r, l int32
 		// Apply mid scaling (side is already scaled)
-		l = int16(MULT16_16_P15(mid, X[j]))
+		l = MULT32_32_Q31(mid, X[j])
 		r = Y[j]
-		X[j] = EXTRACT16(PSHR32(MULT16_16(lgain, SUB16(l, r)), kl+1))
-		Y[j] = EXTRACT16(PSHR32(MULT16_16(rgain, ADD16(l, r)), kr+1))
+		X[j] = VSHR32(MULT32_32_Q31(lgain, SUB32(l, r)), kl-15)
+		Y[j] = VSHR32(MULT32_32_Q31(rgain, ADD32(l, r)), kr-15)
 	}
 }
 
@@ -425,7 +406,7 @@ func stereo_merge(X, Y []int16, mid int16, N int, arch int) {
 //
 //	int last_decision, int *hf_average, int *tapset_decision, int update_hf,
 //	int end, int C, int M, const int *spread_weight)
-func SpreadingDecision(m *CELTMode, X []int16, average *int,
+func SpreadingDecision(m *CELTMode, X []int32, average *int,
 	last_decision int, hf_average, tapset_decision *int, update_hf int,
 	end, C, M int, spread_weight []int) int {
 	var i, c, N0 int
@@ -455,7 +436,7 @@ func SpreadingDecision(m *CELTMode, X []int16, average *int,
 			for j = 0; j < N; j++ {
 				var x2N int32 // Q13
 
-				x2N = MULT16_16(MULT16_16_Q15(x[j], x[j]), N)
+				x2N = MULT16_16(MULT16_16_Q15(SHR32(x[j], NORM_SHIFT-14), SHR32(x[j], NORM_SHIFT-14)), N)
 				if x2N < int32(QCONST16(0.25, 13)) {
 					tcount[0]++
 				}
@@ -541,10 +522,10 @@ var ordery_table = []int{
 }
 
 // C: static void deinterleave_hadamard(celt_norm *X, int N0, int stride, int hadamard)
-func deinterleave_hadamard(X []int16, N0, stride, hadamard int) {
+func deinterleave_hadamard(X []int32, N0, stride, hadamard int) {
 	var i, j, N int
 	N = N0 * stride
-	tmp := make([]int16, N)
+	tmp := make([]int32, N)
 	celt_assert(stride > 0)
 	if hadamard != 0 {
 		ordery := ordery_table[stride-2:]
@@ -564,10 +545,10 @@ func deinterleave_hadamard(X []int16, N0, stride, hadamard int) {
 }
 
 // C: static void interleave_hadamard(celt_norm *X, int N0, int stride, int hadamard)
-func interleave_hadamard(X []int16, N0, stride, hadamard int) {
+func interleave_hadamard(X []int32, N0, stride, hadamard int) {
 	var i, j, N int
 	N = N0 * stride
-	tmp := make([]int16, N)
+	tmp := make([]int32, N)
 	if hadamard != 0 {
 		ordery := ordery_table[stride-2:]
 		for i = 0; i < stride; i++ {
@@ -586,16 +567,16 @@ func interleave_hadamard(X []int16, N0, stride, hadamard int) {
 }
 
 // C: void haar1(celt_norm *X, int N0, int stride)
-func Haar1(X []int16, N0, stride int) {
+func Haar1(X []int32, N0, stride int) {
 	var i, j int
 	N0 >>= 1
 	for i = 0; i < stride; i++ {
 		for j = 0; j < N0; j++ {
 			var tmp1, tmp2 int32
-			tmp1 = MULT16_16(QCONST16(.70710678, 15), X[stride*2*j+i])
-			tmp2 = MULT16_16(QCONST16(.70710678, 15), X[stride*(2*j+1)+i])
-			X[stride*2*j+i] = EXTRACT16(PSHR32(ADD32(tmp1, tmp2), 15))
-			X[stride*(2*j+1)+i] = EXTRACT16(PSHR32(SUB32(tmp1, tmp2), 15))
+			tmp1 = MULT32_32_Q31(QCONST32(.70710678, 31), X[stride*2*j+i])
+			tmp2 = MULT32_32_Q31(QCONST32(.70710678, 31), X[stride*(2*j+1)+i])
+			X[stride*2*j+i] = ADD32(tmp1, tmp2)
+			X[stride*(2*j+1)+i] = SUB32(tmp1, tmp2)
 		}
 	}
 }
@@ -661,11 +642,12 @@ type split_ctx struct {
 //	int LM,
 //	int stereo, int *fill)
 func compute_theta(ctx *band_ctx, sctx *split_ctx,
-	X, Y []int16, N int, b *int, B, B0 int,
+	X, Y []int32, N int, b *int, B, B0 int,
 	LM int,
 	stereo int, fill *int) {
 	var qn int
 	var itheta int = 0
+	var itheta_q30 int32 = 0
 	var delta int
 	var imid, iside int
 	var qalloc int
@@ -703,7 +685,8 @@ func compute_theta(ctx *band_ctx, sctx *split_ctx,
 		// side and mid. With just that parameter, we can re-scale both
 		// mid and side because we know that 1) they have unit norm and
 		// 2) they are orthogonal.
-		itheta = StereoItheta(X, Y, stereo, N, ctx.arch)
+		itheta_q30 = StereoItheta(X, Y, stereo, N, ctx.arch)
+		itheta = int(itheta_q30 >> 16)
 	}
 	tell = int32(ec.TellFrac())
 	if qn != 1 {
@@ -858,7 +841,9 @@ func compute_theta(ctx *band_ctx, sctx *split_ctx,
 			inv = 0
 		}
 		itheta = 0
+		itheta_q30 = 0
 	}
+	_ = itheta_q30
 	qalloc = int(ec.TellFrac()) - int(tell)
 	*b -= qalloc
 
@@ -889,7 +874,7 @@ func compute_theta(ctx *band_ctx, sctx *split_ctx,
 }
 
 // C: static unsigned quant_band_n1(struct band_ctx *ctx, celt_norm *X, celt_norm *Y, celt_norm *lowband_out)
-func quant_band_n1(ctx *band_ctx, X, Y []int16, lowband_out []int16) uint32 {
+func quant_band_n1(ctx *band_ctx, X, Y []int32, lowband_out []int32) uint32 {
 	var c int
 	var stereo int
 	x := X
@@ -926,7 +911,7 @@ func quant_band_n1(ctx *band_ctx, X, Y []int16, lowband_out []int16) uint32 {
 		}
 	}
 	if lowband_out != nil {
-		lowband_out[0] = int16(SHR16(X[0], 4))
+		lowband_out[0] = SHR32(X[0], 4)
 	}
 	return 1
 }
@@ -940,19 +925,20 @@ func quant_band_n1(ctx *band_ctx, X, Y []int16, lowband_out []int16) uint32 {
 //
 //	int N, int b, int B, celt_norm *lowband,
 //	int LM,
-//	opus_val16 gain, int fill)
-func quant_partition(ctx *band_ctx, X []int16,
-	N, b, B int, lowband []int16,
+//	opus_val32 gain, int fill
+//	ARG_QEXT(int ext_b))
+func quant_partition(ctx *band_ctx, X []int32,
+	N, b, B int, lowband []int32,
 	LM int,
-	gain int16, fill int) uint32 {
+	gain int32, fill int) uint32 {
 	var cache []uint8
 	var q int
 	var curr_bits int
 	var imid, iside int = 0, 0
 	B0 := B
-	var mid, side int16 = 0, 0
+	var mid, side int32 = 0, 0
 	var cm uint32 = 0
-	var Y []int16 = nil
+	var Y []int32 = nil
 	var encode int
 	var m *CELTMode
 	var i int
@@ -972,7 +958,7 @@ func quant_partition(ctx *band_ctx, X []int16,
 		var itheta int
 		var qalloc int
 		var sctx split_ctx
-		var next_lowband2 []int16 = nil
+		var next_lowband2 []int32 = nil
 		var rebalance int32
 
 		N >>= 1
@@ -989,8 +975,8 @@ func quant_partition(ctx *band_ctx, X []int16,
 		delta = sctx.delta
 		itheta = sctx.itheta
 		qalloc = sctx.qalloc
-		mid = int16(imid)
-		side = int16(iside)
+		mid = SHL32(EXTEND32(imid), 16)
+		side = SHL32(EXTEND32(iside), 16)
 
 		// Give more bits to low-energy MDCTs than they would otherwise deserve
 		if B0 > 1 && (itheta&0x3fff) != 0 {
@@ -1013,22 +999,22 @@ func quant_partition(ctx *band_ctx, X []int16,
 		rebalance = ctx.remaining_bits
 		if mbits >= sbits {
 			cm = quant_partition(ctx, X, N, mbits, B, lowband, LM,
-				int16(MULT16_16_P15(gain, mid)), fill)
+				MULT32_32_Q31(gain, mid), fill)
 			rebalance = int32(mbits) - (rebalance - ctx.remaining_bits)
 			if rebalance > 3<<BITRES && itheta != 0 {
 				sbits += int(rebalance) - (3 << BITRES)
 			}
 			cm |= quant_partition(ctx, Y, N, sbits, B, next_lowband2, LM,
-				int16(MULT16_16_P15(gain, side)), fill>>uint(B)) << uint(B0>>1)
+				MULT32_32_Q31(gain, side), fill>>uint(B)) << uint(B0>>1)
 		} else {
 			cm = quant_partition(ctx, Y, N, sbits, B, next_lowband2, LM,
-				int16(MULT16_16_P15(gain, side)), fill>>uint(B)) << uint(B0>>1)
+				MULT32_32_Q31(gain, side), fill>>uint(B)) << uint(B0>>1)
 			rebalance = int32(sbits) - (rebalance - ctx.remaining_bits)
 			if rebalance > 3<<BITRES && itheta != 16384 {
 				mbits += int(rebalance) - (3 << BITRES)
 			}
 			cm |= quant_partition(ctx, X, N, mbits, B, lowband, LM,
-				int16(MULT16_16_P15(gain, mid)), fill)
+				MULT32_32_Q31(gain, mid), fill)
 		}
 	} else {
 		// This is the basic no-split case
@@ -1069,7 +1055,7 @@ func quant_partition(ctx *band_ctx, X []int16,
 						// Noise
 						for j = 0; j < N; j++ {
 							ctx.seed = LcgRand(ctx.seed)
-							X[j] = int16(int32(ctx.seed) >> 20)
+							X[j] = SHL32(int32(ctx.seed)>>20, NORM_SHIFT-14)
 						}
 						cm = cm_mask
 					} else {
@@ -1078,11 +1064,11 @@ func quant_partition(ctx *band_ctx, X []int16,
 							var tmp int16
 							ctx.seed = LcgRand(ctx.seed)
 							// About 48 dB below the "normal" folding level
-							tmp = QCONST16(1.0/256, 10)
+							tmp = QCONST16(1.0/256, NORM_SHIFT-4)
 							if (ctx.seed)&0x8000 == 0 {
 								tmp = -tmp
 							}
-							X[j] = lowband[j] + tmp
+							X[j] = lowband[j] + int32(tmp)
 						}
 						cm = uint32(fill)
 					}
@@ -1101,11 +1087,12 @@ func quant_partition(ctx *band_ctx, X []int16,
 //
 //	int N, int b, int B, celt_norm *lowband,
 //	int LM, celt_norm *lowband_out,
-//	opus_val16 gain, celt_norm *lowband_scratch, int fill)
-func quant_band(ctx *band_ctx, X []int16,
-	N, b, B int, lowband []int16,
-	LM int, lowband_out []int16,
-	gain int16, lowband_scratch []int16, fill int) uint32 {
+//	opus_val32 gain, celt_norm *lowband_scratch, int fill
+//	ARG_QEXT(int ext_b))
+func quant_band(ctx *band_ctx, X []int32,
+	N, b, B int, lowband []int32,
+	LM int, lowband_out []int32,
+	gain int32, lowband_scratch []int32, fill int) uint32 {
 	N0 := N
 	N_B := N
 	var N_B0 int
@@ -1179,7 +1166,9 @@ func quant_band(ctx *band_ctx, X []int16,
 		}
 	}
 
-	cm = quant_partition(ctx, X, N, b, B, lowband, LM, gain, fill)
+	{
+		cm = quant_partition(ctx, X, N, b, B, lowband, LM, gain, fill)
+	}
 
 	// This code is used by the decoder and by the resynthesis-enabled encoder
 	if ctx.resynth != 0 {
@@ -1210,7 +1199,7 @@ func quant_band(ctx *band_ctx, X []int16,
 			var n int16
 			n = int16(Sqrt(SHL32(EXTEND32(N0), 22)))
 			for j = 0; j < N0; j++ {
-				lowband_out[j] = int16(MULT16_16_Q15(n, X[j]))
+				lowband_out[j] = MULT16_32_Q15(n, X[j])
 			}
 		}
 		cm &= (1 << uint(B)) - 1
@@ -1227,20 +1216,24 @@ var bit_deinterleave_table = [16]uint8{
 	0xC0, 0xC3, 0xCC, 0xCF, 0xF0, 0xF3, 0xFC, 0xFF,
 }
 
+// C: #define MIN_STEREO_ENERGY 2   (FIXED_POINT)
+const MIN_STEREO_ENERGY = 2
+
 // This function is responsible for encoding and decoding a band for the stereo case.
 //
 // C: static unsigned quant_band_stereo(struct band_ctx *ctx, celt_norm *X, celt_norm *Y,
 //
 //	int N, int b, int B, celt_norm *lowband,
 //	int LM, celt_norm *lowband_out,
-//	celt_norm *lowband_scratch, int fill)
-func quant_band_stereo(ctx *band_ctx, X, Y []int16,
-	N, b, B int, lowband []int16,
-	LM int, lowband_out []int16,
-	lowband_scratch []int16, fill int) uint32 {
+//	celt_norm *lowband_scratch, int fill
+//	ARG_QEXT(int ext_b) ARG_QEXT(const int *cap))
+func quant_band_stereo(ctx *band_ctx, X, Y []int32,
+	N, b, B int, lowband []int32,
+	LM int, lowband_out []int32,
+	lowband_scratch []int32, fill int) uint32 {
 	var imid, iside int = 0, 0
 	var inv int = 0
-	var mid, side int16 = 0, 0
+	var mid, side int32 = 0, 0
 	var cm uint32 = 0
 	var mbits, sbits, delta int
 	var itheta int
@@ -1260,6 +1253,15 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 
 	orig_fill = fill
 
+	if encode != 0 {
+		if ctx.bandE[ctx.i] < MIN_STEREO_ENERGY || ctx.bandE[ctx.m.nbEBands+ctx.i] < MIN_STEREO_ENERGY {
+			if ctx.bandE[ctx.i] > ctx.bandE[ctx.m.nbEBands+ctx.i] {
+				copy(Y[:N], X[:N])
+			} else {
+				copy(X[:N], Y[:N])
+			}
+		}
+	}
 	compute_theta(ctx, &sctx, X, Y, N, &b, B, B, LM, 1, &fill)
 	inv = sctx.inv
 	imid = sctx.imid
@@ -1267,8 +1269,8 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 	delta = sctx.delta
 	itheta = sctx.itheta
 	qalloc = sctx.qalloc
-	mid = int16(imid)
-	side = int16(iside)
+	mid = SHL32(EXTEND32(imid), 16)
+	side = SHL32(EXTEND32(iside), 16)
 
 	// This is a special case for N=2 that only works for stereo and takes
 	// advantage of the fact that mid and side are orthogonal to encode
@@ -1276,7 +1278,7 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 	if N == 2 {
 		var c int
 		var sign int = 0
-		var x2, y2 []int16
+		var x2, y2 []int32
 		mbits = b
 		sbits = 0
 		// Only need one bit for the side.
@@ -1297,7 +1299,8 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 		if sbits != 0 {
 			if encode != 0 {
 				// Here we only need to encode a sign for the side.
-				sign = b2i(int32(x2[0])*int32(y2[1])-int32(x2[1])*int32(y2[0]) < 0)
+				// FIXME: Need to increase fixed-point precision?
+				sign = b2i(MULT32_32_Q31(x2[0], y2[1])-MULT32_32_Q31(x2[1], y2[0]) < 0)
 				ec.EncBits(uint32(sign), 1)
 			} else {
 				sign = int(ec.DecBits(1))
@@ -1306,24 +1309,24 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 		sign = 1 - 2*sign
 		// We use orig_fill here because we want to fold the side, but if
 		// itheta==16384, we'll have cleared the low bits of fill.
-		cm = quant_band(ctx, x2, N, mbits, B, lowband, LM, lowband_out, Q15ONE,
+		cm = quant_band(ctx, x2, N, mbits, B, lowband, LM, lowband_out, Q31ONE,
 			lowband_scratch, orig_fill)
 		// We don't split N=2 bands, so cm is either 1 or 0 (for a fold-collapse),
 		// and there's no need to worry about mixing with the other channel.
-		y2[0] = int16(-sign) * x2[1]
-		y2[1] = int16(sign) * x2[0]
+		y2[0] = int32(-sign) * x2[1]
+		y2[1] = int32(sign) * x2[0]
 		if ctx.resynth != 0 {
-			var tmp int16
-			X[0] = int16(MULT16_16_Q15(mid, X[0]))
-			X[1] = int16(MULT16_16_Q15(mid, X[1]))
-			Y[0] = int16(MULT16_16_Q15(side, Y[0]))
-			Y[1] = int16(MULT16_16_Q15(side, Y[1]))
+			var tmp int32
+			X[0] = MULT32_32_Q31(mid, X[0])
+			X[1] = MULT32_32_Q31(mid, X[1])
+			Y[0] = MULT32_32_Q31(side, Y[0])
+			Y[1] = MULT32_32_Q31(side, Y[1])
 			tmp = X[0]
-			X[0] = int16(SUB16(tmp, Y[0]))
-			Y[0] = ADD16(tmp, Y[0])
+			X[0] = SUB32(tmp, Y[0])
+			Y[0] = ADD32(tmp, Y[0])
 			tmp = X[1]
-			X[1] = int16(SUB16(tmp, Y[1]))
-			Y[1] = ADD16(tmp, Y[1])
+			X[1] = SUB32(tmp, Y[1])
+			Y[1] = ADD32(tmp, Y[1])
 		}
 	} else {
 		// "Normal" split code
@@ -1337,7 +1340,7 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 		if mbits >= sbits {
 			// In stereo mode, we do not apply a scaling to the mid because we need the normalized
 			// mid for folding later.
-			cm = quant_band(ctx, X, N, mbits, B, lowband, LM, lowband_out, Q15ONE,
+			cm = quant_band(ctx, X, N, mbits, B, lowband, LM, lowband_out, Q31ONE,
 				lowband_scratch, fill)
 			rebalance = int32(mbits) - (rebalance - ctx.remaining_bits)
 			if rebalance > 3<<BITRES && itheta != 0 {
@@ -1357,7 +1360,7 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 			}
 			// In stereo mode, we do not apply a scaling to the mid because we need the normalized
 			// mid for folding later.
-			cm |= quant_band(ctx, X, N, mbits, B, lowband, LM, lowband_out, Q15ONE,
+			cm |= quant_band(ctx, X, N, mbits, B, lowband, LM, lowband_out, Q31ONE,
 				lowband_scratch, fill)
 		}
 	}
@@ -1379,7 +1382,7 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 
 // C: static void special_hybrid_folding(const CELTMode *m, celt_norm *norm, celt_norm *norm2, int start, int M, int dual_stereo)
 // (1.4: inside #ifndef DISABLE_UPDATE_DRAFT, which is not defined, so it is compiled.)
-func special_hybrid_folding(m *CELTMode, norm, norm2 []int16, start, M, dual_stereo int) {
+func special_hybrid_folding(m *CELTMode, norm, norm2 []int32, start, M, dual_stereo int) {
 	var n1, n2 int
 	eBands := m.eBands
 	n1 = M * int(eBands[start+1]-eBands[start])
@@ -1400,9 +1403,11 @@ func special_hybrid_folding(m *CELTMode, norm, norm2 []int16, start, M, dual_ste
 //	const celt_ener *bandE, int *pulses, int shortBlocks, int spread,
 //	int dual_stereo, int intensity, int *tf_res, opus_int32 total_bits,
 //	opus_int32 balance, ec_ctx *ec, int LM, int codedBands,
-//	opus_uint32 *seed, int complexity, int arch, int disable_inv)
+//	opus_uint32 *seed, int complexity, int arch, int disable_inv
+//	ARG_QEXT(ec_ctx *ext_ec) ARG_QEXT(int *extra_pulses)
+//	ARG_QEXT(opus_int32 ext_total_bits) ARG_QEXT(const int *cap))
 func QuantAllBands(encode int, m *CELTMode, start, end int,
-	X_, Y_ []int16, collapse_masks []uint8,
+	X_, Y_ []int32, collapse_masks []uint8,
 	bandE []int32, pulses []int, shortBlocks, spread int,
 	dual_stereo, intensity int, tf_res []int, total_bits int32,
 	balance int32, ec *EcCtx, LM, codedBands int,
@@ -1410,10 +1415,11 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 	var i int
 	var remaining_bits int32
 	eBands := m.eBands
-	var norm, norm2 []int16
-	var X_save, Y_save, X_save2, Y_save2, norm_save2 []int16
+	var norm, norm2 []int32
+	var X_save, Y_save, X_save2, Y_save2, norm_save2 []int32
+	var bytes_save []byte
 	var resynth_alloc int
-	var lowband_scratch []int16
+	var lowband_scratch []int32
 	var B int
 	var M int
 	var lowband_offset int
@@ -1436,7 +1442,7 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 	norm_offset = M * int(eBands[start])
 	// No need to allocate norm for the last band because we don't need an
 	// output in that band.
-	_norm := make([]int16, C*(M*int(eBands[m.nbEBands-1])-norm_offset))
+	_norm := make([]int32, C*(M*int(eBands[m.nbEBands-1])-norm_offset))
 	norm = _norm
 	norm2 = norm[M*int(eBands[m.nbEBands-1])-norm_offset:]
 
@@ -1448,17 +1454,17 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 	} else {
 		resynth_alloc = 0 // ALLOC_NONE
 	}
-	_lowband_scratch := make([]int16, resynth_alloc)
+	_lowband_scratch := make([]int32, resynth_alloc)
 	if encode != 0 && resynth != 0 {
 		lowband_scratch = _lowband_scratch
 	} else {
 		lowband_scratch = X_[M*int(eBands[m.effEBands-1]):]
 	}
-	X_save = make([]int16, resynth_alloc)
-	Y_save = make([]int16, resynth_alloc)
-	X_save2 = make([]int16, resynth_alloc)
-	Y_save2 = make([]int16, resynth_alloc)
-	norm_save2 = make([]int16, resynth_alloc)
+	X_save = make([]int32, resynth_alloc)
+	Y_save = make([]int32, resynth_alloc)
+	X_save2 = make([]int32, resynth_alloc)
+	Y_save2 = make([]int32, resynth_alloc)
+	norm_save2 = make([]int32, resynth_alloc)
 
 	lowband_offset = 0
 	ctx.bandE = bandE
@@ -1472,6 +1478,10 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 	ctx.disable_inv = disable_inv
 	ctx.resynth = resynth
 	ctx.theta_round = 0
+	if theta_rdo != 0 {
+		bytes_save = make([]byte, 1275)
+	}
+
 	// Avoid injecting noise in the first band on transients.
 	ctx.avoid_split_noise = b2i(B > 1)
 	for i = start; i < end; i++ {
@@ -1480,7 +1490,7 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 		var N int
 		var curr_balance int32
 		var effective_lowband int = -1
-		var X, Y []int16
+		var X, Y []int32
 		var tf_change int = 0
 		var x_cm uint32
 		var y_cm uint32
@@ -1581,11 +1591,11 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 			dual_stereo = 0
 			if resynth != 0 {
 				for j = 0; j < M*int(eBands[i])-norm_offset; j++ {
-					norm[j] = int16(HALF32(int32(norm[j]) + int32(norm2[j])))
+					norm[j] = HALF32(norm[j] + norm2[j])
 				}
 			}
 		}
-		var lb, lb2, lo, lo2 []int16
+		var lb, lb2, lo, lo2 []int32
 		if effective_lowband != -1 {
 			lb = norm[effective_lowband:]
 			if C == 2 {
@@ -1601,10 +1611,10 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 		if dual_stereo != 0 {
 			x_cm = quant_band(&ctx, X, N, b/2, B,
 				lb, LM,
-				lo, Q15ONE, lowband_scratch, int(x_cm))
+				lo, Q31ONE, lowband_scratch, int(x_cm))
 			y_cm = quant_band(&ctx, Y, N, b/2, B,
 				lb2, LM,
-				lo2, Q15ONE, lowband_scratch, int(y_cm))
+				lo2, Q31ONE, lowband_scratch, int(y_cm))
 		} else {
 			if Y != nil {
 				if theta_rdo != 0 && i < intensity {
@@ -1614,7 +1624,6 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 					var cm, cm2 uint32
 					var nstart_bytes, nend_bytes, save_bytes int
 					var bytes_buf []byte
-					var bytes_save [1275]byte
 					var w [2]int16
 					compute_channel_weights(bandE[i], bandE[i+m.nbEBands], &w)
 					// Make a copy.
@@ -1628,7 +1637,7 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 					x_cm = quant_band_stereo(&ctx, X, Y, N, b, B,
 						lb, LM,
 						lo, lowband_scratch, int(cm))
-					dist0 = MULT16_32_Q15(w[0], InnerProd(X_save, X, N, arch)) + MULT16_32_Q15(w[1], InnerProd(Y_save, Y, N, arch))
+					dist0 = MULT16_32_Q15(w[0], InnerProdNormShift(X_save, X, N, arch)) + MULT16_32_Q15(w[1], InnerProdNormShift(Y_save, Y, N, arch))
 
 					// Save first result.
 					cm2 = x_cm
@@ -1659,7 +1668,7 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 					x_cm = quant_band_stereo(&ctx, X, Y, N, b, B,
 						lb, LM,
 						lo, lowband_scratch, int(cm))
-					dist1 = MULT16_32_Q15(w[0], InnerProd(X_save, X, N, arch)) + MULT16_32_Q15(w[1], InnerProd(Y_save, Y, N, arch))
+					dist1 = MULT16_32_Q15(w[0], InnerProdNormShift(X_save, X, N, arch)) + MULT16_32_Q15(w[1], InnerProdNormShift(Y_save, Y, N, arch))
 					if dist0 >= dist1 {
 						x_cm = cm2
 						*ec = ec_save2
@@ -1680,7 +1689,7 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 			} else {
 				x_cm = quant_band(&ctx, X, N, b, B,
 					lb, LM,
-					lo, Q15ONE, lowband_scratch, int(x_cm|y_cm))
+					lo, Q31ONE, lowband_scratch, int(x_cm|y_cm))
 			}
 			y_cm = x_cm
 		}

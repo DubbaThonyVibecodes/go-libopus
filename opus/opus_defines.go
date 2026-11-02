@@ -74,6 +74,12 @@ const (
 	OPUS_GET_DRED_DURATION_REQUEST            = 4051
 	OPUS_SET_DNN_BLOB_REQUEST                 = 4052
 	/*#define OPUS_GET_DNN_BLOB_REQUEST 4053 */
+	OPUS_SET_OSCE_BWE_REQUEST          = 4054
+	OPUS_GET_OSCE_BWE_REQUEST          = 4055
+	OPUS_SET_QEXT_REQUEST              = 4056
+	OPUS_GET_QEXT_REQUEST              = 4057
+	OPUS_SET_IGNORE_EXTENSIONS_REQUEST = 4058
+	OPUS_GET_IGNORE_EXTENSIONS_REQUEST = 4059
 )
 
 // Defines for the presence of extended APIs.
@@ -91,6 +97,10 @@ const (
 	OPUS_APPLICATION_AUDIO = 2049
 	// Only use when lowest-achievable latency is what matters most. Voice-optimized modes cannot be used.
 	OPUS_APPLICATION_RESTRICTED_LOWDELAY = 2051
+	// Experts only: forces SILK encoding; don't allocate CELT state at all. Disables OPUS_SET_APPLICATION.
+	OPUS_APPLICATION_RESTRICTED_SILK = 2052
+	// Experts only: forces CELT encoding; don't allocate SILK state at all. Disables OPUS_SET_APPLICATION.
+	OPUS_APPLICATION_RESTRICTED_CELT = 2053
 
 	OPUS_SIGNAL_VOICE = 3001 // Signal being encoded is voice
 	OPUS_SIGNAL_MUSIC = 3002 // Signal being encoded is music

@@ -52,15 +52,15 @@ type CELTEncoder struct {
 	overlap_max   int32
 	stereo_saving int16
 	intensity     int
-	energy_mask   []int16
-	spec_avg      int16
+	energy_mask   []int32 // celt_glog
+	spec_avg      int32   // celt_glog
 
 	in_mem        []int32 // Size = channels*mode->overlap
 	prefilter_mem []int32 // Size = channels*COMBFILTER_MAXPERIOD
-	oldBandE      []int16 // Size = channels*mode->nbEBands
-	oldLogE       []int16 // Size = channels*mode->nbEBands
-	oldLogE2      []int16 // Size = channels*mode->nbEBands
-	energyError   []int16 // Size = channels*mode->nbEBands
+	oldBandE      []int32 // celt_glog, Size = channels*mode->nbEBands
+	oldLogE       []int32 // celt_glog, Size = channels*mode->nbEBands
+	oldLogE2      []int32 // celt_glog, Size = channels*mode->nbEBands
+	energyError   []int32 // celt_glog, Size = channels*mode->nbEBands
 }
 
 // C: int celt_encoder_get_size(int channels)
@@ -74,10 +74,12 @@ func EncoderGetSize(channels int) int {
 //
 // C: int opus_custom_encoder_get_size(const CELTMode *mode, int channels)
 func CustomEncoderGetSize(mode *CELTMode, channels int) int {
+	extra := 0
 	size := 240 + // sizeof(struct CELTEncoder) excluding in_mem[1], approximate
 		channels*mode.overlap*4 + // celt_sig in_mem[channels*mode->overlap];
-		channels*COMBFILTER_MAXPERIOD*4 + // celt_sig prefilter_mem[channels*COMBFILTER_MAXPERIOD];
-		4*channels*mode.nbEBands*2 // opus_val16 oldBandE/oldLogE/oldLogE2/energyError[channels*mode->nbEBands];
+		channels*QEXT_SCALE(COMBFILTER_MAXPERIOD)*4 + // celt_sig prefilter_mem[channels*COMBFILTER_MAXPERIOD];
+		4*channels*mode.nbEBands*4 + // celt_glog oldBandE/oldLogE/oldLogE2/energyError[channels*mode->nbEBands];
+		extra
 	return size
 }
 
@@ -98,11 +100,11 @@ func (st *CELTEncoder) customEncoderInitArch(mode *CELTMode, channels int, arch 
 	st.stream_channels = channels
 
 	st.in_mem = make([]int32, channels*mode.overlap)
-	st.prefilter_mem = make([]int32, channels*COMBFILTER_MAXPERIOD)
-	st.oldBandE = make([]int16, channels*mode.nbEBands)
-	st.oldLogE = make([]int16, channels*mode.nbEBands)
-	st.oldLogE2 = make([]int16, channels*mode.nbEBands)
-	st.energyError = make([]int16, channels*mode.nbEBands)
+	st.prefilter_mem = make([]int32, channels*QEXT_SCALE(COMBFILTER_MAXPERIOD))
+	st.oldBandE = make([]int32, channels*mode.nbEBands)
+	st.oldLogE = make([]int32, channels*mode.nbEBands)
+	st.oldLogE2 = make([]int32, channels*mode.nbEBands)
+	st.energyError = make([]int32, channels*mode.nbEBands)
 
 	st.upsample = 1
 	st.start = 0
@@ -150,9 +152,9 @@ var transient_inv_table = [128]uint8{
 // C: static int transient_analysis(const opus_val32 * OPUS_RESTRICT in, int len, int C,
 //
 //	opus_val16 *tf_estimate, int *tf_chan, int allow_weak_transients,
-//	int *weak_transient)
+//	int *weak_transient, opus_val16 tone_freq, opus_val32 toneishness)
 func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int, allow_weak_transients int,
-	weak_transient *int) int {
+	weak_transient *int, tone_freq int16, toneishness int32) int {
 	var i int
 	var mem0, mem1 int32
 	var is_transient int = 0
@@ -163,6 +165,7 @@ func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int
 	// Forward masking: 6.7 dB/ms.
 	var forward_shift int = 4
 	inv_table := &transient_inv_table
+	var in_shift int = IMAX(0, int(Ilog2(1+Maxabs32(in, C*len)))-14)
 	tmp := make([]int16, len)
 
 	*weak_transient = 0
@@ -184,7 +187,7 @@ func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int
 		// High-pass filter: (1 - 2*z^-1 + z^-2) / (1 - z^-1 + .5*z^-2)
 		for i = 0; i < len; i++ {
 			var x, y int32
-			x = SHR32(in[i+c*len], SIG_SHIFT)
+			x = SHR32(in[i+c*len], in_shift)
 			y = ADD32(mem0, x)
 			mem0 = mem1 + y - SHL32(x, 1)
 			mem1 = x - SHR32(y, 1)
@@ -211,11 +214,11 @@ func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int
 		// Grouping by two to reduce complexity
 		// Forward pass to compute the post-echo threshold
 		for i = 0; i < len2; i++ {
-			var x2 int16 = int16(PSHR32(MULT16_16(tmp[2*i], tmp[2*i])+MULT16_16(tmp[2*i+1], tmp[2*i+1]), 16))
-			mean += int32(x2)
+			var x2 int32 = PSHR32(MULT16_16(tmp[2*i], tmp[2*i])+MULT16_16(tmp[2*i+1], tmp[2*i+1]), 4)
+			mean += PSHR32(x2, 12)
 			// FIXME: Use PSHR16() instead
-			tmp[i] = int16(mem0 + PSHR32(int32(x2)-mem0, forward_shift))
-			mem0 = int32(tmp[i])
+			mem0 = mem0 + PSHR32(x2-mem0, forward_shift)
+			tmp[i] = int16(PSHR32(mem0, 12))
 		}
 
 		mem0 = 0
@@ -224,9 +227,9 @@ func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int
 		for i = len2 - 1; i >= 0; i-- {
 			// Backward masking: 13.9 dB/ms.
 			// FIXME: Use PSHR16() instead
-			tmp[i] = int16(mem0 + PSHR32(int32(tmp[i])-mem0, 3))
-			mem0 = int32(tmp[i])
-			maxE = int16(MAX16(int32(maxE), mem0))
+			mem0 = mem0 + PSHR32(SHL32(tmp[i], 4)-mem0, 3)
+			tmp[i] = int16(PSHR32(mem0, 4))
+			maxE = MAX16(maxE, tmp[i])
 		}
 		// for (i=0;i<len2;i++)printf("%f ", tmp[i]/mean);printf("\n");
 
@@ -263,6 +266,12 @@ func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int
 		}
 	}
 	is_transient = b2i(mask_metric > 200)
+	// Prevent the transient detector from confusing the partial cycle of a
+	// very low frequency tone with a transient.
+	if toneishness > QCONST32(.98, 29) && tone_freq < QCONST16(0.026, 13) {
+		is_transient = 0
+		mask_metric = 0
+	}
 	// For low bitrates, define "weak transients" that need to be
 	// handled differently to avoid partial collapse.
 	if allow_weak_transients != 0 && is_transient != 0 && mask_metric < 600 {
@@ -281,38 +290,39 @@ func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int
 // Looks for sudden increases of energy to decide whether we need to patch
 // the transient decision
 //
-// C: static int patch_transient_decision(opus_val16 *newE, opus_val16 *oldE, int nbEBands,
+// C: static int patch_transient_decision(celt_glog *newE, celt_glog *oldE, int nbEBands,
 //
 //	int start, int end, int C)
-func patch_transient_decision(newE, oldE []int16, nbEBands int, start, end, C int) int {
+func patch_transient_decision(newE, oldE []int32, nbEBands int, start, end, C int) int {
 	var i, c int
 	var mean_diff int32 = 0
-	var spread_old [26]int16
+	var spread_old [26]int32
 	// Apply an aggressive (-6 dB/Bark) spreading function to the old frame to
 	// avoid false detection caused by irrelevant bands
 	if C == 1 {
 		spread_old[start] = oldE[start]
 		for i = start + 1; i < end; i++ {
-			spread_old[i] = MAX16(spread_old[i-1]-QCONST16(1.0, DB_SHIFT), oldE[i])
+			spread_old[i] = MAXG(spread_old[i-1]-GCONST(1.0), oldE[i])
 		}
 	} else {
-		spread_old[start] = MAX16(oldE[start], oldE[start+nbEBands])
+		spread_old[start] = MAXG(oldE[start], oldE[start+nbEBands])
 		for i = start + 1; i < end; i++ {
-			spread_old[i] = MAX16(spread_old[i-1]-QCONST16(1.0, DB_SHIFT),
-				MAX16(oldE[i], oldE[i+nbEBands]))
+			spread_old[i] = MAXG(spread_old[i-1]-GCONST(1.0),
+				MAXG(oldE[i], oldE[i+nbEBands]))
 		}
 	}
 	for i = end - 2; i >= start; i-- {
-		spread_old[i] = MAX16(spread_old[i], spread_old[i+1]-QCONST16(1.0, DB_SHIFT))
+		spread_old[i] = MAXG(spread_old[i], spread_old[i+1]-GCONST(1.0))
 	}
 	// Compute mean increase
 	c = 0
 	for {
 		for i = IMAX(2, start); i < end-1; i++ {
+			// (C keeps x1/x2 as opus_val16, so the Q24 values are truncated to 16 bits.)
 			var x1, x2 int16
-			x1 = MAX16(0, newE[i+c*nbEBands])
-			x2 = MAX16(0, spread_old[i])
-			mean_diff = ADD32(mean_diff, EXTEND32(MAX16(0, SUB16(x1, x2))))
+			x1 = int16(MAXG(0, newE[i+c*nbEBands]))
+			x2 = int16(MAXG(0, spread_old[i]))
+			mean_diff = ADD32(mean_diff, MAXG(0, SUB32(x1, x2)))
 		}
 		c++
 		if c >= C {
@@ -321,7 +331,7 @@ func patch_transient_decision(newE, oldE []int16, nbEBands int, start, end, C in
 	}
 	mean_diff = DIV32(mean_diff, C*(end-1-IMAX(2, start)))
 	// printf("%f %f %d\n", mean_diff, max_diff, count);
-	return b2i(mean_diff > int32(QCONST16(1.0, DB_SHIFT)))
+	return b2i(mean_diff > GCONST(1.0))
 }
 
 // Apply window and compute the MDCT for all sub-frames and all channels in a frame.
@@ -382,10 +392,10 @@ func compute_mdcts(mode *CELTMode, shortBlocks int, in []int32, out []int32, C, 
 // Preemphasis applies the pre-emphasis filter to one channel of interleaved
 // input: pcmp[CC*i] is read (pass pcm[c:]).
 //
-// C: void celt_preemphasis(const opus_val16 * OPUS_RESTRICT pcmp, celt_sig * OPUS_RESTRICT inp,
+// C: void celt_preemphasis(const opus_res * OPUS_RESTRICT pcmp, celt_sig * OPUS_RESTRICT inp,
 //
 //	int N, int CC, int upsample, const opus_val16 *coef, celt_sig *mem, int clip)
-func Preemphasis(pcmp []int16, inp []int32, N, CC, upsample int, coef []int16, mem *int32, clip int) {
+func Preemphasis(pcmp []int32, inp []int32, N, CC, upsample int, coef []int16, mem *int32, clip int) {
 	var i int
 	var coef0 int16
 	var m int32
@@ -397,11 +407,11 @@ func Preemphasis(pcmp []int16, inp []int32, N, CC, upsample int, coef []int16, m
 	// Fast path for the normal 48kHz case and no clipping
 	if coef[1] == 0 && upsample == 1 && clip == 0 {
 		for i = 0; i < N; i++ {
-			var x int16
-			x = SCALEIN(pcmp[CC*i])
+			var x int32
+			x = RES2SIG(pcmp[CC*i])
 			// Apply pre-emphasis
-			inp[i] = SHL32(x, SIG_SHIFT) - m
-			m = SHR32(MULT16_16(coef0, x), 15-SIG_SHIFT)
+			inp[i] = x - m
+			m = MULT16_32_Q15(coef0, x)
 		}
 		*mem = m
 		return
@@ -412,29 +422,36 @@ func Preemphasis(pcmp []int16, inp []int32, N, CC, upsample int, coef []int16, m
 		clear(inp[:N])
 	}
 	for i = 0; i < Nu; i++ {
-		inp[i*upsample] = int32(SCALEIN(pcmp[CC*i]))
+		inp[i*upsample] = RES2SIG(pcmp[CC*i])
 	}
 
-	_ = clip // Avoids a warning about clip being unused.
+	// ENABLE_RES24
+	if clip != 0 {
+		// Clip input to avoid encoding non-portable files
+		for i = 0; i < Nu; i++ {
+			inp[i*upsample] = MAX32(-(65536 << SIG_SHIFT), MIN32(65536<<SIG_SHIFT, inp[i*upsample]))
+		}
+	}
+	// CUSTOM_MODES, ENABLE_OPUS_CUSTOM_API and ENABLE_QEXT are not defined: no coef[1] branch.
 	{
 		for i = 0; i < N; i++ {
-			var x int16
-			x = int16(inp[i])
+			var x int32
+			x = inp[i]
 			// Apply pre-emphasis
-			inp[i] = SHL32(x, SIG_SHIFT) - m
-			m = SHR32(MULT16_16(coef0, x), 15-SIG_SHIFT)
+			inp[i] = x - m
+			m = MULT16_32_Q15(coef0, x)
 		}
 	}
 	*mem = m
 }
 
 // C: static opus_val32 l1_metric(const celt_norm *tmp, int N, int LM, opus_val16 bias)
-func l1_metric(tmp []int16, N, LM int, bias int16) int32 {
+func l1_metric(tmp []int32, N, LM int, bias int16) int32 {
 	var i int
 	var L1 int32
 	L1 = 0
 	for i = 0; i < N; i++ {
-		L1 += EXTEND32(ABS16(tmp[i]))
+		L1 += EXTEND32(ABS16(SHR32(tmp[i], NORM_SHIFT-14)))
 	}
 	// When in doubt, prefer good freq resolution
 	L1 = MAC16_32_Q15(L1, LM*int(bias), L1)
@@ -447,7 +464,7 @@ func l1_metric(tmp []int16, N, LM int, bias int16) int32 {
 //	int *tf_res, int lambda, celt_norm *X, int N0, int LM,
 //	opus_val16 tf_estimate, int tf_chan, int *importance)
 func tf_analysis(m *CELTMode, len, isTransient int,
-	tf_res []int, lambda int, X []int16, N0, LM int,
+	tf_res []int, lambda int, X []int32, N0, LM int,
 	tf_estimate int16, tf_chan int, importance []int) int {
 	var i int
 	var cost0 int
@@ -461,8 +478,8 @@ func tf_analysis(m *CELTMode, len, isTransient int,
 	// printf("%f ", bias);
 
 	metric := make([]int, len)
-	tmp := make([]int16, int(m.eBands[len]-m.eBands[len-1])<<uint(LM))
-	tmp_1 := make([]int16, int(m.eBands[len]-m.eBands[len-1])<<uint(LM))
+	tmp := make([]int32, int(m.eBands[len]-m.eBands[len-1])<<uint(LM))
+	tmp_1 := make([]int32, int(m.eBands[len]-m.eBands[len-1])<<uint(LM))
 	path0 := make([]int, len)
 	path1 := make([]int, len)
 
@@ -652,13 +669,13 @@ func tf_encode(start, end, isTransient int, tf_res []int, LM, tf_select int, enc
 
 // C: static int alloc_trim_analysis(const CELTMode *m, const celt_norm *X,
 //
-//	const opus_val16 *bandLogE, int end, int LM, int C, int N0,
+//	const celt_glog *bandLogE, int end, int LM, int C, int N0,
 //	AnalysisInfo *analysis, opus_val16 *stereo_saving, opus_val16 tf_estimate,
-//	int intensity, opus_val16 surround_trim, opus_int32 equiv_rate, int arch)
-func alloc_trim_analysis(m *CELTMode, X []int16,
-	bandLogE []int16, end, LM, C, N0 int,
+//	int intensity, celt_glog surround_trim, opus_int32 equiv_rate, int arch)
+func alloc_trim_analysis(m *CELTMode, X []int32,
+	bandLogE []int32, end, LM, C, N0 int,
 	analysis *AnalysisInfo, stereo_saving *int16, tf_estimate int16,
-	intensity int, surround_trim int16, equiv_rate int32, arch int) int {
+	intensity int, surround_trim int32, equiv_rate int32, arch int) int {
 	var i int
 	var diff int32 = 0
 	var c int
@@ -679,7 +696,7 @@ func alloc_trim_analysis(m *CELTMode, X []int16,
 		// Compute inter-channel correlation for low frequencies
 		for i = 0; i < 8; i++ {
 			var partial int32
-			partial = InnerProd(X[int(m.eBands[i])<<uint(LM):], X[N0+(int(m.eBands[i])<<uint(LM)):],
+			partial = InnerProdNormShift(X[int(m.eBands[i])<<uint(LM):], X[N0+(int(m.eBands[i])<<uint(LM)):],
 				int(m.eBands[i+1]-m.eBands[i])<<uint(LM), arch)
 			sum = ADD16(sum, EXTRACT16(SHR32(partial, 18)))
 		}
@@ -688,7 +705,7 @@ func alloc_trim_analysis(m *CELTMode, X []int16,
 		minXC = sum
 		for i = 8; i < intensity; i++ {
 			var partial int32
-			partial = InnerProd(X[int(m.eBands[i])<<uint(LM):], X[N0+(int(m.eBands[i])<<uint(LM)):],
+			partial = InnerProdNormShift(X[int(m.eBands[i])<<uint(LM):], X[N0+(int(m.eBands[i])<<uint(LM)):],
 				int(m.eBands[i+1]-m.eBands[i])<<uint(LM), arch)
 			minXC = MIN16(minXC, ABS16(EXTRACT16(SHR32(partial, 18))))
 		}
@@ -699,8 +716,8 @@ func alloc_trim_analysis(m *CELTMode, X []int16,
 		// mid-side savings estimations based on min correlation
 		logXC2 = int16(MAX16(HALF16(logXC), int32(Log2(QCONST32(1.001, 20)-MULT16_16(minXC, minXC)))))
 		// Compensate for Q20 vs Q14 input and convert output to Q8
-		logXC = int16(PSHR32(int32(logXC)-int32(QCONST16(6.0, DB_SHIFT)), DB_SHIFT-8))
-		logXC2 = int16(PSHR32(int32(logXC2)-int32(QCONST16(6.0, DB_SHIFT)), DB_SHIFT-8))
+		logXC = int16(PSHR32(int32(logXC)-int32(QCONST16(6.0, 10)), 10-8))
+		logXC2 = int16(PSHR32(int32(logXC2)-int32(QCONST16(6.0, 10)), 10-8))
 
 		trim = int16(int32(trim) + MAX16(int32(-QCONST16(4.0, 8)), MULT16_16_Q15(QCONST16(.75, 15), logXC)))
 		*stereo_saving = int16(MIN16(int32(*stereo_saving)+int32(QCONST16(0.25, 8)), -HALF16(logXC2)))
@@ -710,7 +727,7 @@ func alloc_trim_analysis(m *CELTMode, X []int16,
 	c = 0
 	for {
 		for i = 0; i < end-1; i++ {
-			diff += int32(bandLogE[i+c*m.nbEBands]) * int32(2+2*i-end)
+			diff += SHR32(bandLogE[i+c*m.nbEBands], 5) * int32(2+2*i-end)
 		}
 		c++
 		if c >= C {
@@ -719,8 +736,8 @@ func alloc_trim_analysis(m *CELTMode, X []int16,
 	}
 	diff /= int32(C * (end - 1))
 	// printf("%f\n", diff);
-	trim = int16(int32(trim) - MAX32(int32(-QCONST16(2.0, 8)), MIN32(int32(QCONST16(2.0, 8)), SHR32(diff+int32(QCONST16(1.0, DB_SHIFT)), DB_SHIFT-8)/6)))
-	trim = int16(int32(trim) - SHR16(surround_trim, DB_SHIFT-8))
+	trim = int16(int32(trim) - MAX32(int32(-QCONST16(2.0, 8)), MIN32(int32(QCONST16(2.0, 8)), SHR32(diff+QCONST32(1.0, DB_SHIFT-5), DB_SHIFT-13)/6)))
+	trim = int16(int32(trim) - SHR32(surround_trim, DB_SHIFT-8))
 	trim = int16(int32(trim) - 2*SHR16(tf_estimate, 14-8))
 	if analysis.Valid != 0 {
 		trim = int16(int32(trim) - MAX16(int32(-QCONST16(2.0, 8)), MIN16(int32(QCONST16(2.0, 8)),
@@ -734,7 +751,7 @@ func alloc_trim_analysis(m *CELTMode, X []int16,
 }
 
 // C: static int stereo_analysis(const CELTMode *m, const celt_norm *X, int LM, int N0)
-func stereo_analysis(m *CELTMode, X []int16, LM, N0 int) int {
+func stereo_analysis(m *CELTMode, X []int32, LM, N0 int) int {
 	var i int
 	var thetas int
 	var sumLR, sumMS int32 = EPSILON, EPSILON
@@ -745,8 +762,8 @@ func stereo_analysis(m *CELTMode, X []int16, LM, N0 int) int {
 		for j = int(m.eBands[i]) << uint(LM); j < int(m.eBands[i+1])<<uint(LM); j++ {
 			var L, R, M, S int32
 			// We cast to 32-bit first because of the -32768 case
-			L = EXTEND32(X[j])
-			R = EXTEND32(X[N0+j])
+			L = SHR32(X[j], NORM_SHIFT-14)
+			R = SHR32(X[N0+j], NORM_SHIFT-14)
 			M = ADD32(L, R)
 			S = SUB32(L, R)
 			sumLR = ADD32(sumLR, ADD32(ABS32(L), ABS32(R)))
@@ -763,9 +780,9 @@ func stereo_analysis(m *CELTMode, X []int16, LM, N0 int) int {
 		MULT16_32_Q15(int(m.eBands[13])<<uint(LM+1), sumLR))
 }
 
-// C: static opus_val16 median_of_5(const opus_val16 *x)
-func median_of_5(x []int16) int16 {
-	var t0, t1, t2, t3, t4 int16
+// C: static celt_glog median_of_5(const celt_glog *x)
+func median_of_5(x []int32) int32 {
+	var t0, t1, t2, t3, t4 int32
 	t2 = x[2]
 	if x[0] > x[1] {
 		t0 = x[1]
@@ -787,19 +804,19 @@ func median_of_5(x []int16) int16 {
 	}
 	if t2 > t1 {
 		if t1 < t3 {
-			return MIN16(t2, t3)
+			return MING(t2, t3)
 		}
-		return MIN16(t4, t1)
+		return MING(t4, t1)
 	}
 	if t2 < t3 {
-		return MIN16(t1, t3)
+		return MING(t1, t3)
 	}
-	return MIN16(t2, t4)
+	return MING(t2, t4)
 }
 
-// C: static opus_val16 median_of_3(const opus_val16 *x)
-func median_of_3(x []int16) int16 {
-	var t0, t1, t2 int16
+// C: static celt_glog median_of_3(const celt_glog *x)
+func median_of_3(x []int32) int32 {
+	var t0, t1, t2 int32
 	if x[0] > x[1] {
 		t0 = x[1]
 		t1 = x[0]
@@ -816,37 +833,38 @@ func median_of_3(x []int16) int16 {
 	return t0
 }
 
-// C: static opus_val16 dynalloc_analysis(const opus_val16 *bandLogE, const opus_val16 *bandLogE2, const opus_val16 *oldBandE,
+// C: static celt_glog dynalloc_analysis(const celt_glog *bandLogE, const celt_glog *bandLogE2, const celt_glog *oldBandE,
 //
 //	int nbEBands, int start, int end, int C, int *offsets, int lsb_depth, const opus_int16 *logN,
 //	int isTransient, int vbr, int constrained_vbr, const opus_int16 *eBands, int LM,
-//	int effectiveBytes, opus_int32 *tot_boost_, int lfe, opus_val16 *surround_dynalloc,
-//	AnalysisInfo *analysis, int *importance, int *spread_weight)
-func dynalloc_analysis(bandLogE, bandLogE2, oldBandE []int16,
+//	int effectiveBytes, opus_int32 *tot_boost_, int lfe, celt_glog *surround_dynalloc,
+//	AnalysisInfo *analysis, int *importance, int *spread_weight, opus_val16 tone_freq, opus_val32 toneishness
+//	ARG_QEXT(int qext_scale))
+func dynalloc_analysis(bandLogE, bandLogE2, oldBandE []int32,
 	nbEBands, start, end, C int, offsets []int, lsb_depth int, logN []int16,
 	isTransient, vbr, constrained_vbr int, eBands []int16, LM int,
-	effectiveBytes int, tot_boost_ *int32, lfe int, surround_dynalloc []int16,
-	analysis *AnalysisInfo, importance []int, spread_weight []int) int16 {
+	effectiveBytes int, tot_boost_ *int32, lfe int, surround_dynalloc []int32,
+	analysis *AnalysisInfo, importance []int, spread_weight []int, tone_freq int16, toneishness int32) int32 {
 	var i, c int
 	var tot_boost int32 = 0
-	var maxDepth int16
-	follower := make([]int16, C*nbEBands)
-	noise_floor := make([]int16, C*nbEBands)
-	bandLogE3 := make([]int16, nbEBands)
+	var maxDepth int32
+	follower := make([]int32, C*nbEBands)
+	noise_floor := make([]int32, C*nbEBands)
+	bandLogE3 := make([]int32, nbEBands)
 	clear(offsets[:nbEBands])
 	// Dynamic allocation code
-	maxDepth = -QCONST16(31.9, DB_SHIFT)
+	maxDepth = -GCONST(31.9)
 	for i = 0; i < end; i++ {
 		// Noise floor must take into account eMeans, the depth, the width of the bands
 		// and the preemphasis filter (approx. square of bark band ID)
-		noise_floor[i] = int16(MULT16_16(QCONST16(0.0625, DB_SHIFT), logN[i]) +
-			int32(QCONST16(.5, DB_SHIFT)) + int32(SHL16(9-lsb_depth, DB_SHIFT)) - int32(SHL16(eMeans[i], 6)) +
-			MULT16_16(QCONST16(.0062, DB_SHIFT), (i+5)*(i+5)))
+		noise_floor[i] = GCONST(0.0625)*int32(logN[i]) +
+			GCONST(.5) + SHL32(9-lsb_depth, DB_SHIFT) - SHL32(eMeans[i], DB_SHIFT-4) +
+			GCONST(.0062)*int32((i+5)*(i+5))
 	}
 	c = 0
 	for {
 		for i = 0; i < end; i++ {
-			maxDepth = MAX16(maxDepth, bandLogE[c*nbEBands+i]-noise_floor[i])
+			maxDepth = MAXG(maxDepth, bandLogE[c*nbEBands+i]-noise_floor[i])
 		}
 		c++
 		if c >= C {
@@ -856,30 +874,29 @@ func dynalloc_analysis(bandLogE, bandLogE2, oldBandE []int16,
 	{
 		// Compute a really simple masking model to avoid taking into account completely masked
 		// bands when computing the spreading decision.
-		mask := make([]int16, nbEBands)
-		sig := make([]int16, nbEBands)
+		mask := make([]int32, nbEBands)
+		sig := make([]int32, nbEBands)
 		for i = 0; i < end; i++ {
 			mask[i] = bandLogE[i] - noise_floor[i]
 		}
 		if C == 2 {
 			for i = 0; i < end; i++ {
-				mask[i] = MAX16(mask[i], bandLogE[nbEBands+i]-noise_floor[i])
+				mask[i] = MAXG(mask[i], bandLogE[nbEBands+i]-noise_floor[i])
 			}
 		}
 		copy(sig[:end], mask[:end])
 		for i = 1; i < end; i++ {
-			mask[i] = MAX16(mask[i], mask[i-1]-QCONST16(2.0, DB_SHIFT))
+			mask[i] = MAXG(mask[i], mask[i-1]-GCONST(2.0))
 		}
 		for i = end - 2; i >= 0; i-- {
-			mask[i] = MAX16(mask[i], mask[i+1]-QCONST16(3.0, DB_SHIFT))
+			mask[i] = MAXG(mask[i], mask[i+1]-GCONST(3.0))
 		}
 		for i = 0; i < end; i++ {
 			// Compute SMR: Mask is never more than 72 dB below the peak and never below the noise floor.
-			// (C does the MAX16 arithmetic in int; maxDepth-12 dB can be below -32768.)
-			var smr int16 = int16(int32(sig[i]) - MAX16(MAX16(0, int32(maxDepth)-int32(QCONST16(12.0, DB_SHIFT))), int32(mask[i])))
+			var smr int32 = sig[i] - MAXG(MAXG(0, maxDepth-GCONST(12.0)), mask[i])
 			// Clamp SMR to make sure we're not shifting by something negative or too large.
 			// FIXME: Use PSHR16() instead
-			var shift int = -int(PSHR32(MAX16(-QCONST16(5.0, DB_SHIFT), MIN16(0, smr)), DB_SHIFT))
+			var shift int = -int(PSHR32(MAXG(-GCONST(5.0), MING(0, smr)), DB_SHIFT))
 			spread_weight[i] = 32 >> uint(shift)
 		}
 		// for (i=0;i<end;i++)
@@ -893,9 +910,9 @@ func dynalloc_analysis(bandLogE, bandLogE2, oldBandE []int16,
 		var last int = 0
 		c = 0
 		for {
-			var offset int16
-			var tmp int16
-			var f []int16
+			var offset int32
+			var tmp int32
+			var f []int32
 			copy(bandLogE3[:end], bandLogE2[c*nbEBands:c*nbEBands+end])
 			if LM == 0 {
 				// For 2.5 ms frames, the first 8 bands have just one bin, so the
@@ -903,7 +920,7 @@ func dynalloc_analysis(bandLogE, bandLogE2, oldBandE []int16,
 				// we take the max with the previous energy so that at least 2 bins
 				// are getting used.
 				for i = 0; i < IMIN(8, end); i++ {
-					bandLogE3[i] = MAX16(bandLogE2[c*nbEBands+i], oldBandE[c*nbEBands+i])
+					bandLogE3[i] = MAXG(bandLogE2[c*nbEBands+i], oldBandE[c*nbEBands+i])
 				}
 			}
 			f = follower[c*nbEBands:]
@@ -912,31 +929,31 @@ func dynalloc_analysis(bandLogE, bandLogE2, oldBandE []int16,
 				// The last band to be at least 3 dB higher than the previous one
 				// is the last we'll consider. Otherwise, we run into problems on
 				// bandlimited signals.
-				if bandLogE3[i] > bandLogE3[i-1]+QCONST16(.5, DB_SHIFT) {
+				if bandLogE3[i] > bandLogE3[i-1]+GCONST(.5) {
 					last = i
 				}
-				f[i] = MIN16(f[i-1]+QCONST16(1.5, DB_SHIFT), bandLogE3[i])
+				f[i] = MING(f[i-1]+GCONST(1.5), bandLogE3[i])
 			}
 			for i = last - 1; i >= 0; i-- {
-				f[i] = MIN16(f[i], MIN16(f[i+1]+QCONST16(2.0, DB_SHIFT), bandLogE3[i]))
+				f[i] = MING(f[i], MING(f[i+1]+GCONST(2.0), bandLogE3[i]))
 			}
 
 			// Combine with a median filter to avoid dynalloc triggering unnecessarily.
 			// The "offset" value controls how conservative we are -- a higher offset
 			// reduces the impact of the median filter and makes dynalloc use more bits.
-			offset = QCONST16(1.0, DB_SHIFT)
+			offset = GCONST(1.0)
 			for i = 2; i < end-2; i++ {
-				f[i] = MAX16(f[i], median_of_5(bandLogE3[i-2:])-offset)
+				f[i] = MAXG(f[i], median_of_5(bandLogE3[i-2:])-offset)
 			}
 			tmp = median_of_3(bandLogE3[0:]) - offset
-			f[0] = MAX16(f[0], tmp)
-			f[1] = MAX16(f[1], tmp)
+			f[0] = MAXG(f[0], tmp)
+			f[1] = MAXG(f[1], tmp)
 			tmp = median_of_3(bandLogE3[end-3:]) - offset
-			f[end-2] = MAX16(f[end-2], tmp)
-			f[end-1] = MAX16(f[end-1], tmp)
+			f[end-2] = MAXG(f[end-2], tmp)
+			f[end-1] = MAXG(f[end-1], tmp)
 
 			for i = 0; i < end; i++ {
-				f[i] = MAX16(f[i], noise_floor[i])
+				f[i] = MAXG(f[i], noise_floor[i])
 			}
 			c++
 			if c >= C {
@@ -946,25 +963,25 @@ func dynalloc_analysis(bandLogE, bandLogE2, oldBandE []int16,
 		if C == 2 {
 			for i = start; i < end; i++ {
 				// Consider 24 dB "cross-talk"
-				follower[nbEBands+i] = MAX16(follower[nbEBands+i], follower[i]-QCONST16(4.0, DB_SHIFT))
-				follower[i] = MAX16(follower[i], follower[nbEBands+i]-QCONST16(4.0, DB_SHIFT))
-				follower[i] = int16(HALF16(int32(MAX16(0, bandLogE[i]-follower[i])) + int32(MAX16(0, bandLogE[nbEBands+i]-follower[nbEBands+i]))))
+				follower[nbEBands+i] = MAXG(follower[nbEBands+i], follower[i]-GCONST(4.0))
+				follower[i] = MAXG(follower[i], follower[nbEBands+i]-GCONST(4.0))
+				follower[i] = HALF32(MAXG(0, bandLogE[i]-follower[i]) + MAXG(0, bandLogE[nbEBands+i]-follower[nbEBands+i]))
 			}
 		} else {
 			for i = start; i < end; i++ {
-				follower[i] = MAX16(0, bandLogE[i]-follower[i])
+				follower[i] = MAXG(0, bandLogE[i]-follower[i])
 			}
 		}
 		for i = start; i < end; i++ {
-			follower[i] = MAX16(follower[i], surround_dynalloc[i])
+			follower[i] = MAXG(follower[i], surround_dynalloc[i])
 		}
 		for i = start; i < end; i++ {
-			importance[i] = int(PSHR32(13*Exp2(MIN16(follower[i], QCONST16(4.0, DB_SHIFT))), 16))
+			importance[i] = int(PSHR32(13*Exp2Db(MING(follower[i], GCONST(4.0))), 16))
 		}
 		// For non-transient CBR/CVBR frames, halve the dynalloc contribution
 		if (vbr == 0 || constrained_vbr != 0) && isTransient == 0 {
 			for i = start; i < end; i++ {
-				follower[i] = int16(HALF16(follower[i]))
+				follower[i] = HALF32(follower[i])
 			}
 		}
 		for i = start; i < end; i++ {
@@ -972,12 +989,34 @@ func dynalloc_analysis(bandLogE, bandLogE2, oldBandE []int16,
 				follower[i] *= 2
 			}
 			if i >= 12 {
-				follower[i] = int16(HALF16(follower[i]))
+				follower[i] = HALF32(follower[i])
+			}
+		}
+		// Compensate for Opus' under-allocation on tones.
+		if toneishness > QCONST32(.98, 29) {
+			var freq_bin int = int(PSHR32(QEXT_SCALE(int32(tone_freq))*int32(QCONST16(120/PI, 9)), 13+9))
+			for i = start; i < end; i++ {
+				if freq_bin >= int(eBands[i]) && freq_bin <= int(eBands[i+1]) {
+					follower[i] += GCONST(2.0)
+				}
+				if freq_bin >= int(eBands[i])-1 && freq_bin <= int(eBands[i+1])+1 {
+					follower[i] += GCONST(1.0)
+				}
+				if freq_bin >= int(eBands[i])-2 && freq_bin <= int(eBands[i+1])+2 {
+					follower[i] += GCONST(1.0)
+				}
+				if freq_bin >= int(eBands[i])-3 && freq_bin <= int(eBands[i+1])+3 {
+					follower[i] += GCONST(.5)
+				}
+			}
+			if freq_bin >= int(eBands[end]) {
+				follower[end-1] += GCONST(2.0)
+				follower[end-2] += GCONST(1.0)
 			}
 		}
 		if analysis.Valid != 0 {
 			for i = start; i < IMIN(LEAK_BANDS, end); i++ {
-				follower[i] = int16(int32(follower[i]) + int32(QCONST16(1.0/64.0, DB_SHIFT))*int32(analysis.Leak_boost[i]))
+				follower[i] = follower[i] + GCONST(1.0/64.0)*int32(analysis.Leak_boost[i])
 			}
 		}
 		for i = start; i < end; i++ {
@@ -985,17 +1024,18 @@ func dynalloc_analysis(bandLogE, bandLogE2, oldBandE []int16,
 			var boost int
 			var boost_bits int
 
-			follower[i] = MIN16(follower[i], QCONST16(4, DB_SHIFT))
+			follower[i] = MING(follower[i], GCONST(4))
 
+			follower[i] = SHR32(follower[i], 8)
 			width = C * int(eBands[i+1]-eBands[i]) << uint(LM)
 			if width < 6 {
-				boost = int(SHR32(EXTEND32(follower[i]), DB_SHIFT))
+				boost = int(SHR32(follower[i], DB_SHIFT-8))
 				boost_bits = boost * width << BITRES
 			} else if width > 48 {
-				boost = int(SHR32(EXTEND32(follower[i])*8, DB_SHIFT))
+				boost = int(SHR32(follower[i]*8, DB_SHIFT-8))
 				boost_bits = (boost * width << BITRES) / 8
 			} else {
-				boost = int(SHR32(EXTEND32(follower[i])*int32(width)/6, DB_SHIFT))
+				boost = int(SHR32(follower[i]*int32(width)/6, DB_SHIFT-8))
 				boost_bits = boost * 6 << BITRES
 			}
 			// For CBR and non-transient CVBR frames, limit dynalloc to 2/3 of the bits
@@ -1019,11 +1059,160 @@ func dynalloc_analysis(bandLogE, bandLogE2, oldBandE []int16,
 	return maxDepth
 }
 
+// C: void normalize_tone_input(opus_val16 *x, int len)   (FIXED_POINT)
+func NormalizeToneInput(x []int16, length int) {
+	var ac0 int32 = int32(length)
+	var i int
+	var shift int
+	for i = 0; i < length; i++ {
+		ac0 = ADD32(ac0, SHR32(MULT16_16(x[i], x[i]), 10))
+	}
+	shift = 5 - (28-int(Ilog2(ac0)))/2
+	if shift > 0 {
+		for i = 0; i < length; i++ {
+			x[i] = int16(PSHR32(x[i], shift))
+		}
+	}
+}
+
+// C: int acos_approx(opus_val32 x)   (FIXED_POINT)
+func AcosApprox(x int32) int {
+	var x14 int16
+	var tmp int32
+	var flip int = b2i(x < 0)
+	x = ABS(x)
+	x14 = int16(x >> 15)
+	tmp = (762*int32(x14))>>14 - 3308
+	tmp = (tmp*int32(x14))>>14 + 25726
+	tmp = tmp * Sqrt(IMAX(0, (1<<30)-(x<<1))) >> 16
+	if flip != 0 {
+		tmp = 25736 - tmp
+	}
+	return int(tmp)
+}
+
+// Compute the LPC coefficients using a least-squares fit for both forward and backward prediction.
+//
+// C: static int tone_lpc(const opus_val16 *x, int len, int delay, opus_val32 *lpc)
+func tone_lpc(x []int16, length int, delay int, lpc []int32) int {
+	var i int
+	var r00, r01, r11, r02, r12, r22 int32 = 0, 0, 0, 0, 0, 0
+	var edges int32
+	var num0, num1, den int32
+	celt_assert(length > 2*delay)
+	// Compute correlations as if using the forward prediction covariance method.
+	for i = 0; i < length-2*delay; i++ {
+		r00 += MULT16_16(x[i], x[i])
+		r01 += MULT16_16(x[i], x[i+delay])
+		r02 += MULT16_16(x[i], x[i+2*delay])
+	}
+	edges = 0
+	for i = 0; i < delay; i++ {
+		edges += MULT16_16(x[length+i-2*delay], x[length+i-2*delay]) - MULT16_16(x[i], x[i])
+	}
+	r11 = r00 + edges
+	edges = 0
+	for i = 0; i < delay; i++ {
+		edges += MULT16_16(x[length+i-delay], x[length+i-delay]) - MULT16_16(x[i+delay], x[i+delay])
+	}
+	r22 = r11 + edges
+	edges = 0
+	for i = 0; i < delay; i++ {
+		edges += MULT16_16(x[length+i-2*delay], x[length+i-delay]) - MULT16_16(x[i], x[i+delay])
+	}
+	r12 = r01 + edges
+	// Reverse and sum to get the backward contribution.
+	{
+		var R00, R01, R11, R02, R12, R22 int32
+		R00 = r00 + r22
+		R01 = r01 + r12
+		R11 = 2 * r11
+		R02 = 2 * r02
+		R12 = r12 + r01
+		R22 = r00 + r22
+		r00 = R00
+		r01 = R01
+		r11 = R11
+		r02 = R02
+		r12 = R12
+		r22 = R22
+	}
+	// Solve A*x=b, where A=[r00, r01; r01, r11] and b=[r02; r12].
+	den = MULT32_32_Q31(r00, r11) - MULT32_32_Q31(r01, r01)
+	if den <= SHR32(MULT32_32_Q31(r00, r11), 10) {
+		return 1
+	}
+	num1 = MULT32_32_Q31(r02, r11) - MULT32_32_Q31(r01, r12)
+	if num1 >= den {
+		lpc[1] = QCONST32(1.0, 29)
+	} else if num1 <= -den {
+		lpc[1] = -QCONST32(1.0, 29)
+	} else {
+		lpc[1] = FracDiv32Q29(num1, den)
+	}
+	num0 = MULT32_32_Q31(r00, r12) - MULT32_32_Q31(r02, r01)
+	if HALF32(num0) >= den {
+		lpc[0] = QCONST32(1.999999, 29)
+	} else if HALF32(num0) <= -den {
+		lpc[0] = -QCONST32(1.999999, 29)
+	} else {
+		lpc[0] = FracDiv32Q29(num0, den)
+	}
+	// printf("%f %f\n", lpc[0], lpc[1]);
+	return 0
+}
+
+// QCONST32(3.999999, 29): the C literal has no f suffix, so it is a double
+// and the constant is (opus_val32)(.5+3.999999*(1<<29)) = 2147483111.
+const qconst32_3_999999_q29 int32 = 2147483111
+
+// Detects pure of nearly pure tones so we can prevent them from causing problems with the encoder.
+//
+// C: static opus_val16 tone_detect(const celt_sig *in, int CC, int N, opus_val32 *toneishness, opus_int32 Fs)
+func tone_detect(in []int32, CC, N int, toneishness *int32, Fs int32) int16 {
+	var i int
+	var delay int = 1
+	var fail int
+	var lpc [2]int32
+	var freq int16
+	x := make([]int16, N)
+	// Shift by SIG_SHIFT+2 (+3 for stereo) to account for HF gain of the preemphasis filter.
+	if CC == 2 {
+		for i = 0; i < N; i++ {
+			x[i] = int16(PSHR32(ADD32(SHR32(in[i], 1), SHR32(in[i+N], 1)), SIG_SHIFT+2))
+		}
+	} else {
+		for i = 0; i < N; i++ {
+			x[i] = int16(PSHR32(in[i], SIG_SHIFT+2))
+		}
+	}
+	NormalizeToneInput(x, N)
+	fail = tone_lpc(x, N, delay, lpc[:])
+	// If our LPC filter resonates too close to DC, retry the analysis with down-sampling.
+	for delay <= int(Fs/3000) && (fail != 0 || (lpc[0] > QCONST32(1.0, 29) && lpc[1] < 0)) {
+		delay *= 2
+		fail = tone_lpc(x, N, delay, lpc[:])
+	}
+	// Check that our filter has complex roots.
+	if fail == 0 && MULT32_32_Q31(lpc[0], lpc[0])+MULT32_32_Q31(qconst32_3_999999_q29, lpc[1]) < 0 {
+		// Squared radius of the poles.
+		*toneishness = -lpc[1]
+		freq = int16((AcosApprox(lpc[0]>>1) + delay/2) / delay)
+	} else {
+		freq = -1
+		*toneishness = 0
+	}
+	// printf("%f %f %f %f\n", freq, lpc[0], lpc[1], *toneishness);
+	return freq
+}
+
 // C: static int run_prefilter(CELTEncoder *st, celt_sig *in, celt_sig *prefilter_mem, int CC, int N,
 //
-//	int prefilter_tapset, int *pitch, opus_val16 *gain, int *qgain, int enabled, int nbAvailableBytes, AnalysisInfo *analysis)
+//	int prefilter_tapset, int *pitch, opus_val16 *gain, int *qgain, int enabled, int complexity, opus_val16 tf_estimate,
+//	int nbAvailableBytes, AnalysisInfo *analysis, opus_val16 tone_freq, opus_val32 toneishness ARG_QEXT(int qext_scale))
 func run_prefilter(st *CELTEncoder, in []int32, prefilter_mem []int32, CC, N int,
-	prefilter_tapset int, pitch *int, gain *int16, qgain *int, enabled int, nbAvailableBytes int, analysis *AnalysisInfo) int {
+	prefilter_tapset int, pitch *int, gain *int16, qgain *int, enabled int, complexity int, tf_estimate int16,
+	nbAvailableBytes int, analysis *AnalysisInfo, tone_freq int16, toneishness int32) int {
 	var c int
 	var pre [2][]int32
 	var mode *CELTMode
@@ -1033,39 +1222,67 @@ func run_prefilter(st *CELTEncoder, in []int32, prefilter_mem []int32, CC, N int
 	var pf_on int
 	var qg int
 	var overlap int
+	var min_period, max_period int
+	var before, after [2]int32
+	var cancel_pitch int = 0
 
+	max_period = QEXT_SCALE(COMBFILTER_MAXPERIOD)
+	min_period = QEXT_SCALE(COMBFILTER_MINPERIOD)
 	mode = st.mode
 	overlap = mode.overlap
-	_pre := make([]int32, CC*(N+COMBFILTER_MAXPERIOD))
+	_pre := make([]int32, CC*(N+max_period))
 
 	pre[0] = _pre
-	pre[1] = _pre[(N + COMBFILTER_MAXPERIOD):]
+	pre[1] = _pre[(N + max_period):]
 
 	c = 0
 	for {
-		copy(pre[c][:COMBFILTER_MAXPERIOD], prefilter_mem[c*COMBFILTER_MAXPERIOD:])
-		copy(pre[c][COMBFILTER_MAXPERIOD:COMBFILTER_MAXPERIOD+N], in[c*(N+overlap)+overlap:])
+		copy(pre[c][:max_period], prefilter_mem[c*max_period:])
+		copy(pre[c][max_period:max_period+N], in[c*(N+overlap)+overlap:])
 		c++
 		if c >= CC {
 			break
 		}
 	}
 
-	if enabled != 0 {
-		pitch_buf := make([]int16, (COMBFILTER_MAXPERIOD+N)>>1)
+	// If we detect that the signal is dominated by a single tone, don't rely on the standard pitch
+	// estimator, as it can become unreliable.
+	if enabled != 0 && toneishness > QCONST32(.99, 29) {
+		var multiple int = 1
+		// Using aliased version of the postfilter above 24 kHz.
+		// First value is purposely slightly above pi to avoid triggering for Fs=48kHz.
+		if QEXT_SCALE(tone_freq) >= QCONST16(3.1416, 13) {
+			tone_freq = QCONST16(3.141593, 13) - tone_freq
+		}
+		// If the pitch is too high for our post-filter, apply pitch doubling until
+		// we can get something that fits (not ideal, but better than nothing).
+		for int(QEXT_SCALE(tone_freq)) >= multiple*int(QCONST16(0.39, 13)) {
+			multiple++
+		}
+		if QEXT_SCALE(tone_freq) > QCONST16(0.006148, 13) {
+			pitch_index = IMIN((51472*multiple+int(QEXT_SCALE(tone_freq))/2)/int(QEXT_SCALE(tone_freq)), COMBFILTER_MAXPERIOD-2)
+		} else {
+			// If the pitch is too low, using a very high pitch will actually give us an improvement
+			// due to the DC component of the filter that will be close to our tone. Again, not ideal,
+			// but if we only have a single tone, it's better than nothing.
+			pitch_index = COMBFILTER_MINPERIOD
+		}
+		gain1 = QCONST16(.75, 15)
+	} else if enabled != 0 && complexity >= 5 {
+		pitch_buf := make([]int16, (max_period+N)>>1)
 
-		PitchDownsample(pre[:], pitch_buf, COMBFILTER_MAXPERIOD+N, CC, st.arch)
+		PitchDownsample(pre[:], pitch_buf, (max_period+N)>>1, CC, 2, st.arch)
 		// Don't search for the fir last 1.5 octave of the range because
 		// there's too many false-positives due to short-term correlation
-		PitchSearch(pitch_buf[(COMBFILTER_MAXPERIOD>>1):], pitch_buf, N,
-			COMBFILTER_MAXPERIOD-3*COMBFILTER_MINPERIOD, &pitch_index,
+		PitchSearch(pitch_buf[(max_period>>1):], pitch_buf, N,
+			max_period-3*min_period, &pitch_index,
 			st.arch)
-		pitch_index = COMBFILTER_MAXPERIOD - pitch_index
+		pitch_index = max_period - pitch_index
 
-		gain1 = RemoveDoubling(pitch_buf, COMBFILTER_MAXPERIOD, COMBFILTER_MINPERIOD,
+		gain1 = RemoveDoubling(pitch_buf, max_period, min_period,
 			N, &pitch_index, st.prefilter_period, st.prefilter_gain, st.arch)
-		if pitch_index > COMBFILTER_MAXPERIOD-2 {
-			pitch_index = COMBFILTER_MAXPERIOD - 2
+		if pitch_index > max_period-QEXT_SCALE(2) {
+			pitch_index = max_period - QEXT_SCALE(2)
 		}
 		gain1 = int16(MULT16_16_Q15(QCONST16(.7, 15), gain1))
 		// printf("%d %d %f %f\n", pitch_change, pitch_index, gain1, st->analysis.tonality);
@@ -1092,6 +1309,10 @@ func run_prefilter(st *CELTEncoder, in []int32, prefilter_mem []int32, CC, N int
 	// Adjusting the threshold based on rate and continuity
 	if ABS(pitch_index-st.prefilter_period)*10 > pitch_index {
 		pf_threshold += QCONST16(.2, 15)
+		// Completely disable the prefilter on strong transients without continuity.
+		if tf_estimate > QCONST16(.98, 14) {
+			gain1 = 0
+		}
 	}
 	if nbAvailableBytes < 25 {
 		pf_threshold += QCONST16(.1, 15)
@@ -1128,25 +1349,77 @@ func run_prefilter(st *CELTEncoder, in []int32, prefilter_mem []int32, CC, N int
 
 	c = 0
 	for {
+		var i int
 		var offset int = mode.shortMdctSize - overlap
 		st.prefilter_period = IMAX(st.prefilter_period, COMBFILTER_MINPERIOD)
 		copy(in[c*(N+overlap):c*(N+overlap)+overlap], st.in_mem[c*(overlap):])
+		for i = 0; i < N; i++ {
+			before[c] += ABS32(SHR32(in[c*(N+overlap)+overlap+i], 12))
+		}
 		if offset != 0 {
-			comb_filter(in, c*(N+overlap)+overlap, pre[c], COMBFILTER_MAXPERIOD,
+			comb_filter(in, c*(N+overlap)+overlap, pre[c], max_period,
 				st.prefilter_period, st.prefilter_period, offset, -st.prefilter_gain, -st.prefilter_gain,
 				st.prefilter_tapset, st.prefilter_tapset, nil, 0, st.arch)
 		}
 
-		comb_filter(in, c*(N+overlap)+overlap+offset, pre[c], COMBFILTER_MAXPERIOD+offset,
+		comb_filter(in, c*(N+overlap)+overlap+offset, pre[c], max_period+offset,
 			st.prefilter_period, pitch_index, N-offset, -st.prefilter_gain, -gain1,
 			st.prefilter_tapset, prefilter_tapset, mode.window, overlap, st.arch)
+		for i = 0; i < N; i++ {
+			after[c] += ABS32(SHR32(in[c*(N+overlap)+overlap+i], 12))
+		}
+		c++
+		if c >= CC {
+			break
+		}
+	}
+
+	if CC == 2 {
+		var thresh [2]int16
+		thresh[0] = int16(MULT16_32_Q15(MULT16_16_Q15(QCONST16(.25, 15), gain1), before[0]) + MULT16_32_Q15(QCONST16(.01, 15), before[1]))
+		thresh[1] = int16(MULT16_32_Q15(MULT16_16_Q15(QCONST16(.25, 15), gain1), before[1]) + MULT16_32_Q15(QCONST16(.01, 15), before[0]))
+		// Don't use the filter if one channel gets significantly worse.
+		if after[0]-before[0] > int32(thresh[0]) || after[1]-before[1] > int32(thresh[1]) {
+			cancel_pitch = 1
+		}
+		// Use the filter only if at least one channel gets significantly better.
+		if before[0]-after[0] < int32(thresh[0]) && before[1]-after[1] < int32(thresh[1]) {
+			cancel_pitch = 1
+		}
+	} else {
+		// Check that the mono channel actually got better.
+		if after[0] > before[0] {
+			cancel_pitch = 1
+		}
+	}
+	// If needed, revert to a gain of zero.
+	if cancel_pitch != 0 {
+		c = 0
+		for {
+			var offset int = mode.shortMdctSize - overlap
+			copy(in[c*(N+overlap)+overlap:c*(N+overlap)+overlap+N], pre[c][max_period:])
+			comb_filter(in, c*(N+overlap)+overlap+offset, pre[c], max_period+offset,
+				st.prefilter_period, pitch_index, overlap, -st.prefilter_gain, -0,
+				st.prefilter_tapset, prefilter_tapset, mode.window, overlap, st.arch)
+			c++
+			if c >= CC {
+				break
+			}
+		}
+		gain1 = 0
+		pf_on = 0
+		qg = 0
+	}
+
+	c = 0
+	for {
 		copy(st.in_mem[c*(overlap):c*(overlap)+overlap], in[c*(N+overlap)+N:])
 
-		if N > COMBFILTER_MAXPERIOD {
-			copy(prefilter_mem[c*COMBFILTER_MAXPERIOD:c*COMBFILTER_MAXPERIOD+COMBFILTER_MAXPERIOD], pre[c][N:])
+		if N > max_period {
+			copy(prefilter_mem[c*max_period:c*max_period+max_period], pre[c][N:])
 		} else {
-			copy(prefilter_mem[c*COMBFILTER_MAXPERIOD:c*COMBFILTER_MAXPERIOD+COMBFILTER_MAXPERIOD-N], prefilter_mem[c*COMBFILTER_MAXPERIOD+N:])
-			copy(prefilter_mem[c*COMBFILTER_MAXPERIOD+COMBFILTER_MAXPERIOD-N:c*COMBFILTER_MAXPERIOD+COMBFILTER_MAXPERIOD], pre[c][COMBFILTER_MAXPERIOD:])
+			copy(prefilter_mem[c*max_period:c*max_period+max_period-N], prefilter_mem[c*max_period+N:])
+			copy(prefilter_mem[c*max_period+max_period-N:c*max_period+max_period], pre[c][max_period:])
 		}
 		c++
 		if c >= CC {
@@ -1164,15 +1437,15 @@ func run_prefilter(st *CELTEncoder, in []int32, prefilter_mem []int32, CC, N int
 //
 //	int LM, opus_int32 bitrate, int lastCodedBands, int C, int intensity,
 //	int constrained_vbr, opus_val16 stereo_saving, int tot_boost,
-//	opus_val16 tf_estimate, int pitch_change, opus_val16 maxDepth,
-//	int lfe, int has_surround_mask, opus_val16 surround_masking,
-//	opus_val16 temporal_vbr)
+//	opus_val16 tf_estimate, int pitch_change, celt_glog maxDepth,
+//	int lfe, int has_surround_mask, celt_glog surround_masking,
+//	celt_glog temporal_vbr ARG_QEXT(int enable_qext))
 func compute_vbr(mode *CELTMode, analysis *AnalysisInfo, base_target int32,
 	LM int, bitrate int32, lastCodedBands, C, intensity int,
 	constrained_vbr int, stereo_saving int16, tot_boost int,
-	tf_estimate int16, pitch_change int, maxDepth int16,
-	lfe, has_surround_mask int, surround_masking int16,
-	temporal_vbr int16) int32 {
+	tf_estimate int16, pitch_change int, maxDepth int32,
+	lfe, has_surround_mask int, surround_masking int32,
+	temporal_vbr int32) int32 {
 	// The target rate in 8th bits per frame
 	var target int32
 	var coded_bins int
@@ -1236,7 +1509,7 @@ func compute_vbr(mode *CELTMode, analysis *AnalysisInfo, base_target int32,
 	}
 
 	if has_surround_mask != 0 && lfe == 0 {
-		var surround_target int32 = target + int32(SHR32(MULT16_16(surround_masking, coded_bins<<BITRES), DB_SHIFT))
+		var surround_target int32 = target + int32(SHR32(MULT16_16(SHR32(surround_masking, DB_SHIFT-10), coded_bins<<BITRES), 10))
 		// printf("%f %d %d %d %d %d %d ", surround_masking, coded_bins, st->end, st->intensity, surround_target, target, st->bitrate);
 		target = IMAX(target/4, surround_target)
 	}
@@ -1246,7 +1519,7 @@ func compute_vbr(mode *CELTMode, analysis *AnalysisInfo, base_target int32,
 		var bins int
 		bins = int(eBands[nbEBands-2]) << uint(LM)
 		// floor_depth = SHR32(MULT16_16((C*bins<<BITRES),celt_log2(SHL32(MAX16(1,sample_max),13))), DB_SHIFT);
-		floor_depth = int32(SHR32(MULT16_16((C*bins<<BITRES), maxDepth), DB_SHIFT))
+		floor_depth = int32(SHR32(MULT16_32_Q15((C*bins<<BITRES), maxDepth), DB_SHIFT-15))
 		floor_depth = IMAX(floor_depth, target>>2)
 		target = IMIN(target, floor_depth)
 		// printf("%f %d\n", maxDepth, floor_depth);
@@ -1262,7 +1535,7 @@ func compute_vbr(mode *CELTMode, analysis *AnalysisInfo, base_target int32,
 		var amount int16
 		var tvbr_factor int16
 		amount = int16(MULT16_16_Q15(QCONST16(.0000031, 30), IMAX(0, IMIN(32000, 96000-bitrate))))
-		tvbr_factor = int16(SHR32(MULT16_16(temporal_vbr, amount), DB_SHIFT))
+		tvbr_factor = int16(SHR32(MULT16_16(SHR32(temporal_vbr, DB_SHIFT-10), amount), 10))
 		target += int32(MULT16_32_Q15(tvbr_factor, target))
 	}
 
@@ -1281,13 +1554,13 @@ var intensity_histeresis = [21]int16{
 // EncodeWithEc encodes one frame. Returns the number of bytes written to
 // compressed or a negative error code.
 //
-// C: int celt_encode_with_ec(CELTEncoder * OPUS_RESTRICT st, const opus_val16 * pcm, int frame_size, unsigned char *compressed, int nbCompressedBytes, ec_enc *enc)
-func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []byte, nbCompressedBytes int, enc *EcEnc) int {
+// C: int celt_encode_with_ec(CELTEncoder * OPUS_RESTRICT st, const opus_res * pcm, int frame_size, unsigned char *compressed, int nbCompressedBytes, ec_enc *enc)
+func (st *CELTEncoder) EncodeWithEc(pcm []int32, frame_size int, compressed []byte, nbCompressedBytes int, enc *EcEnc) int {
 	var i, c, N int
 	var bits int32
 	var _enc EcEnc
 	var prefilter_mem []int32
-	var oldBandE, oldLogE, oldLogE2, energyError []int16
+	var oldBandE, oldLogE, oldLogE2, energyError []int32
 	var shortBlocks int = 0
 	var isTransient int = 0
 	CC := st.channels
@@ -1295,6 +1568,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	var LM, M int
 	var tf_select int
 	var nbFilledBytes, nbAvailableBytes int
+	var min_allowed int32
 	var start int
 	var end int
 	var effEnd int
@@ -1321,7 +1595,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	var pitch_change int = 0
 	var tot_boost int32
 	var sample_max int32
-	var maxDepth int16
+	var maxDepth int32
 	var mode *CELTMode
 	var nbEBands int
 	var overlap int
@@ -1329,13 +1603,18 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	var secondMdct int
 	var signalBandwidth int
 	var transient_got_disabled int = 0
-	var surround_masking int16 = 0
-	var temporal_vbr int16 = 0
-	var surround_trim int16 = 0
+	var surround_masking int32 = 0
+	var temporal_vbr int32 = 0
+	var surround_trim int32 = 0
 	var equiv_rate int32
 	var hybrid int
 	var weak_transient int = 0
 	var enable_tf_analysis int
+	var tone_freq int16 = -1
+	var toneishness int32 = 0
+	// ENABLE_QEXT is not defined: qext_bytes is 0.
+	const qext_bytes = 0
+	var packet_size_cap int = 1275
 
 	mode = st.mode
 	nbEBands = mode.nbEBands
@@ -1379,13 +1658,11 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 
 	celt_assert(st.signalling == 0)
 
-	// Can't produce more than 1275 output bytes
-	nbCompressedBytes = IMIN(nbCompressedBytes, 1275)
-	nbAvailableBytes = nbCompressedBytes - nbFilledBytes
+	// Can't produce more than 1275 output bytes for the main payload, plus any QEXT extra data.
+	nbCompressedBytes = IMIN(nbCompressedBytes, packet_size_cap)
 
 	if st.vbr != 0 && st.bitrate != OPUS_BITRATE_MAX {
-		var den int32 = mode.Fs >> BITRES
-		vbr_rate = (st.bitrate*int32(frame_size) + (den >> 1)) / den
+		vbr_rate = BitrateToBits(st.bitrate, mode.Fs, int32(frame_size)) << BITRES
 		effectiveBytes = int(vbr_rate >> (3 + BITRES))
 	} else {
 		var tmp int32
@@ -1397,10 +1674,13 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		if st.bitrate != OPUS_BITRATE_MAX {
 			nbCompressedBytes = IMAX(2, IMIN(nbCompressedBytes,
 				int((tmp+4*mode.Fs)/(8*mode.Fs))-b2i(st.signalling != 0)))
-			enc.EncShrink(uint32(nbCompressedBytes))
+			if enc != nil {
+				enc.EncShrink(uint32(nbCompressedBytes))
+			}
 		}
 		effectiveBytes = nbCompressedBytes - nbFilledBytes
 	}
+	nbAvailableBytes = nbCompressedBytes - nbFilledBytes
 	equiv_rate = (int32(nbCompressedBytes) * 8 * 50 << uint(3-LM)) - int32((40*C+20)*((400>>uint(LM))-50))
 	if st.bitrate != OPUS_BITRATE_MAX {
 		equiv_rate = IMIN(equiv_rate, st.bitrate-int32((40*C+20)*((400>>uint(LM))-50)))
@@ -1447,8 +1727,8 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 
 	in := make([]int32, CC*(N+overlap))
 
-	sample_max = MAX32(st.overlap_max, Maxabs16(pcm, C*(N-overlap)/st.upsample))
-	st.overlap_max = Maxabs16(pcm[C*(N-overlap)/st.upsample:], C*overlap/st.upsample)
+	sample_max = MAX32(st.overlap_max, MaxabsRes(pcm, C*(N-overlap)/st.upsample))
+	st.overlap_max = MaxabsRes(pcm[C*(N-overlap)/st.upsample:], C*overlap/st.upsample)
 	sample_max = MAX32(sample_max, st.overlap_max)
 	silence = b2i(sample_max == 0)
 	if tell == 1 {
@@ -1473,23 +1753,36 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	c = 0
 	for {
 		var need_clip int = 0
+		need_clip = b2i(st.clip != 0 && sample_max > 65536<<RES_SHIFT)
 		Preemphasis(pcm[c:], in[c*(N+overlap)+overlap:], N, CC, st.upsample,
 			mode.preemph[:], &st.preemph_memE[c], need_clip)
+		copy(in[c*(N+overlap):c*(N+overlap)+overlap], prefilter_mem[(1+c)*QEXT_SCALE(COMBFILTER_MAXPERIOD)-overlap:])
 		c++
 		if c >= CC {
 			break
 		}
 	}
 
+	tone_freq = tone_detect(in, CC, N+overlap, &toneishness, mode.Fs)
+	isTransient = 0
+	shortBlocks = 0
+	if st.complexity >= 1 && st.lfe == 0 {
+		// Reduces the likelihood of energy instability on fricatives at low bitrate
+		// in hybrid mode. It seems like we still want to have real transients on vowels
+		// though (small SILK quantization offset value).
+		var allow_weak_transients int = b2i(hybrid != 0 && effectiveBytes < 15 && st.silk_info.SignalType != 2)
+		isTransient = transient_analysis(in, N+overlap, CC,
+			&tf_estimate, &tf_chan, allow_weak_transients, &weak_transient, tone_freq, toneishness)
+	}
+	toneishness = MIN32(toneishness, QCONST32(1.0, 29)-SHL32(tf_estimate, 15))
 	// Find pitch period and gain
 	{
 		var enabled int
 		var qg int
-		enabled = b2i(((st.lfe != 0 && nbAvailableBytes > 3) || nbAvailableBytes > 12*C) && hybrid == 0 && silence == 0 && st.disable_pf == 0 &&
-			st.complexity >= 5)
+		enabled = b2i(((st.lfe != 0 && nbAvailableBytes > 3) || nbAvailableBytes > 12*C) && hybrid == 0 && silence == 0 && tell+16 <= total_bits && st.disable_pf == 0)
 
 		prefilter_tapset = st.tapset_decision
-		pf_on = run_prefilter(st, in, prefilter_mem, CC, N, prefilter_tapset, &pitch_index, &gain1, &qg, enabled, nbAvailableBytes, &st.analysis)
+		pf_on = run_prefilter(st, in, prefilter_mem, CC, N, prefilter_tapset, &pitch_index, &gain1, &qg, enabled, st.complexity, tf_estimate, nbAvailableBytes, &st.analysis, tone_freq, toneishness)
 		if (gain1 > QCONST16(.4, 15) || st.prefilter_gain > QCONST16(.4, 15)) && (st.analysis.Valid == 0 || float64(st.analysis.Tonality) > .3) &&
 			(float64(pitch_index) > 1.26*float64(st.prefilter_period) || float64(pitch_index) < .79*float64(st.prefilter_period)) {
 			pitch_change = 1
@@ -1512,17 +1805,6 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 			enc.EncIcdf(prefilter_tapset, tapset_icdf[:], 2)
 		}
 	}
-
-	isTransient = 0
-	shortBlocks = 0
-	if st.complexity >= 1 && st.lfe == 0 {
-		// Reduces the likelihood of energy instability on fricatives at low bitrate
-		// in hybrid mode. It seems like we still want to have real transients on vowels
-		// though (small SILK quantization offset value).
-		var allow_weak_transients int = b2i(hybrid != 0 && effectiveBytes < 15 && st.silk_info.SignalType != 2)
-		isTransient = transient_analysis(in, N+overlap, CC,
-			&tf_estimate, &tf_chan, allow_weak_transients, &weak_transient)
-	}
 	if LM > 0 && enc.Tell()+3 <= int(total_bits) {
 		if isTransient != 0 {
 			shortBlocks = M
@@ -1534,17 +1816,17 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 
 	freq := make([]int32, CC*N) // Interleaved signal MDCTs
 	bandE := make([]int32, nbEBands*CC)
-	bandLogE := make([]int16, nbEBands*CC)
+	bandLogE := make([]int32, nbEBands*CC)
 
 	secondMdct = b2i(shortBlocks != 0 && st.complexity >= 8)
-	bandLogE2 := make([]int16, C*nbEBands)
+	bandLogE2 := make([]int32, C*nbEBands)
 	if secondMdct != 0 {
 		compute_mdcts(mode, 0, in, freq, C, CC, LM, st.upsample, st.arch)
 		ComputeBandEnergies(mode, freq, bandE, effEnd, C, LM, st.arch)
 		Amp2Log2(mode, effEnd, end, bandE, bandLogE2, C)
 		for c = 0; c < C; c++ {
 			for i = 0; i < end; i++ {
-				bandLogE2[nbEBands*c+i] += int16(HALF16(SHL16(LM, DB_SHIFT)))
+				bandLogE2[nbEBands*c+i] += HALF32(SHL32(LM, DB_SHIFT))
 			}
 		}
 	}
@@ -1566,7 +1848,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	}
 	Amp2Log2(mode, effEnd, end, bandE, bandLogE, C)
 
-	surround_dynalloc := make([]int16, C*nbEBands)
+	surround_dynalloc := make([]int32, C*nbEBands)
 	clear(surround_dynalloc[:end])
 	// This computes how much masking takes place between surround channels
 	if hybrid == 0 && st.energy_mask != nil && st.lfe == 0 {
@@ -1579,48 +1861,50 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		mask_end = IMAX(2, st.lastCodedBands)
 		for c = 0; c < C; c++ {
 			for i = 0; i < mask_end; i++ {
-				var mask int16
-				mask = MAX16(MIN16(st.energy_mask[nbEBands*c+i],
-					QCONST16(.25, DB_SHIFT)), -QCONST16(2.0, DB_SHIFT))
+				var mask int32
+				var mask16 int16
+				mask = MAXG(MING(st.energy_mask[nbEBands*c+i],
+					GCONST(.25)), -GCONST(2.0))
 				if mask > 0 {
-					mask = int16(HALF16(mask))
+					mask = HALF32(mask)
 				}
-				mask_avg += MULT16_16(mask, eBands[i+1]-eBands[i])
+				mask16 = int16(SHR32(mask, DB_SHIFT-10))
+				mask_avg += MULT16_16(mask16, eBands[i+1]-eBands[i])
 				count += int(eBands[i+1] - eBands[i])
-				diff += MULT16_16(mask, 1+2*i-mask_end)
+				diff += MULT16_16(mask16, 1+2*i-mask_end)
 			}
 		}
 		celt_assert(count > 0)
-		mask_avg = int32(DIV32_16(mask_avg, count))
-		mask_avg += int32(QCONST16(.2, DB_SHIFT))
-		diff = diff * 6 / int32(C*(mask_end-1)*(mask_end+1)*mask_end)
+		mask_avg = SHL32(DIV32_16(mask_avg, count), DB_SHIFT-10)
+		mask_avg += GCONST(.2)
+		diff = SHL32(diff*6/int32(C*(mask_end-1)*(mask_end+1)*mask_end), DB_SHIFT-10)
 		// Again, being conservative
 		diff = HALF32(diff)
-		diff = MAX32(MIN32(diff, QCONST32(.031, DB_SHIFT)), -QCONST32(.031, DB_SHIFT))
+		diff = MAX32(MIN32(diff, GCONST(.031)), -GCONST(.031))
 		// Find the band that's in the middle of the coded spectrum
 		for midband = 0; eBands[midband+1] < eBands[mask_end]/2; midband++ {
 		}
 		count_dynalloc = 0
 		for i = 0; i < mask_end; i++ {
 			var lin int32
-			var unmask int16
+			var unmask int32
 			lin = mask_avg + diff*int32(i-midband)
 			if C == 2 {
-				unmask = MAX16(st.energy_mask[i], st.energy_mask[nbEBands+i])
+				unmask = MAXG(st.energy_mask[i], st.energy_mask[nbEBands+i])
 			} else {
 				unmask = st.energy_mask[i]
 			}
-			unmask = MIN16(unmask, QCONST16(.0, DB_SHIFT))
-			unmask = int16(int32(unmask) - lin)
-			if unmask > QCONST16(.25, DB_SHIFT) {
-				surround_dynalloc[i] = unmask - QCONST16(.25, DB_SHIFT)
+			unmask = MING(unmask, GCONST(.0))
+			unmask -= lin
+			if unmask > GCONST(.25) {
+				surround_dynalloc[i] = unmask - GCONST(.25)
 				count_dynalloc++
 			}
 		}
 		if count_dynalloc >= 3 {
 			// If we need dynalloc in many bands, it's probably because our
 			// initial masking rate was too low.
-			mask_avg += int32(QCONST16(.25, DB_SHIFT))
+			mask_avg += GCONST(.25)
 			if mask_avg > 0 {
 				// Something went really wrong in the original calculations,
 				// disabling masking.
@@ -1629,37 +1913,37 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 				clear(surround_dynalloc[:mask_end])
 			} else {
 				for i = 0; i < mask_end; i++ {
-					surround_dynalloc[i] = MAX16(0, surround_dynalloc[i]-QCONST16(.25, DB_SHIFT))
+					surround_dynalloc[i] = MAXG(0, surround_dynalloc[i]-GCONST(.25))
 				}
 			}
 		}
-		mask_avg += int32(QCONST16(.2, DB_SHIFT))
+		mask_avg += GCONST(.2)
 		// Convert to 1/64th units used for the trim
-		surround_trim = int16(64 * diff)
+		surround_trim = 64 * diff
 		// printf("%d %d ", mask_avg, surround_trim);
-		surround_masking = int16(mask_avg)
+		surround_masking = mask_avg
 	}
 	// Temporal VBR (but not for LFE)
 	if st.lfe == 0 {
-		var follow int16 = -QCONST16(10.0, DB_SHIFT)
+		var follow int32 = -QCONST32(10.0, DB_SHIFT-5)
 		var frame_avg int32 = 0
-		var offset int16
+		var offset int32
 		if shortBlocks != 0 {
-			offset = int16(HALF16(SHL16(LM, DB_SHIFT)))
+			offset = HALF32(SHL32(LM, DB_SHIFT-5))
 		} else {
 			offset = 0
 		}
 		for i = start; i < end; i++ {
-			follow = MAX16(follow-QCONST16(1.0, DB_SHIFT), bandLogE[i]-offset)
+			follow = MAXG(follow-QCONST32(1.0, DB_SHIFT-5), SHR32(bandLogE[i], 5)-offset)
 			if C == 2 {
-				follow = MAX16(follow, bandLogE[i+nbEBands]-offset)
+				follow = MAXG(follow, SHR32(bandLogE[i+nbEBands], 5)-offset)
 			}
-			frame_avg += int32(follow)
+			frame_avg += follow
 		}
 		frame_avg /= int32(end - start)
-		temporal_vbr = int16(SUB16(frame_avg, st.spec_avg))
-		temporal_vbr = MIN16(QCONST16(3.0, DB_SHIFT), MAX16(-QCONST16(1.5, DB_SHIFT), temporal_vbr))
-		st.spec_avg += int16(MULT16_16_Q15(QCONST16(.02, 15), temporal_vbr))
+		temporal_vbr = SUB32(SHL32(frame_avg, 5), st.spec_avg)
+		temporal_vbr = MING(GCONST(3.0), MAXG(-GCONST(1.5), temporal_vbr))
+		st.spec_avg += MULT16_32_Q15(QCONST16(.02, 15), temporal_vbr)
 	}
 	// for (i=0;i<21;i++)
 	//    printf("%f ", bandLogE[i]);
@@ -1681,7 +1965,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 			// Compensate for the scaling of short vs long mdcts
 			for c = 0; c < C; c++ {
 				for i = 0; i < end; i++ {
-					bandLogE2[nbEBands*c+i] += int16(HALF16(SHL16(LM, DB_SHIFT)))
+					bandLogE2[nbEBands*c+i] += HALF32(SHL32(LM, DB_SHIFT))
 				}
 			}
 			tf_estimate = QCONST16(.2, 14)
@@ -1692,12 +1976,12 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		enc.EncBitLogp(isTransient, 3)
 	}
 
-	X := make([]int16, C*N) // Interleaved normalised MDCTs
+	X := make([]int32, C*N) // Interleaved normalised MDCTs
 
 	// Band normalisation
 	NormaliseBands(mode, freq, X, bandE, effEnd, C, M)
 
-	enable_tf_analysis = b2i(effectiveBytes >= 15*C && hybrid == 0 && st.complexity >= 2 && st.lfe == 0)
+	enable_tf_analysis = b2i(effectiveBytes >= 15*C && hybrid == 0 && st.complexity >= 2 && st.lfe == 0 && toneishness < QCONST32(.98, 29))
 
 	offsets := make([]int, nbEBands)
 	importance := make([]int, nbEBands)
@@ -1705,7 +1989,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 
 	maxDepth = dynalloc_analysis(bandLogE, bandLogE2, oldBandE, nbEBands, start, end, C, offsets,
 		st.lsb_depth, mode.logN, isTransient, st.vbr, st.constrained_vbr,
-		eBands, LM, effectiveBytes, &tot_boost, st.lfe, surround_dynalloc, &st.analysis, importance, spread_weight)
+		eBands, LM, effectiveBytes, &tot_boost, st.lfe, surround_dynalloc, &st.analysis, importance, spread_weight, tone_freq, toneishness)
 
 	tf_res := make([]int, nbEBands)
 	// Disable variable tf resolution for hybrid and at very low bitrate
@@ -1737,15 +2021,15 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		tf_select = 0
 	}
 
-	error := make([]int16, C*nbEBands)
+	error := make([]int32, C*nbEBands)
 	c = 0
 	for {
 		for i = start; i < end; i++ {
 			// When the energy is stable, slightly bias energy quantization towards
 			// the previous error to make the gain more stable (a constant offset is
 			// better than fluctuations).
-			if ABS32(SUB32(bandLogE[i+c*nbEBands], oldBandE[i+c*nbEBands])) < int32(QCONST16(2.0, DB_SHIFT)) {
-				bandLogE[i+c*nbEBands] = int16(int32(bandLogE[i+c*nbEBands]) - MULT16_16_Q15(energyError[i+c*nbEBands], QCONST16(0.25, 15)))
+			if ABS32(SUB32(bandLogE[i+c*nbEBands], oldBandE[i+c*nbEBands])) < GCONST(2.0) {
+				bandLogE[i+c*nbEBands] -= MULT16_32_Q15(QCONST16(0.25, 15), energyError[i+c*nbEBands])
 			}
 		}
 		c++
@@ -1791,6 +2075,8 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 			// printf("%f %d %f %d\n\n", st->analysis.tonality, st->spread_decision, st->analysis.tonality_slope, st->tapset_decision);
 		}
 		enc.EncIcdf(st.spread_decision, spread_icdf[:], 5)
+	} else {
+		st.spread_decision = SPREAD_NORMAL
 	}
 
 	// For LFE, everything interesting is in the first band
@@ -1860,18 +2146,28 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		tell = int32(enc.TellFrac())
 	}
 
+	// In VBR mode the frame size must not be reduced so much that it would
+	// result in the encoder running out of bits.
+	// The margin of 2 bytes ensures that none of the bust-prevention logic
+	// in the decoder will have triggered so far.
+	min_allowed = ((tell + total_boost + (1 << (BITRES + 3)) - 1) >> (BITRES + 3)) + 2
+	// Take into account the 37 bits we need to have left in the packet to
+	// signal a redundant frame in hybrid mode. Creating a shorter packet would
+	// create an entropy coder desync.
+	if hybrid != 0 {
+		min_allowed = IMAX(min_allowed, (tell0_frac+(37<<BITRES)+total_boost+(1<<(BITRES+3))-1)>>(BITRES+3))
+	}
 	// Variable bitrate
 	if vbr_rate > 0 {
 		var alpha int16
 		var delta int32
 		// The target rate in 8th bits per frame
 		var target, base_target int32
-		var min_allowed int32
 		var lm_diff int = mode.maxLM - LM
 
 		// Don't attempt to use more than 510 kb/s, even for frames smaller than 20 ms.
 		// The CELT allocator will just not be able to use more than that anyway.
-		nbCompressedBytes = IMIN(nbCompressedBytes, 1275>>uint(3-LM))
+		nbCompressedBytes = IMIN(nbCompressedBytes, packet_size_cap>>uint(3-LM))
 		if hybrid == 0 {
 			base_target = vbr_rate - int32((40*C+20)<<BITRES)
 		} else {
@@ -1909,17 +2205,6 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		// The current offset is removed from the target and the space used
 		// so far is added
 		target = target + tell
-		// In VBR mode the frame size must not be reduced so much that it would
-		// result in the encoder running out of bits.
-		// The margin of 2 bytes ensures that none of the bust-prevention logic
-		// in the decoder will have triggered so far.
-		min_allowed = ((tell + total_boost + (1 << (BITRES + 3)) - 1) >> (BITRES + 3)) + 2
-		// Take into account the 37 bits we need to have left in the packet to
-		// signal a redundant frame in hybrid mode. Creating a shorter packet would
-		// create an entropy coder desync.
-		if hybrid != 0 {
-			min_allowed = IMAX(min_allowed, (tell0_frac+(37<<BITRES)+total_boost+(1<<(BITRES+3))-1)>>(BITRES+3))
-		}
 
 		nbAvailableBytes = int((target + (1 << (BITRES + 2))) >> (BITRES + 3))
 		nbAvailableBytes = IMAX(int(min_allowed), nbAvailableBytes)
@@ -2017,11 +2302,13 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		st.lastCodedBands = codedBands
 	}
 
-	QuantFineEnergy(mode, start, end, oldBandE, error, fine_quant, enc, C)
+	QuantFineEnergy(mode, start, end, oldBandE, error, nil, fine_quant, enc, C)
+	clear(energyError[:nbEBands*CC])
+	// ENABLE_QEXT is not defined.
 
 	// Residual quantisation
 	collapse_masks := make([]uint8, C*nbEBands)
-	var Y []int16
+	var Y []int32
 	if C == 2 {
 		Y = X[N:]
 	}
@@ -2034,22 +2321,23 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		anti_collapse_on = b2i(st.consec_transient < 2)
 		enc.EncBits(uint32(anti_collapse_on), 1)
 	}
-	QuantEnergyFinalise(mode, start, end, oldBandE, error, fine_quant, fine_priority, nbCompressedBytes*8-enc.Tell(), enc, C)
-	clear(energyError[:nbEBands*CC])
+	if qext_bytes == 0 {
+		QuantEnergyFinalise(mode, start, end, oldBandE, error, fine_quant, fine_priority, nbCompressedBytes*8-enc.Tell(), enc, C)
+	}
 	c = 0
 	for {
 		for i = start; i < end; i++ {
-			energyError[i+c*nbEBands] = MAX16(-QCONST16(0.5, 15), MIN16(QCONST16(0.5, 15), error[i+c*nbEBands]))
+			energyError[i+c*nbEBands] = MAXG(-GCONST(0.5), MING(GCONST(0.5), error[i+c*nbEBands]))
 		}
 		c++
 		if c >= C {
 			break
 		}
 	}
-
+	// ENABLE_QEXT is not defined.
 	if silence != 0 {
 		for i = 0; i < C*nbEBands; i++ {
-			oldBandE[i] = -QCONST16(28.0, DB_SHIFT)
+			oldBandE[i] = -GCONST(28.0)
 		}
 	}
 
@@ -2066,7 +2354,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		copy(oldLogE[:CC*nbEBands], oldBandE[:CC*nbEBands])
 	} else {
 		for i = 0; i < CC*nbEBands; i++ {
-			oldLogE[i] = MIN16(oldLogE[i], oldBandE[i])
+			oldLogE[i] = MING(oldLogE[i], oldBandE[i])
 		}
 	}
 	// In case start or end were to change
@@ -2074,13 +2362,13 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	for {
 		for i = 0; i < start; i++ {
 			oldBandE[c*nbEBands+i] = 0
-			oldLogE[c*nbEBands+i] = -QCONST16(28.0, DB_SHIFT)
-			oldLogE2[c*nbEBands+i] = -QCONST16(28.0, DB_SHIFT)
+			oldLogE[c*nbEBands+i] = -GCONST(28.0)
+			oldLogE2[c*nbEBands+i] = -GCONST(28.0)
 		}
 		for i = end; i < nbEBands; i++ {
 			oldBandE[c*nbEBands+i] = 0
-			oldLogE[c*nbEBands+i] = -QCONST16(28.0, DB_SHIFT)
-			oldLogE2[c*nbEBands+i] = -QCONST16(28.0, DB_SHIFT)
+			oldLogE[c*nbEBands+i] = -GCONST(28.0)
+			oldLogE2[c*nbEBands+i] = -GCONST(28.0)
 		}
 		c++
 		if c >= CC {
@@ -2108,7 +2396,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 // Ctl is the C opus_custom_encoder_ctl / celt_encoder_ctl. Value arguments
 // are int32 (int is accepted), output arguments are *int32, *uint32 or
 // **CELTMode; CELT_SET_ANALYSIS takes *AnalysisInfo and OPUS_SET_ENERGY_MASK
-// takes []int16 (nil for NULL), CELT_SET_SILK_INFO takes *SILKInfo.
+// takes []int32 (celt_glog, nil for NULL), CELT_SET_SILK_INFO takes *SILKInfo.
 //
 // C: int opus_custom_encoder_ctl(CELTEncoder * OPUS_RESTRICT st, int request, ...)
 func (st *CELTEncoder) Ctl(request int, args ...any) int {
@@ -2161,7 +2449,7 @@ func (st *CELTEncoder) Ctl(request int, args ...any) int {
 		if !ok || (value <= 500 && value != OPUS_BITRATE_MAX) {
 			return OPUS_BAD_ARG
 		}
-		value = IMIN(value, int32(260000*st.channels))
+		value = IMIN(value, int32(750000*st.channels))
 		st.bitrate = value
 	case CELT_SET_CHANNELS_REQUEST:
 		value, ok := argInt32(args, 0)
@@ -2227,8 +2515,8 @@ func (st *CELTEncoder) Ctl(request int, args ...any) int {
 		clear(st.oldLogE2)
 		clear(st.energyError)
 		for i = 0; i < st.channels*st.mode.nbEBands; i++ {
-			st.oldLogE[i] = -QCONST16(28.0, DB_SHIFT)
-			st.oldLogE2[i] = -QCONST16(28.0, DB_SHIFT)
+			st.oldLogE[i] = -GCONST(28.0)
+			st.oldLogE2[i] = -GCONST(28.0)
 		}
 		st.vbr_offset = 0
 		st.delayedIntra = 1
@@ -2280,7 +2568,7 @@ func (st *CELTEncoder) Ctl(request int, args ...any) int {
 		if args[0] == nil {
 			st.energy_mask = nil
 		} else {
-			value, ok := args[0].([]int16)
+			value, ok := args[0].([]int32)
 			if !ok {
 				return OPUS_BAD_ARG
 			}

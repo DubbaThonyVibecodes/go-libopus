@@ -59,11 +59,11 @@ func (matrix *MappingMatrix) MappingMatrixInit(rows int, cols int, gain int, dat
 	}
 }
 
-// C: void mapping_matrix_multiply_channel_in_float(const MappingMatrix *matrix, const float *input, int input_rows, opus_val16 *output, int output_row, int output_rows, int frame_size)
+// C: void mapping_matrix_multiply_channel_in_float(const MappingMatrix *matrix, const float *input, int input_rows, opus_res *output, int output_row, int output_rows, int frame_size)
 func (matrix *MappingMatrix) MappingMatrixMultiplyChannelInFloat(
 	input []float32,
 	input_rows int,
-	output []int16,
+	output []int32,
 	output_row int,
 	output_rows int,
 	frame_size int) {
@@ -81,14 +81,13 @@ func (matrix *MappingMatrix) MappingMatrixMultiplyChannelInFloat(
 			tmp += float32(float32(matrix_data[MATRIX_INDEX(matrix.rows, output_row, col)]) *
 				input[MATRIX_INDEX(input_rows, col, i)])
 		}
-		// FIXED_POINT
-		output[output_rows*i] = FLOAT2INT16((1 / 32768.0) * tmp)
+		output[output_rows*i] = celt.FLOAT2RES((1 / 32768.0) * tmp)
 	}
 }
 
-// C: void mapping_matrix_multiply_channel_out_float(const MappingMatrix *matrix, const opus_val16 *input, int input_row, int input_rows, float *output, int output_rows, int frame_size)
+// C: void mapping_matrix_multiply_channel_out_float(const MappingMatrix *matrix, const opus_res *input, int input_row, int input_rows, float *output, int output_rows, int frame_size)
 func (matrix *MappingMatrix) MappingMatrixMultiplyChannelOutFloat(
-	input []int16,
+	input []int32,
 	input_row int,
 	input_rows int,
 	output []float32,
@@ -104,8 +103,7 @@ func (matrix *MappingMatrix) MappingMatrixMultiplyChannelOutFloat(
 	matrix_data = matrix.MappingMatrixGetData()
 
 	for i = 0; i < frame_size; i++ {
-		// FIXED_POINT
-		input_sample = (1 / 32768.0) * float32(input[input_rows*i])
+		input_sample = celt.RES2FLOAT(input[input_rows*i])
 		for row = 0; row < output_rows; row++ {
 			var tmp float32 = float32(float32((1/32768.0)*float32(matrix_data[MATRIX_INDEX(matrix.rows, row, input_row)])) *
 				input_sample)
@@ -114,11 +112,11 @@ func (matrix *MappingMatrix) MappingMatrixMultiplyChannelOutFloat(
 	}
 }
 
-// C: void mapping_matrix_multiply_channel_in_short(const MappingMatrix *matrix, const opus_int16 *input, int input_rows, opus_val16 *output, int output_row, int output_rows, int frame_size)
+// C: void mapping_matrix_multiply_channel_in_short(const MappingMatrix *matrix, const opus_int16 *input, int input_rows, opus_res *output, int output_row, int output_rows, int frame_size)
 func (matrix *MappingMatrix) MappingMatrixMultiplyChannelInShort(
 	input []int16,
 	input_rows int,
-	output []int16,
+	output []int32,
 	output_row int,
 	output_rows int,
 	frame_size int) {
@@ -138,14 +136,14 @@ func (matrix *MappingMatrix) MappingMatrixMultiplyChannelInShort(
 				(int32(matrix_data[MATRIX_INDEX(matrix.rows, output_row, col)]) *
 					int32(input[MATRIX_INDEX(input_rows, col, i)])) >> 8
 		}
-		// FIXED_POINT
-		output[output_rows*i] = int16((tmp + 64) >> 7)
+		// FIXED_POINT && ENABLE_RES24
+		output[output_rows*i] = celt.SHL32(tmp, celt.RES_SHIFT-7)
 	}
 }
 
-// C: void mapping_matrix_multiply_channel_out_short(const MappingMatrix *matrix, const opus_val16 *input, int input_row, int input_rows, opus_int16 *output, int output_rows, int frame_size)
+// C: void mapping_matrix_multiply_channel_out_short(const MappingMatrix *matrix, const opus_res *input, int input_row, int input_rows, opus_int16 *output, int output_rows, int frame_size)
 func (matrix *MappingMatrix) MappingMatrixMultiplyChannelOutShort(
-	input []int16,
+	input []int32,
 	input_row int,
 	input_rows int,
 	output []int16,
@@ -161,12 +159,66 @@ func (matrix *MappingMatrix) MappingMatrixMultiplyChannelOutShort(
 	matrix_data = matrix.MappingMatrixGetData()
 
 	for i = 0; i < frame_size; i++ {
-		// FIXED_POINT
-		input_sample = int32(input[input_rows*i])
+		input_sample = int32(celt.RES2INT16(input[input_rows*i]))
 		for row = 0; row < output_rows; row++ {
 			var tmp int32 = int32(matrix_data[MATRIX_INDEX(matrix.rows, row, input_row)]) *
 				input_sample
 			output[MATRIX_INDEX(output_rows, row, i)] = int16(int32(output[MATRIX_INDEX(output_rows, row, i)]) + ((tmp + 16384) >> 15))
+		}
+	}
+}
+
+// C: void mapping_matrix_multiply_channel_in_int24(const MappingMatrix *matrix, const opus_int32 *input, int input_rows, opus_res *output, int output_row, int output_rows, int frame_size)
+func (matrix *MappingMatrix) MappingMatrixMultiplyChannelInInt24(
+	input []int32,
+	input_rows int,
+	output []int32,
+	output_row int,
+	output_rows int,
+	frame_size int) {
+	// Matrix data is ordered col-wise.
+	var matrix_data []int16
+	var i, col int
+
+	celt.Assert(input_rows <= matrix.cols && output_rows <= matrix.rows)
+
+	matrix_data = matrix.MappingMatrixGetData()
+
+	for i = 0; i < frame_size; i++ {
+		var tmp int64 = 0
+		for col = 0; col < input_rows; col++ {
+			tmp +=
+				int64(matrix_data[MATRIX_INDEX(matrix.rows, output_row, col)]) *
+					int64(input[MATRIX_INDEX(input_rows, col, i)])
+		}
+		// FIXED_POINT
+		output[output_rows*i] = celt.INT24TORES(int32((tmp + 16384) >> 15))
+	}
+}
+
+// C: void mapping_matrix_multiply_channel_out_int24(const MappingMatrix *matrix, const opus_res *input, int input_row, int input_rows, opus_int32 *output, int output_rows, int frame_size)
+func (matrix *MappingMatrix) MappingMatrixMultiplyChannelOutInt24(
+	input []int32,
+	input_row int,
+	input_rows int,
+	output []int32,
+	output_rows int,
+	frame_size int) {
+	// Matrix data is ordered col-wise.
+	var matrix_data []int16
+	var i, row int
+	var input_sample int32
+
+	celt.Assert(input_rows <= matrix.cols && output_rows <= matrix.rows)
+
+	matrix_data = matrix.MappingMatrixGetData()
+
+	for i = 0; i < frame_size; i++ {
+		input_sample = celt.RES2INT24(input[input_rows*i])
+		for row = 0; row < output_rows; row++ {
+			var tmp int64 = int64(matrix_data[MATRIX_INDEX(matrix.rows, row, input_row)]) *
+				int64(input_sample)
+			output[MATRIX_INDEX(output_rows, row, i)] += int32((tmp + 16384) >> 15)
 		}
 	}
 }

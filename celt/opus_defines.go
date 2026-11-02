@@ -58,9 +58,19 @@ const (
 	OPUS_SET_DRED_DURATION_REQUEST            = 4050
 	OPUS_GET_DRED_DURATION_REQUEST            = 4051
 	OPUS_SET_DNN_BLOB_REQUEST                 = 4052
+	OPUS_SET_OSCE_BWE_REQUEST                 = 4054
+	OPUS_GET_OSCE_BWE_REQUEST                 = 4055
+	OPUS_SET_QEXT_REQUEST                     = 4056
+	OPUS_GET_QEXT_REQUEST                     = 4057
+	OPUS_SET_IGNORE_EXTENSIONS_REQUEST        = 4058
+	OPUS_GET_IGNORE_EXTENSIONS_REQUEST        = 4059
 
 	OPUS_AUTO        = -1000
 	OPUS_BITRATE_MAX = -1
+
+	// include/opus_defines.h (1.6): the restricted SILK/CELT application modes.
+	OPUS_APPLICATION_RESTRICTED_SILK = 2052
+	OPUS_APPLICATION_RESTRICTED_CELT = 2053
 
 	OPUS_FRAMESIZE_ARG    = 5000 /* Select frame size from the argument (default) */
 	OPUS_FRAMESIZE_2_5_MS = 5001 /* Use 2.5 ms frames */

@@ -32,7 +32,7 @@ func cpxView(f []int32) []KissFftCpx {
 //
 // C: void clt_mdct_forward_c(const mdct_lookup *l, kiss_fft_scalar *in, kiss_fft_scalar * OPUS_RESTRICT out,
 //
-//	const opus_val16 *window, int overlap, int shift, int stride, int arch)
+//	const celt_coef *window, int overlap, int shift, int stride, int arch)
 //
 // C: #define clt_mdct_forward(_l, _in, _out, _window, _overlap, _shift, _stride, _arch) clt_mdct_forward_c(...)
 func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift, stride int, arch int) {
@@ -44,6 +44,7 @@ func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift
 	// Allows us to scale with MULT16_32_Q16(), which is faster than
 	// MULT16_32_Q15() on ARM.
 	var scale_shift int = st.scale_shift - 1
+	var headroom int
 	_ = arch
 	scale = st.scale
 
@@ -70,9 +71,9 @@ func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift
 		wp2 := (overlap >> 1) - 1
 		for i = 0; i < ((overlap + 3) >> 2); i++ {
 			// Real part arranged as -d-cR, Imag part arranged as -b+aR
-			f[yp] = MULT16_32_Q15(window[wp2], in[xp1+N2]) + MULT16_32_Q15(window[wp1], in[xp2])
+			f[yp] = S_MUL(in[xp1+N2], window[wp2]) + S_MUL(in[xp2], window[wp1])
 			yp++
-			f[yp] = MULT16_32_Q15(window[wp1], in[xp1]) - MULT16_32_Q15(window[wp2], in[xp2-N2])
+			f[yp] = S_MUL(in[xp1], window[wp1]) - S_MUL(in[xp2-N2], window[wp2])
 			yp++
 			xp1 += 2
 			xp2 -= 2
@@ -92,9 +93,9 @@ func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift
 		}
 		for ; i < N4; i++ {
 			// Real part arranged as a-bR, Imag part arranged as -c-dR
-			f[yp] = -MULT16_32_Q15(window[wp1], in[xp1-N2]) + MULT16_32_Q15(window[wp2], in[xp2])
+			f[yp] = -S_MUL(in[xp1-N2], window[wp1]) + S_MUL(in[xp2], window[wp2])
 			yp++
-			f[yp] = MULT16_32_Q15(window[wp2], in[xp1]) + MULT16_32_Q15(window[wp1], in[xp2+N2])
+			f[yp] = S_MUL(in[xp1], window[wp2]) + S_MUL(in[xp2+N2], window[wp1])
 			yp++
 			xp1 += 2
 			xp2 -= 2
@@ -106,6 +107,7 @@ func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift
 	{
 		yp := 0
 		t := trig
+		var maxval int32 = 1
 		for i = 0; i < N4; i++ {
 			var yc KissFftCpx
 			var t0, t1 int16
@@ -118,16 +120,18 @@ func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift
 			yp++
 			yr = S_MUL(re, t0) - S_MUL(im, t1)
 			yi = S_MUL(im, t0) + S_MUL(re, t1)
-			yc.R = yr
-			yc.I = yi
-			yc.R = PSHR32(MULT16_32_Q16(scale, yc.R), scale_shift)
-			yc.I = PSHR32(MULT16_32_Q16(scale, yc.I), scale_shift)
+			// For QEXT, it's best to scale before the FFT, but otherwise it's best to scale after.
+			// For floating-point it doesn't matter.
+			yc.R = S_MUL2(yr, scale)
+			yc.I = S_MUL2(yi, scale)
+			maxval = MAX32(maxval, MAX32(ABS32(yc.R), ABS32(yc.I)))
 			f2[st.bitrev[i]] = yc
 		}
+		headroom = IMAX(0, IMIN(scale_shift, 28-int(Ilog2(maxval))))
 	}
 
 	// N/4 complex FFT, does not downscale anymore
-	FftImpl(st, f2)
+	FftImpl(st, f2, scale_shift-headroom)
 
 	// Post-rotate
 	{
@@ -139,8 +143,11 @@ func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift
 		// Temp pointers to make it really clear to the compiler what we're doing
 		for i = 0; i < N4; i++ {
 			var yr, yi int32
-			yr = S_MUL(f2[fp].I, t[N4+i]) - S_MUL(f2[fp].R, t[i])
-			yi = S_MUL(f2[fp].R, t[N4+i]) + S_MUL(f2[fp].I, t[i])
+			var t0, t1 int16
+			t0 = t[i]
+			t1 = t[N4+i]
+			yr = PSHR32(S_MUL(f2[fp].I, t1)-S_MUL(f2[fp].R, t0), headroom)
+			yi = PSHR32(S_MUL(f2[fp].R, t1)+S_MUL(f2[fp].I, t0), headroom)
 			out[yp1] = yr
 			out[yp2] = yi
 			fp++
@@ -155,13 +162,14 @@ func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift
 //
 // C: void clt_mdct_backward_c(const mdct_lookup *l, kiss_fft_scalar *in, kiss_fft_scalar * OPUS_RESTRICT out,
 //
-//	const opus_val16 * OPUS_RESTRICT window, int overlap, int shift, int stride, int arch)
+//	const celt_coef * OPUS_RESTRICT window, int overlap, int shift, int stride, int arch)
 //
 // C: #define clt_mdct_backward(_l, _in, _out, _window, _overlap, _shift, _stride, _arch) clt_mdct_backward_c(...)
 func MdctBackward(l *mdct_lookup, in []int32, out []int32, window []int16, overlap, shift, stride int, arch int) {
 	var i int
 	var N, N2, N4 int
 	var trig []int16
+	var pre_shift, post_shift, fft_shift int
 	_ = arch
 
 	N = l.n
@@ -173,6 +181,19 @@ func MdctBackward(l *mdct_lookup, in []int32, out []int32, window []int16, overl
 	N2 = N >> 1
 	N4 = N >> 2
 
+	{
+		var sumval int32 = int32(N2)
+		var maxval int32 = 0
+		for i = 0; i < N2; i++ {
+			maxval = MAX32(maxval, ABS32(in[i*stride]))
+			sumval = ADD32_ovflw(sumval, ABS32(SHR32(in[i*stride], 11)))
+		}
+		pre_shift = IMAX(0, 29-int(Zlog2(1+maxval)))
+		// Worst-case where all the energy goes to a single sample.
+		post_shift = IMAX(0, 19-int(Ilog2(ABS32(sumval))))
+		post_shift = IMIN(post_shift, pre_shift)
+		fft_shift = pre_shift - post_shift
+	}
 	// Pre-rotate
 	{
 		// Temp pointers to make it really clear to the compiler what we're doing
@@ -184,9 +205,12 @@ func MdctBackward(l *mdct_lookup, in []int32, out []int32, window []int16, overl
 		for i = 0; i < N4; i++ {
 			var rev int
 			var yr, yi int32
+			var x1, x2 int32
 			rev = int(bitrev[i])
-			yr = ADD32_ovflw(S_MUL(in[xp2], t[i]), S_MUL(in[xp1], t[N4+i]))
-			yi = SUB32_ovflw(S_MUL(in[xp1], t[i]), S_MUL(in[xp2], t[N4+i]))
+			x1 = SHL32_ovflw(in[xp1], pre_shift)
+			x2 = SHL32_ovflw(in[xp2], pre_shift)
+			yr = ADD32_ovflw(S_MUL(x2, t[i]), S_MUL(x1, t[N4+i]))
+			yi = SUB32_ovflw(S_MUL(x1, t[i]), S_MUL(x2, t[N4+i]))
 			// We swap real and imag because we use an FFT instead of an IFFT.
 			yp[2*rev+1] = yr
 			yp[2*rev] = yi
@@ -196,7 +220,7 @@ func MdctBackward(l *mdct_lookup, in []int32, out []int32, window []int16, overl
 		}
 	}
 
-	FftImpl(l.kfft[shift], cpxView(out[(overlap>>1):(overlap>>1)+N2]))
+	FftImpl(l.kfft[shift], cpxView(out[(overlap>>1):(overlap>>1)+N2]), fft_shift)
 
 	// Post-rotate and de-shuffle from both ends of the buffer at once to make
 	// it in-place.
@@ -215,8 +239,8 @@ func MdctBackward(l *mdct_lookup, in []int32, out []int32, window []int16, overl
 			t0 = t[i]
 			t1 = t[N4+i]
 			// We'd scale up by 2 here, but instead it's done when mixing the windows
-			yr = ADD32_ovflw(S_MUL(re, t0), S_MUL(im, t1))
-			yi = SUB32_ovflw(S_MUL(re, t1), S_MUL(im, t0))
+			yr = PSHR32_ovflw(ADD32_ovflw(S_MUL(re, t0), S_MUL(im, t1)), post_shift)
+			yi = PSHR32_ovflw(SUB32_ovflw(S_MUL(re, t1), S_MUL(im, t0)), post_shift)
 			// We swap real and imag because we're using an FFT instead of an IFFT.
 			re = out[yp1+1]
 			im = out[yp1+0]
@@ -226,8 +250,8 @@ func MdctBackward(l *mdct_lookup, in []int32, out []int32, window []int16, overl
 			t0 = t[(N4 - i - 1)]
 			t1 = t[(N2 - i - 1)]
 			// We'd scale up by 2 here, but instead it's done when mixing the windows
-			yr = ADD32_ovflw(S_MUL(re, t0), S_MUL(im, t1))
-			yi = SUB32_ovflw(S_MUL(re, t1), S_MUL(im, t0))
+			yr = PSHR32_ovflw(ADD32_ovflw(S_MUL(re, t0), S_MUL(im, t1)), post_shift)
+			yi = PSHR32_ovflw(SUB32_ovflw(S_MUL(re, t1), S_MUL(im, t0)), post_shift)
 			out[yp1+0] = yr
 			out[yp0+1] = yi
 			yp0 += 2
@@ -246,9 +270,9 @@ func MdctBackward(l *mdct_lookup, in []int32, out []int32, window []int16, overl
 			var x1, x2 int32
 			x1 = out[xp1]
 			x2 = out[yp1]
-			out[yp1] = SUB32_ovflw(MULT16_32_Q15(window[wp2], x2), MULT16_32_Q15(window[wp1], x1))
+			out[yp1] = SUB32_ovflw(S_MUL(x2, window[wp2]), S_MUL(x1, window[wp1]))
 			yp1++
-			out[xp1] = ADD32_ovflw(MULT16_32_Q15(window[wp1], x2), MULT16_32_Q15(window[wp2], x1))
+			out[xp1] = ADD32_ovflw(S_MUL(x2, window[wp1]), S_MUL(x1, window[wp2]))
 			xp1--
 			wp1++
 			wp2--

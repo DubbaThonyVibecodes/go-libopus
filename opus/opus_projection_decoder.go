@@ -12,12 +12,12 @@ type OpusProjectionDecoder struct {
 	ms_decoder      OpusMSDecoder
 }
 
-// C: static void opus_projection_copy_channel_out_float(void *dst, int dst_stride, int dst_channel, const opus_val16 *src, int src_stride, int frame_size, void *user_data)
+// C: static void opus_projection_copy_channel_out_float(void *dst, int dst_stride, int dst_channel, const opus_res *src, int src_stride, int frame_size, void *user_data)
 func opus_projection_copy_channel_out_float(
 	dst any,
 	dst_stride int,
 	dst_channel int,
-	src []int16,
+	src []int32,
 	src_stride int,
 	frame_size int,
 	user_data any) {
@@ -36,12 +36,12 @@ func opus_projection_copy_channel_out_float(
 	}
 }
 
-// C: static void opus_projection_copy_channel_out_short(void *dst, int dst_stride, int dst_channel, const opus_val16 *src, int src_stride, int frame_size, void *user_data)
+// C: static void opus_projection_copy_channel_out_short(void *dst, int dst_stride, int dst_channel, const opus_res *src, int src_stride, int frame_size, void *user_data)
 func opus_projection_copy_channel_out_short(
 	dst any,
 	dst_stride int,
 	dst_channel int,
-	src []int16,
+	src []int32,
 	src_stride int,
 	frame_size int,
 	user_data any) {
@@ -55,6 +55,29 @@ func opus_projection_copy_channel_out_short(
 
 	if src != nil {
 		matrix.MappingMatrixMultiplyChannelOutShort(src, dst_channel,
+			src_stride, short_dst, dst_stride, frame_size)
+	}
+}
+
+// C: static void opus_projection_copy_channel_out_int24(void *dst, int dst_stride, int dst_channel, const opus_res *src, int src_stride, int frame_size, void *user_data)
+func opus_projection_copy_channel_out_int24(
+	dst any,
+	dst_stride int,
+	dst_channel int,
+	src []int32,
+	src_stride int,
+	frame_size int,
+	user_data any) {
+	var short_dst []int32
+	var matrix *MappingMatrix
+	short_dst = dst.([]int32)
+	matrix = user_data.(*MappingMatrix)
+	if dst_channel == 0 {
+		clear(short_dst[:frame_size*dst_stride])
+	}
+
+	if src != nil {
+		matrix.MappingMatrixMultiplyChannelOutInt24(src, dst_channel,
 			src_stride, short_dst, dst_stride, frame_size)
 	}
 }
@@ -166,12 +189,24 @@ func ProjectionDecoderCreate(
 	return st
 }
 
-// C: int opus_projection_decode(OpusProjectionDecoder *st, const unsigned char *data, opus_int32 len, opus_int16 *pcm, int frame_size, int decode_fec)   (FIXED_POINT)
+// C: int opus_projection_decode(OpusProjectionDecoder *st, const unsigned char *data, opus_int32 len, opus_int16 *pcm, int frame_size, int decode_fec)
 func (st *OpusProjectionDecoder) ProjectionDecode(data []byte,
 	length int32, pcm []int16, frame_size int,
 	decode_fec int) int {
 	return st.get_multistream_decoder().MultistreamDecodeNative(data, length,
-		pcm, opus_projection_copy_channel_out_short, frame_size, decode_fec, 0,
+		pcm, opus_projection_copy_channel_out_short, frame_size, decode_fec, OPTIONAL_CLIP,
+		st.get_dec_demixing_matrix())
+}
+
+// ProjectionDecode24 decodes to 24-bit samples (opus_int32, left-aligned
+// in the low 24 bits).
+//
+// C: int opus_projection_decode24(OpusProjectionDecoder *st, const unsigned char *data, opus_int32 len, opus_int32 *pcm, int frame_size, int decode_fec)
+func (st *OpusProjectionDecoder) ProjectionDecode24(data []byte,
+	length int32, pcm []int32, frame_size int,
+	decode_fec int) int {
+	return st.get_multistream_decoder().MultistreamDecodeNative(data, length,
+		pcm, opus_projection_copy_channel_out_int24, frame_size, decode_fec, 0,
 		st.get_dec_demixing_matrix())
 }
 

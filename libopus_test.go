@@ -213,3 +213,47 @@ func TestProjection(t *testing.T) {
 		t.Fatal("fresh encoder reports DTX")
 	}
 }
+
+// TestPCM24 round-trips through the 24-bit API (libopus 1.6+) and checks the
+// restricted applications and the ignore-extensions ctl.
+func TestPCM24(t *testing.T) {
+	const rate, ch, frame = 48000, 2, 960
+	enc, err := NewEncoder(rate, ch, RestrictedCELT)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if enc.Application() != RestrictedCELT {
+		t.Fatalf("application %v", enc.Application())
+	}
+	if _, err := NewEncoder(rate, 1, RestrictedSILK); err != nil {
+		t.Fatal(err)
+	}
+	dec, _ := NewDecoder(rate, ch)
+	if err := dec.SetIgnoreExtensions(true); err != nil || !dec.IgnoreExtensions() {
+		t.Fatalf("ignore extensions: %v", err)
+	}
+	pcm := make([]int32, frame*ch)
+	for i := 0; i < frame; i++ {
+		v := int32(4000000 * math.Sin(float64(i)*2*math.Pi*440/rate))
+		pcm[i*ch], pcm[i*ch+1] = v, v/2
+	}
+	pkt := make([]byte, MaxPacket)
+	out := make([]int32, 5760*ch)
+	var energy float64
+	for f := 0; f < 10; f++ {
+		n, err := enc.Encode24(pcm, pkt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, err := dec.Decode24(pkt[:n], out, false)
+		if err != nil || m != frame {
+			t.Fatalf("decode24: m=%d err=%v", m, err)
+		}
+		for _, v := range out[:m*ch] {
+			energy += float64(v) * float64(v)
+		}
+	}
+	if energy == 0 {
+		t.Fatal("silent output")
+	}
+}

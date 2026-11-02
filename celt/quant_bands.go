@@ -87,14 +87,14 @@ var e_prob_model = [4][2][42]uint8{
 
 var small_energy_icdf = [3]uint8{2, 1, 0}
 
-// C: static opus_val32 loss_distortion(const opus_val16 *eBands, opus_val16 *oldEBands, int start, int end, int len, int C)
-func loss_distortion(eBands, oldEBands []int16, start, end, length, C int) int32 {
+// C: static opus_val32 loss_distortion(const celt_glog *eBands, celt_glog *oldEBands, int start, int end, int len, int C)
+func loss_distortion(eBands, oldEBands []int32, start, end, length, C int) int32 {
 	var c, i int
 	var dist int32 = 0
 	c = 0
 	for {
 		for i = start; i < end; i++ {
-			var d int16 = int16(SUB16(SHR16(eBands[i+c*length], 3), SHR16(oldEBands[i+c*length], 3)))
+			var d int32 = PSHR32(SUB32(eBands[i+c*length], oldEBands[i+c*length]), DB_SHIFT-7)
 			dist = MAC16_16(dist, d, d)
 		}
 		c++
@@ -102,20 +102,20 @@ func loss_distortion(eBands, oldEBands []int16, start, end, length, C int) int32
 			break
 		}
 	}
-	return MIN32(200, SHR32(dist, 2*DB_SHIFT-6))
+	return MIN32(200, SHR32(dist, 14))
 }
 
 // C: static int quant_coarse_energy_impl(const CELTMode *m, int start, int end,
 //
-//	const opus_val16 *eBands, opus_val16 *oldEBands,
+//	const celt_glog *eBands, celt_glog *oldEBands,
 //	opus_int32 budget, opus_int32 tell,
-//	const unsigned char *prob_model, opus_val16 *error, ec_enc *enc,
-//	int C, int LM, int intra, opus_val16 max_decay, int lfe)
+//	const unsigned char *prob_model, celt_glog *error, ec_enc *enc,
+//	int C, int LM, int intra, celt_glog max_decay, int lfe)
 func quant_coarse_energy_impl(m *CELTMode, start, end int,
-	eBands, oldEBands []int16,
+	eBands, oldEBands []int32,
 	budget, tell int32,
-	prob_model []uint8, error []int16, enc *EcEnc,
-	C, LM, intra int, max_decay int16, lfe int) int {
+	prob_model []uint8, error []int32, enc *EcEnc,
+	C, LM, intra int, max_decay int32, lfe int) int {
 	var i, c int
 	var badness int = 0
 	var prev = [2]int32{0, 0}
@@ -138,20 +138,19 @@ func quant_coarse_energy_impl(m *CELTMode, start, end int,
 		for {
 			var bits_left, qi, qi0 int
 			var q int32
-			var x int16
+			var x int32
 			var f, tmp int32
-			var oldE, decay_bound int16
+			var oldE, decay_bound int32
 			x = eBands[i+c*m.nbEBands]
-			oldE = MAX16(-QCONST16(9.0, DB_SHIFT), oldEBands[i+c*m.nbEBands])
-			f = SHL32(EXTEND32(x), 7) - PSHR32(MULT16_16(coef, oldE), 8) - prev[c]
+			oldE = MAXG(-GCONST(9.0), oldEBands[i+c*m.nbEBands])
+			f = x - MULT16_32_Q15(coef, oldE) - prev[c]
 			// Rounding to nearest integer here is really important!
-			qi = int((f + int32(QCONST32(.5, DB_SHIFT+7))) >> (DB_SHIFT + 7))
-			decay_bound = EXTRACT16(MAX32(-int32(QCONST16(28.0, DB_SHIFT)),
-				SUB32(int32(oldEBands[i+c*m.nbEBands]), max_decay)))
+			qi = int((f + QCONST32(.5, DB_SHIFT)) >> DB_SHIFT)
+			decay_bound = MAXG(-GCONST(28.0), SUB32(oldEBands[i+c*m.nbEBands], max_decay))
 			// Prevent the energy from going down too quickly (e.g. for bands
 			// that have just one bin)
-			if qi < 0 && int32(x) < int32(decay_bound) {
-				qi += int(SHR16(SUB16(decay_bound, x), DB_SHIFT))
+			if qi < 0 && x < decay_bound {
+				qi += int(SHR32(SUB32(decay_bound, x), DB_SHIFT))
 				if qi > 0 {
 					qi = 0
 				}
@@ -189,14 +188,14 @@ func quant_coarse_energy_impl(m *CELTMode, start, end int,
 			} else {
 				qi = -1
 			}
-			error[i+c*m.nbEBands] = int16(PSHR32(f, 7) - int32(SHL16(qi, DB_SHIFT)))
+			error[i+c*m.nbEBands] = f - SHL32(qi, DB_SHIFT)
 			badness += ABS(qi0 - qi)
 			q = SHL32(EXTEND32(qi), DB_SHIFT)
 
-			tmp = PSHR32(MULT16_16(coef, oldE), 8) + prev[c] + SHL32(q, 7)
-			tmp = MAX32(-QCONST32(28.0, DB_SHIFT+7), tmp)
-			oldEBands[i+c*m.nbEBands] = int16(PSHR32(tmp, 7))
-			prev[c] = prev[c] + SHL32(q, 7) - MULT16_16(beta, PSHR32(q, 8))
+			tmp = MULT16_32_Q15(coef, oldE) + prev[c] + q
+			tmp = MAX32(-GCONST(28.0), tmp)
+			oldEBands[i+c*m.nbEBands] = tmp
+			prev[c] = prev[c] + q - MULT16_32_Q15(beta, q)
 			c++
 			if c >= C {
 				break
@@ -211,15 +210,15 @@ func quant_coarse_energy_impl(m *CELTMode, start, end int,
 
 // C: void quant_coarse_energy(const CELTMode *m, int start, int end, int effEnd,
 //
-//	const opus_val16 *eBands, opus_val16 *oldEBands, opus_uint32 budget,
-//	opus_val16 *error, ec_enc *enc, int C, int LM, int nbAvailableBytes,
+//	const celt_glog *eBands, celt_glog *oldEBands, opus_uint32 budget,
+//	celt_glog *error, ec_enc *enc, int C, int LM, int nbAvailableBytes,
 //	int force_intra, opus_val32 *delayedIntra, int two_pass, int loss_rate, int lfe)
 func QuantCoarseEnergy(m *CELTMode, start, end, effEnd int,
-	eBands, oldEBands []int16, budget uint32,
-	error []int16, enc *EcEnc, C, LM, nbAvailableBytes int,
+	eBands, oldEBands []int32, budget uint32,
+	error []int32, enc *EcEnc, C, LM, nbAvailableBytes int,
 	force_intra int, delayedIntra *int32, two_pass, loss_rate int, lfe int) {
 	var intra int
-	var max_decay int16
+	var max_decay int32
 	var enc_start_state EcEnc
 	var tell uint32
 	var badness1 int = 0
@@ -238,17 +237,17 @@ func QuantCoarseEnergy(m *CELTMode, start, end, effEnd int,
 		intra = 0
 	}
 
-	max_decay = QCONST16(16.0, DB_SHIFT)
+	max_decay = GCONST(16.0)
 	if end-start > 10 {
-		max_decay = int16(MIN32(int32(max_decay), SHL32(EXTEND32(nbAvailableBytes), DB_SHIFT-3)))
+		max_decay = SHL32(MIN32(SHR32(max_decay, DB_SHIFT-3), EXTEND32(nbAvailableBytes)), DB_SHIFT-3)
 	}
 	if lfe != 0 {
-		max_decay = QCONST16(3.0, DB_SHIFT)
+		max_decay = GCONST(3.0)
 	}
 	enc_start_state = *enc
 
-	oldEBands_intra := make([]int16, C*m.nbEBands)
-	error_intra := make([]int16, C*m.nbEBands)
+	oldEBands_intra := make([]int32, C*m.nbEBands)
+	error_intra := make([]int32, C*m.nbEBands)
 	copy(oldEBands_intra, oldEBands[:C*m.nbEBands])
 
 	if two_pass != 0 || intra != 0 {
@@ -302,30 +301,39 @@ func QuantCoarseEnergy(m *CELTMode, start, end, effEnd int,
 	}
 }
 
-// C: void quant_fine_energy(const CELTMode *m, int start, int end, opus_val16 *oldEBands, opus_val16 *error, int *fine_quant, ec_enc *enc, int C)
-func QuantFineEnergy(m *CELTMode, start, end int, oldEBands, error []int16, fine_quant []int, enc *EcEnc, C int) {
+// C: void quant_fine_energy(const CELTMode *m, int start, int end, celt_glog *oldEBands, celt_glog *error, int *prev_quant, int *extra_quant, ec_enc *enc, int C)
+func QuantFineEnergy(m *CELTMode, start, end int, oldEBands, error []int32, prev_quant, extra_quant []int, enc *EcEnc, C int) {
 	var i, c int
-
 	// Encode finer resolution
 	for i = start; i < end; i++ {
-		var frac int16 = 1 << uint(fine_quant[i])
-		if fine_quant[i] <= 0 {
+		var extra, prev int16
+		extra = int16(1 << uint(extra_quant[i]))
+		if extra_quant[i] <= 0 {
 			continue
+		}
+		if int32(enc.Tell()+C*extra_quant[i]) > int32(enc.storage)*8 {
+			continue
+		}
+		if prev_quant != nil {
+			prev = int16(prev_quant[i])
+		} else {
+			prev = 0
 		}
 		c = 0
 		for {
 			var q2 int
-			var offset int16
+			var offset int32
 			// Has to be without rounding
-			q2 = int((int32(error[i+c*m.nbEBands]) + int32(QCONST16(.5, DB_SHIFT))) >> uint(DB_SHIFT-fine_quant[i]))
-			if q2 > int(frac)-1 {
-				q2 = int(frac) - 1
+			q2 = int(VSHR32(ADD32(error[i+c*m.nbEBands], SHR32(GCONST(.5), int(prev))), DB_SHIFT-extra_quant[i]-int(prev)))
+			if q2 > int(extra)-1 {
+				q2 = int(extra) - 1
 			}
 			if q2 < 0 {
 				q2 = 0
 			}
-			enc.EncBits(uint32(q2), uint(fine_quant[i]))
-			offset = int16(SUB16(SHR32(SHL32(EXTEND32(q2), DB_SHIFT)+int32(QCONST16(.5, DB_SHIFT)), fine_quant[i]), QCONST16(.5, DB_SHIFT)))
+			enc.EncBits(uint32(q2), uint(extra_quant[i]))
+			offset = SUB32(VSHR32(2*q2+1, extra_quant[i]-DB_SHIFT+1), GCONST(.5))
+			offset = SHR32(offset, int(prev))
 			oldEBands[i+c*m.nbEBands] += offset
 			error[i+c*m.nbEBands] -= offset
 			// printf ("%f ", error[i] - offset);
@@ -337,8 +345,8 @@ func QuantFineEnergy(m *CELTMode, start, end int, oldEBands, error []int16, fine
 	}
 }
 
-// C: void quant_energy_finalise(const CELTMode *m, int start, int end, opus_val16 *oldEBands, opus_val16 *error, int *fine_quant, int *fine_priority, int bits_left, ec_enc *enc, int C)
-func QuantEnergyFinalise(m *CELTMode, start, end int, oldEBands, error []int16, fine_quant, fine_priority []int, bits_left int, enc *EcEnc, C int) {
+// C: void quant_energy_finalise(const CELTMode *m, int start, int end, celt_glog *oldEBands, celt_glog *error, int *fine_quant, int *fine_priority, int bits_left, ec_enc *enc, int C)
+func QuantEnergyFinalise(m *CELTMode, start, end int, oldEBands, error []int32, fine_quant, fine_priority []int, bits_left int, enc *EcEnc, C int) {
 	var i, prio, c int
 
 	// Use up the remaining bits
@@ -350,15 +358,17 @@ func QuantEnergyFinalise(m *CELTMode, start, end int, oldEBands, error []int16, 
 			c = 0
 			for {
 				var q2 int
-				var offset int16
+				var offset int32
 				if error[i+c*m.nbEBands] < 0 {
 					q2 = 0
 				} else {
 					q2 = 1
 				}
 				enc.EncBits(uint32(q2), 1)
-				offset = int16(SHR16(int32(SHL16(q2, DB_SHIFT))-int32(QCONST16(.5, DB_SHIFT)), fine_quant[i]+1))
-				oldEBands[i+c*m.nbEBands] += offset
+				offset = SHR32(SHL32(q2, DB_SHIFT)-GCONST(.5), fine_quant[i]+1)
+				if oldEBands != nil {
+					oldEBands[i+c*m.nbEBands] += offset
+				}
 				error[i+c*m.nbEBands] -= offset
 				bits_left--
 				c++
@@ -370,11 +380,11 @@ func QuantEnergyFinalise(m *CELTMode, start, end int, oldEBands, error []int16, 
 	}
 }
 
-// C: void unquant_coarse_energy(const CELTMode *m, int start, int end, opus_val16 *oldEBands, int intra, ec_dec *dec, int C, int LM)
-func UnquantCoarseEnergy(m *CELTMode, start, end int, oldEBands []int16, intra int, dec *EcDec, C, LM int) {
+// C: void unquant_coarse_energy(const CELTMode *m, int start, int end, celt_glog *oldEBands, int intra, ec_dec *dec, int C, int LM)
+func UnquantCoarseEnergy(m *CELTMode, start, end int, oldEBands []int32, intra int, dec *EcDec, C, LM int) {
 	prob_model := e_prob_model[LM][intra][:]
 	var i, c int
-	var prev = [2]int32{0, 0}
+	var prev = [2]int64{0, 0}
 	var coef, beta int16
 	var budget, tell int32
 
@@ -413,11 +423,11 @@ func UnquantCoarseEnergy(m *CELTMode, start, end int, oldEBands []int16, intra i
 			}
 			q = SHL32(EXTEND32(qi), DB_SHIFT)
 
-			oldEBands[i+c*m.nbEBands] = MAX16(-QCONST16(9.0, DB_SHIFT), oldEBands[i+c*m.nbEBands])
-			tmp = PSHR32(MULT16_16(coef, oldEBands[i+c*m.nbEBands]), 8) + prev[c] + SHL32(q, 7)
-			tmp = MAX32(-QCONST32(28.0, DB_SHIFT+7), tmp)
-			oldEBands[i+c*m.nbEBands] = int16(PSHR32(tmp, 7))
-			prev[c] = prev[c] + SHL32(q, 7) - MULT16_16(beta, PSHR32(q, 8))
+			oldEBands[i+c*m.nbEBands] = MAXG(-GCONST(9.0), oldEBands[i+c*m.nbEBands])
+			tmp = int32(int64(MULT16_32_Q15(coef, oldEBands[i+c*m.nbEBands])) + prev[c] + int64(q))
+			tmp = MIN32(GCONST(28.0), MAX32(-GCONST(28.0), tmp))
+			oldEBands[i+c*m.nbEBands] = tmp
+			prev[c] = prev[c] + int64(q) - int64(MULT16_32_Q15(beta, q))
 			c++
 			if c >= C {
 				break
@@ -426,20 +436,31 @@ func UnquantCoarseEnergy(m *CELTMode, start, end int, oldEBands []int16, intra i
 	}
 }
 
-// C: void unquant_fine_energy(const CELTMode *m, int start, int end, opus_val16 *oldEBands, int *fine_quant, ec_dec *dec, int C)
-func UnquantFineEnergy(m *CELTMode, start, end int, oldEBands []int16, fine_quant []int, dec *EcDec, C int) {
+// C: void unquant_fine_energy(const CELTMode *m, int start, int end, celt_glog *oldEBands, int *prev_quant, int *extra_quant, ec_dec *dec, int C)
+func UnquantFineEnergy(m *CELTMode, start, end int, oldEBands []int32, prev_quant, extra_quant []int, dec *EcDec, C int) {
 	var i, c int
 	// Decode finer resolution
 	for i = start; i < end; i++ {
-		if fine_quant[i] <= 0 {
+		var extra, prev int16
+		extra = int16(extra_quant[i])
+		if extra_quant[i] <= 0 {
 			continue
+		}
+		if int32(dec.Tell()+C*extra_quant[i]) > int32(dec.storage)*8 {
+			continue
+		}
+		if prev_quant != nil {
+			prev = int16(prev_quant[i])
+		} else {
+			prev = 0
 		}
 		c = 0
 		for {
 			var q2 int
-			var offset int16
-			q2 = int(dec.DecBits(uint(fine_quant[i])))
-			offset = int16(SUB16(SHR32(SHL32(EXTEND32(q2), DB_SHIFT)+int32(QCONST16(.5, DB_SHIFT)), fine_quant[i]), QCONST16(.5, DB_SHIFT)))
+			var offset int32
+			q2 = int(dec.DecBits(uint(extra)))
+			offset = SUB32(VSHR32(2*q2+1, int(extra)-DB_SHIFT+1), GCONST(.5))
+			offset = SHR32(offset, int(prev))
 			oldEBands[i+c*m.nbEBands] += offset
 			c++
 			if c >= C {
@@ -449,8 +470,8 @@ func UnquantFineEnergy(m *CELTMode, start, end int, oldEBands []int16, fine_quan
 	}
 }
 
-// C: void unquant_energy_finalise(const CELTMode *m, int start, int end, opus_val16 *oldEBands, int *fine_quant,  int *fine_priority, int bits_left, ec_dec *dec, int C)
-func UnquantEnergyFinalise(m *CELTMode, start, end int, oldEBands []int16, fine_quant, fine_priority []int, bits_left int, dec *EcDec, C int) {
+// C: void unquant_energy_finalise(const CELTMode *m, int start, int end, celt_glog *oldEBands, int *fine_quant,  int *fine_priority, int bits_left, ec_dec *dec, int C)
+func UnquantEnergyFinalise(m *CELTMode, start, end int, oldEBands []int32, fine_quant, fine_priority []int, bits_left int, dec *EcDec, C int) {
 	var i, prio, c int
 
 	// Use up the remaining bits
@@ -462,10 +483,12 @@ func UnquantEnergyFinalise(m *CELTMode, start, end int, oldEBands []int16, fine_
 			c = 0
 			for {
 				var q2 int
-				var offset int16
+				var offset int32
 				q2 = int(dec.DecBits(1))
-				offset = int16(SHR16(int32(SHL16(q2, DB_SHIFT))-int32(QCONST16(.5, DB_SHIFT)), fine_quant[i]+1))
-				oldEBands[i+c*m.nbEBands] += offset
+				offset = SHR32(SHL32(q2, DB_SHIFT)-GCONST(.5), fine_quant[i]+1)
+				if oldEBands != nil {
+					oldEBands[i+c*m.nbEBands] += offset
+				}
 				bits_left--
 				c++
 				if c >= C {
@@ -476,18 +499,20 @@ func UnquantEnergyFinalise(m *CELTMode, start, end int, oldEBands []int16, fine_
 	}
 }
 
-// C: void amp2Log2(const CELTMode *m, int effEnd, int end, celt_ener *bandE, opus_val16 *bandLogE, int C)
-func Amp2Log2(m *CELTMode, effEnd, end int, bandE []int32, bandLogE []int16, C int) {
+// C: void amp2Log2(const CELTMode *m, int effEnd, int end, celt_ener *bandE, celt_glog *bandLogE, int C)
+func Amp2Log2(m *CELTMode, effEnd, end int, bandE []int32, bandLogE []int32, C int) {
 	var c, i int
 	c = 0
 	for {
 		for i = 0; i < effEnd; i++ {
-			bandLogE[i+c*m.nbEBands] = int16(int32(Log2(bandE[i+c*m.nbEBands])) - int32(SHL16(int16(eMeans[i]), 6)))
+			bandLogE[i+c*m.nbEBands] =
+				Log2Db(bandE[i+c*m.nbEBands]) -
+					SHL32(int32(eMeans[i]), DB_SHIFT-4)
 			// Compensate for bandE[] being Q12 but celt_log2() taking a Q14 input.
-			bandLogE[i+c*m.nbEBands] += QCONST16(2.0, DB_SHIFT)
+			bandLogE[i+c*m.nbEBands] += GCONST(2.0)
 		}
 		for i = effEnd; i < end; i++ {
-			bandLogE[c*m.nbEBands+i] = -QCONST16(14.0, DB_SHIFT)
+			bandLogE[c*m.nbEBands+i] = -GCONST(14.0)
 		}
 		c++
 		if c >= C {

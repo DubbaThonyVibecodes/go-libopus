@@ -54,6 +54,10 @@ const (
 	// RestrictedLowDelay: only use when lowest-achievable latency is what
 	// matters most. Voice-optimized modes cannot be used.
 	RestrictedLowDelay Application = opus.OPUS_APPLICATION_RESTRICTED_LOWDELAY
+	// RestrictedSILK: SILK-only encoding (libopus 1.6+); can only be set at creation.
+	RestrictedSILK Application = opus.OPUS_APPLICATION_RESTRICTED_SILK
+	// RestrictedCELT: CELT-only encoding (libopus 1.6+); can only be set at creation.
+	RestrictedCELT Application = opus.OPUS_APPLICATION_RESTRICTED_CELT
 )
 
 func (a Application) String() string {
@@ -64,6 +68,10 @@ func (a Application) String() string {
 		return "audio"
 	case RestrictedLowDelay:
 		return "restricted-lowdelay"
+	case RestrictedSILK:
+		return "restricted-silk"
+	case RestrictedCELT:
+		return "restricted-celt"
 	}
 	return fmt.Sprintf("Application(%d)", int(a))
 }
@@ -213,6 +221,19 @@ func (e *Encoder) EncodeFloat(pcm []float32, out []byte) (int, error) {
 		return 0, fmt.Errorf("opus: pcm length %d is not a multiple of %d channels", len(pcm), e.channels)
 	}
 	n := e.st.EncodeFloat(pcm, len(pcm)/e.channels, out, int32(len(out)))
+	if n < 0 {
+		return 0, Error(n)
+	}
+	return int(n), nil
+}
+
+// Encode24 encodes one frame of interleaved 24-bit PCM held in int32
+// samples (libopus 1.6+; range -8388608..8388607).
+func (e *Encoder) Encode24(pcm []int32, out []byte) (int, error) {
+	if len(pcm)%e.channels != 0 {
+		return 0, fmt.Errorf("opus: pcm length %d is not a multiple of %d channels", len(pcm), e.channels)
+	}
+	n := e.st.Encode24(pcm, len(pcm)/e.channels, out, int32(len(out)))
 	if n < 0 {
 		return 0, Error(n)
 	}
@@ -468,6 +489,28 @@ func (d *Decoder) DecodeFloat(packet []byte, pcm []float32, fec bool) (int, erro
 		return 0, Error(n)
 	}
 	return n, nil
+}
+
+// Decode24 is Decode with 24-bit output in int32 samples (libopus 1.6+).
+func (d *Decoder) Decode24(packet []byte, pcm []int32, fec bool) (int, error) {
+	if len(pcm)%d.channels != 0 {
+		return 0, fmt.Errorf("opus: pcm length %d is not a multiple of %d channels", len(pcm), d.channels)
+	}
+	n := d.st.Decode24(packet, int32(len(packet)), pcm, len(pcm)/d.channels, b2iInt(fec))
+	if n < 0 {
+		return 0, Error(n)
+	}
+	return n, nil
+}
+
+// SetIgnoreExtensions makes the decoder skip packet extensions (libopus 1.6+).
+func (d *Decoder) SetIgnoreExtensions(on bool) error {
+	return d.Ctl(opus.OPUS_SET_IGNORE_EXTENSIONS_REQUEST, b2i(on))
+}
+
+// IgnoreExtensions reports whether packet extensions are ignored.
+func (d *Decoder) IgnoreExtensions() bool {
+	return d.getInt(opus.OPUS_GET_IGNORE_EXTENSIONS_REQUEST) != 0
 }
 
 // Ctl is the raw opus_decoder_ctl escape hatch.
@@ -824,6 +867,19 @@ func (e *MultistreamEncoder) EncodeFloat(pcm []float32, out []byte) (int, error)
 	return n, nil
 }
 
+// Encode24 encodes one frame of interleaved 24-bit PCM in int32 samples (libopus 1.6+).
+func (e *MultistreamEncoder) Encode24(pcm []int32, out []byte) (int, error) {
+	ch := e.layout.Channels
+	if len(pcm)%ch != 0 {
+		return 0, fmt.Errorf("opus: pcm length %d is not a multiple of %d channels", len(pcm), ch)
+	}
+	n := e.st.MultistreamEncode24(pcm, len(pcm)/ch, out, int32(len(out)))
+	if n < 0 {
+		return 0, Error(n)
+	}
+	return n, nil
+}
+
 // Ctl is the raw opus_multistream_encoder_ctl escape hatch; SET requests
 // apply to every stream.
 func (e *MultistreamEncoder) Ctl(request int, args ...any) error {
@@ -924,6 +980,19 @@ func (d *MultistreamDecoder) DecodeFloat(packet []byte, pcm []float32, fec bool)
 		return 0, fmt.Errorf("opus: pcm length %d is not a multiple of %d channels", len(pcm), ch)
 	}
 	n := d.st.MultistreamDecodeFloat(packet, int32(len(packet)), pcm, len(pcm)/ch, b2iInt(fec))
+	if n < 0 {
+		return 0, Error(n)
+	}
+	return n, nil
+}
+
+// Decode24 is Decode with 24-bit output in int32 samples (libopus 1.6+).
+func (d *MultistreamDecoder) Decode24(packet []byte, pcm []int32, fec bool) (int, error) {
+	ch := d.layout.Channels
+	if len(pcm)%ch != 0 {
+		return 0, fmt.Errorf("opus: pcm length %d is not a multiple of %d channels", len(pcm), ch)
+	}
+	n := d.st.MultistreamDecode24(packet, int32(len(packet)), pcm, len(pcm)/ch, b2iInt(fec))
 	if n < 0 {
 		return 0, Error(n)
 	}
@@ -1055,6 +1124,18 @@ func (e *ProjectionEncoder) EncodeFloat(pcm []float32, out []byte) (int, error) 
 	return n, nil
 }
 
+// Encode24 encodes one frame of interleaved 24-bit PCM in int32 samples (libopus 1.6+).
+func (e *ProjectionEncoder) Encode24(pcm []int32, out []byte) (int, error) {
+	if len(pcm)%e.channels != 0 {
+		return 0, ErrBadArg
+	}
+	n := e.st.ProjectionEncode24(pcm, len(pcm)/e.channels, out, int32(len(out)))
+	if n < 0 {
+		return 0, Error(n)
+	}
+	return n, nil
+}
+
 // Ctl is the raw opus_projection_encoder_ctl escape hatch; requests that are
 // not projection-specific are forwarded to every stream encoder.
 func (e *ProjectionEncoder) Ctl(request int, args ...any) error {
@@ -1109,6 +1190,15 @@ func (d *ProjectionDecoder) Decode(packet []byte, pcm []int16, fec bool) (int, e
 // DecodeFloat is Decode with float32 output.
 func (d *ProjectionDecoder) DecodeFloat(packet []byte, pcm []float32, fec bool) (int, error) {
 	n := d.st.ProjectionDecodeFloat(packet, int32(len(packet)), pcm, len(pcm)/d.channels, b2iInt(fec))
+	if n < 0 {
+		return 0, Error(n)
+	}
+	return n, nil
+}
+
+// Decode24 is Decode with 24-bit output in int32 samples (libopus 1.6+).
+func (d *ProjectionDecoder) Decode24(packet []byte, pcm []int32, fec bool) (int, error) {
+	n := d.st.ProjectionDecode24(packet, int32(len(packet)), pcm, len(pcm)/d.channels, b2iInt(fec))
 	if n < 0 {
 		return 0, Error(n)
 	}

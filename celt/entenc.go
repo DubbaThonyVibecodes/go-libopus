@@ -266,7 +266,9 @@ func (e *EcEnc) EncDone() {
 	}
 	// Clear any excess space and add any remaining extra bits to the last byte.
 	if e.error == 0 {
-		clear(e.buf[e.offs : e.storage-e.end_offs])
+		if e.buf != nil {
+			clear(e.buf[e.offs : e.storage-e.end_offs])
+		}
 		if used > 0 {
 			// If there's no range coder data at all, give up.
 			if e.end_offs >= e.storage {

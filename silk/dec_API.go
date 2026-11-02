@@ -76,15 +76,14 @@ func (decState *Decoder) InitDecoder() int {
 /* Decode a frame */
 //
 // C: opus_int silk_Decode(void *decState, silk_DecControlStruct *decControl, opus_int lostFlag,
-// opus_int newPacketFlag, ec_dec *psRangeDec, opus_int16 *samplesOut, opus_int32 *nSamplesOut, int arch)
-func (decState *Decoder) Decode(decControl *DecControlStruct, lostFlag int, newPacketFlag int, psRangeDec *celt.EcDec, samplesOut []int16, nSamplesOut *int32, arch int) int {
+// opus_int newPacketFlag, ec_dec *psRangeDec, opus_res *samplesOut, opus_int32 *nSamplesOut, int arch)
+func (decState *Decoder) Decode(decControl *DecControlStruct, lostFlag int, newPacketFlag int, psRangeDec *celt.EcDec, samplesOut []int32, nSamplesOut *int32, arch int) int {
 	var i, n int
 	decode_only_middle := 0
 	ret := SILK_NO_ERROR
 	var nSamplesOutDec, LBRR_symbol int32
 	var samplesOut1_tmp [2][]int16
 	var samplesOut1_tmp_storage1 []int16
-	var samplesOut1_tmp_storage2 []int16
 	var samplesOut2_tmp []int16
 	MS_pred_Q13 := [2]int32{0}
 	var resample_out_ptr []int16
@@ -92,7 +91,6 @@ func (decState *Decoder) Decode(decControl *DecControlStruct, lostFlag int, newP
 	channel_state := psDec.channel_state[:]
 	var has_side int
 	var stereo_to_mono int
-	var delay_stack_alloc int
 
 	silk_assert(decControl.NChannelsInternal == 1 || decControl.NChannelsInternal == 2)
 
@@ -243,19 +241,10 @@ func (decState *Decoder) Decode(decControl *DecControlStruct, lostFlag int, newP
 	/* Check if the temp buffer fits into the output PCM buffer. If it fits,
 	   we can delay allocating the temp buffer until after the SILK peak stack
 	   usage. We need to use a < and not a <= because of the two extra samples. */
-	delay_stack_alloc = b2i(decControl.InternalSampleRate*decControl.NChannelsInternal <
-		decControl.API_sampleRate*decControl.NChannelsAPI)
-	if delay_stack_alloc == 0 {
-		samplesOut1_tmp_storage1 = make([]int16,
-			int(decControl.NChannelsInternal)*(channel_state[0].frame_length+2))
-	}
-	if delay_stack_alloc != 0 {
-		samplesOut1_tmp[0] = samplesOut
-		samplesOut1_tmp[1] = samplesOut[channel_state[0].frame_length+2:]
-	} else {
-		samplesOut1_tmp[0] = samplesOut1_tmp_storage1
-		samplesOut1_tmp[1] = samplesOut1_tmp_storage1[channel_state[0].frame_length+2:]
-	}
+	samplesOut1_tmp_storage1 = make([]int16,
+		int(decControl.NChannelsInternal)*(channel_state[0].frame_length+2))
+	samplesOut1_tmp[0] = samplesOut1_tmp_storage1
+	samplesOut1_tmp[1] = samplesOut1_tmp_storage1[channel_state[0].frame_length+2:]
 
 	if lostFlag == FLAG_DECODE_NORMAL {
 		has_side = b2i(decode_only_middle == 0)
@@ -307,33 +296,21 @@ func (decState *Decoder) Decode(decControl *DecControlStruct, lostFlag int, newP
 	*nSamplesOut = DIV32(nSamplesOutDec*decControl.API_sampleRate, SMULBB(channel_state[0].fs_kHz, 1000))
 
 	/* Set up pointers to temp buffers */
-	if decControl.NChannelsAPI == 2 {
-		samplesOut2_tmp = make([]int16, *nSamplesOut)
-	}
-	if decControl.NChannelsAPI == 2 {
-		resample_out_ptr = samplesOut2_tmp
-	} else {
-		resample_out_ptr = samplesOut
-	}
+	samplesOut2_tmp = make([]int16, *nSamplesOut)
+	resample_out_ptr = samplesOut2_tmp
 
-	if delay_stack_alloc != 0 {
-		samplesOut1_tmp_storage2 = make([]int16,
-			int(decControl.NChannelsInternal)*(channel_state[0].frame_length+2))
-	}
-	if delay_stack_alloc != 0 {
-		copy(samplesOut1_tmp_storage2, samplesOut[:int(decControl.NChannelsInternal)*(channel_state[0].frame_length+2)])
-		samplesOut1_tmp[0] = samplesOut1_tmp_storage2
-		samplesOut1_tmp[1] = samplesOut1_tmp_storage2[channel_state[0].frame_length+2:]
-	}
 	for n = 0; n < int(min(decControl.NChannelsAPI, decControl.NChannelsInternal)); n++ {
 
 		/* Resample decoded signal to API_sampleRate */
 		ret += channel_state[n].resampler_state.Resampler(resample_out_ptr, samplesOut1_tmp[n][1:], nSamplesOutDec)
-
 		/* Interleave if stereo output and stereo stream */
 		if decControl.NChannelsAPI == 2 {
 			for i = 0; i < int(*nSamplesOut); i++ {
-				samplesOut[n+2*i] = resample_out_ptr[i]
+				samplesOut[n+2*i] = celt.INT16TORES(resample_out_ptr[i])
+			}
+		} else {
+			for i = 0; i < int(*nSamplesOut); i++ {
+				samplesOut[i] = celt.INT16TORES(resample_out_ptr[i])
 			}
 		}
 	}
@@ -346,7 +323,7 @@ func (decState *Decoder) Decode(decControl *DecControlStruct, lostFlag int, newP
 			ret += channel_state[1].resampler_state.Resampler(resample_out_ptr, samplesOut1_tmp[0][1:], nSamplesOutDec)
 
 			for i = 0; i < int(*nSamplesOut); i++ {
-				samplesOut[1+2*i] = resample_out_ptr[i]
+				samplesOut[1+2*i] = celt.INT16TORES(resample_out_ptr[i])
 			}
 		} else {
 			for i = 0; i < int(*nSamplesOut); i++ {

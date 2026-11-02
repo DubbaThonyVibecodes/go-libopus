@@ -80,6 +80,20 @@ float API, so the float code that the fixed-point build compiles
   either libm or Go's `math`, so a last-ulp difference is possible in
   theory; the conformance corpus has not shown one.
 
+## 1.6: 24-bit internal resolution
+
+libopus 1.6 defaults to `ENABLE_RES24`: the sample type at the SILK/CELT
+boundary and inside the encoder/decoder (`opus_res`) is a 32-bit integer
+holding 16-bit samples shifted left by 8, band energies (`celt_glog`) are
+Q24 and `celt_norm` is 32-bit. The port follows that default, so the
+16-bit `Encode`/`Decode` entry points convert with `INT16TORES`/`RES2INT16`
+exactly as the C does and the new `Encode24`/`Decode24` entry points
+expose the 24-bit samples. A few upstream `opus_val16` return types and
+locals truncate Q24 values to 16 bits (`logSum`, `patch_transient_decision`,
+`run_prefilter` thresholds); the port reproduces those truncations.
+`ENABLE_QEXT` (the quality extension) and `ENABLE_OPUS_CUSTOM_API` are
+configure-time opt-ins that default to off and are not ported.
+
 ## Not ported: the DNN features of 1.5+
 
 libopus 1.5 added neural extensions (DRED, deep PLC, OSCE, the loss

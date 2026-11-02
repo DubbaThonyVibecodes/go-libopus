@@ -86,7 +86,7 @@ func runCeltCase(t *testing.T, dir string, c testvec.Case) bool {
 		st.Ctl(CELT_SET_START_BAND_REQUEST, int32(0))
 		st.Ctl(CELT_SET_END_BAND_REQUEST, endband)
 		st.Ctl(CELT_SET_CHANNELS_REQUEST, int32(streamCh))
-		pcm := make([]int16, frame*ch)
+		pcm := make([]int32, frame*ch) // opus_res (24-bit resolution since 1.6)
 		var dec EcDec
 		dec.DecInit(p.Data[1:], uint32(len(p.Data)-1))
 		n := st.DecodeWithEc(p.Data[1:], len(p.Data)-1, pcm, frame, &dec, 0)
@@ -94,7 +94,11 @@ func runCeltCase(t *testing.T, dir string, c testvec.Case) bool {
 			t.Fatalf("packet %d: decode returned %d, want %d", i, n, frame)
 		}
 		got := fmt.Sprintf("n=%d rng=%08x", n, dec.Rng())
-		crc := crc32.ChecksumIEEE(testvec.S16Bytes(pcm))
+		pcm16 := make([]int16, len(pcm))
+		for j := range pcm {
+			pcm16[j] = RES2INT16(pcm[j])
+		}
+		crc := crc32.ChecksumIEEE(testvec.S16Bytes(pcm16))
 		gotCrc := fmt.Sprintf("crc=%08x", crc)
 		if !strings.Contains(line, got) || !strings.Contains(line, gotCrc) {
 			t.Fatalf("packet %d mismatch:\n got %s %s\nwant %s", i, got, gotCrc, line)

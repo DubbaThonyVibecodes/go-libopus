@@ -18,9 +18,12 @@ func Lpc(_lpc []int16, ac []int32, p int) {
 		for i = 0; i < p; i++ {
 			// Sum up this iteration's reflection coefficient
 			var rr int32 = 0
+			// #if defined (FIXED_POINT) && OPUS_FAST_INT64
+			var acc int64 = 0
 			for j = 0; j < i; j++ {
-				rr += MULT32_32_Q31(lpc[j], ac[i-j])
+				acc += int64(lpc[j]) * int64(ac[i-j])
 			}
+			rr = int32(SHR64(acc, 31))
 			rr += SHR32(ac[i+1], 6)
 			r = -FracDiv32(SHL32(rr, 6), error)
 			// Update LPC coefficients and total error
@@ -182,7 +185,7 @@ func Iir(_x []int32, den []int16, _y []int32, N, ord int, mem []int16, arch int)
 // optional window applied to overlap samples at each end. It returns the
 // shift that was applied.
 //
-// C: int _celt_autocorr(const opus_val16 *x, opus_val32 *ac, const opus_val16 *window, int overlap, int lag, int n, int arch)
+// C: int _celt_autocorr(const opus_val16 *x, opus_val32 *ac, const celt_coef *window, int overlap, int lag, int n, int arch)
 func Autocorr(x []int16, ac []int32, window []int16, overlap, lag, n int, arch int) int {
 	var d int32
 	var i, k int
@@ -199,24 +202,28 @@ func Autocorr(x []int16, ac []int32, window []int16, overlap, lag, n int, arch i
 			xx[i] = x[i]
 		}
 		for i = 0; i < overlap; i++ {
-			xx[i] = int16(MULT16_16_Q15(x[i], window[i]))
-			xx[n-i-1] = int16(MULT16_16_Q15(x[n-i-1], window[i]))
+			var w int16 = COEF2VAL16(window[i])
+			xx[i] = int16(MULT16_16_Q15(x[i], w))
+			xx[n-i-1] = int16(MULT16_16_Q15(x[n-i-1], w))
 		}
 		xptr = xx
 	}
 	shift = 0
 	{
 		var ac0 int32
+		var ac0_shift int = int(Ilog2(int32(n + (n >> 4))))
 		ac0 = int32(1 + (n << 7))
 		if n&1 != 0 {
-			ac0 += SHR32(MULT16_16(xptr[0], xptr[0]), 9)
+			ac0 += SHR32(MULT16_16(xptr[0], xptr[0]), ac0_shift)
 		}
 		for i = (n & 1); i < n; i += 2 {
-			ac0 += SHR32(MULT16_16(xptr[i], xptr[i]), 9)
-			ac0 += SHR32(MULT16_16(xptr[i+1], xptr[i+1]), 9)
+			ac0 += SHR32(MULT16_16(xptr[i], xptr[i]), ac0_shift)
+			ac0 += SHR32(MULT16_16(xptr[i+1], xptr[i+1]), ac0_shift)
 		}
+		// Consider the effect of rounding-to-nearest when scaling the signal.
+		ac0 += SHR32(ac0, 7)
 
-		shift = int(Ilog2(ac0)) - 30 + 10
+		shift = int(Ilog2(ac0)) - 30 + ac0_shift + 1
 		shift = (shift) / 2
 		if shift > 0 {
 			for i = 0; i < n; i++ {

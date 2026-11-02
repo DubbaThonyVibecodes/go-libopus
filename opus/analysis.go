@@ -180,18 +180,21 @@ func silk_resampler_down2_hp(
 		out32_hp = celt.ADD32(out32_hp, X)
 		S[2] = celt.ADD32(-in32, X)
 
-		hp_ener += int64(out32_hp) * int64(out32_hp)
+		// len2 can be up to 480, so we shift by 8 to make it fit.
+		hp_ener += celt.SHR64(int64(out32_hp)*int64(out32_hp), 8)
 		// Add, convert back to int16 and store to output
 		out[k] = celt.HALF32(out32)
 	}
-	// len2 can be up to 480, so we shift by 8 more to make it fit.   (FIXED_POINT)
-	hp_ener = hp_ener >> (2*celt.SIG_SHIFT + 8)
+	// Fitting in 32 bits.   (FIXED_POINT)
+	hp_ener = hp_ener >> (2 * celt.SIG_SHIFT)
+	if hp_ener > 2147483647 {
+		hp_ener = 2147483647
+	}
 	return int32(hp_ener)
 }
 
 // C: static opus_val32 downmix_and_resample(downmix_func downmix, const void *_x, opus_val32 *y, opus_val32 S[3], int subframe, int offset, int c1, int c2, int C, int Fs)
 func downmix_and_resample(downmix downmix_func, _x any, y []int32, S []int32, subframe int, offset int, c1 int, c2 int, C int, Fs int) int32 {
-	var scale int32
 	var j int
 	var ret int32 = 0
 
@@ -204,18 +207,16 @@ func downmix_and_resample(downmix downmix_func, _x any, y []int32, S []int32, su
 	} else if Fs == 16000 {
 		subframe = subframe * 2 / 3
 		offset = offset * 2 / 3
+	} else if Fs != 24000 {
+		celt.Assert(false)
 	}
 	tmp := make([]int32, subframe)
 
 	downmix(_x, tmp, subframe, offset, c1, c2, C)
-	scale = (1 << celt.SIG_SHIFT) // FIXED_POINT
-	if c2 == -2 {
-		scale /= int32(C)
-	} else if c2 > -1 {
-		scale /= 2
-	}
-	for j = 0; j < subframe; j++ {
-		tmp[j] *= scale
+	if (c2 == -2 && C == 2) || c2 > -1 {
+		for j = 0; j < subframe; j++ {
+			tmp[j] = celt.HALF32(tmp[j])
+		}
 	}
 	if Fs == 48000 {
 		ret = silk_resampler_down2_hp(S, y, tmp, subframe)

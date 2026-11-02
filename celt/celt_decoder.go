@@ -2,7 +2,16 @@ package celt
 
 // C: celt/celt_decoder.c — the CELT decoder.
 
-const DECODE_BUFFER_SIZE = 2048
+const DECODE_BUFFER_SIZE = DEC_PITCH_BUF_SIZE
+
+const (
+	FRAME_NONE         = 0
+	FRAME_NORMAL       = 1
+	FRAME_PLC_NOISE    = 2
+	FRAME_PLC_PERIODIC = 3
+	FRAME_PLC_NEURAL   = 4
+	FRAME_DRED         = 5
+)
 
 // The maximum pitch lag to allow in the pitch-based PLC. It's possible to save
 // CPU time in the PLC pitch search by making this smaller than MAX_PERIOD. The
@@ -37,6 +46,8 @@ type CELTDecoder struct {
 	error                 int
 	last_pitch_index      int
 	loss_duration         int
+	plc_duration          int
+	last_frame_type       int
 	skip_plc              int
 	postfilter_period     int
 	postfilter_period_old int
@@ -49,11 +60,11 @@ type CELTDecoder struct {
 	preemph_memD [2]int32
 
 	_decode_mem    []int32 // Size = channels*(DECODE_BUFFER_SIZE+mode->overlap)
+	oldEBands      []int32 // celt_glog, Size = 2*mode->nbEBands
+	oldLogE        []int32 // celt_glog, Size = 2*mode->nbEBands
+	oldLogE2       []int32 // celt_glog, Size = 2*mode->nbEBands
+	backgroundLogE []int32 // celt_glog, Size = 2*mode->nbEBands
 	lpc            []int16 // Size = channels*CELT_LPC_ORDER
-	oldEBands      []int16 // Size = 2*mode->nbEBands
-	oldLogE        []int16 // Size = 2*mode->nbEBands
-	oldLogE2       []int16 // Size = 2*mode->nbEBands
-	backgroundLogE []int16 // Size = 2*mode->nbEBands
 }
 
 // Make basic checks on the CELT state to ensure we don't end
@@ -62,7 +73,7 @@ type CELTDecoder struct {
 //
 // C: void validate_celt_decoder(CELTDecoder *st)
 func validate_celt_decoder(st *CELTDecoder) {
-	// CUSTOM_MODES is not defined.
+	// CUSTOM_MODES, ENABLE_OPUS_CUSTOM_API and ENABLE_QEXT are not defined.
 	celt_assert(st.mode == CustomModeCreate(48000, 960, nil))
 	celt_assert(st.overlap == 120)
 	celt_assert(st.end <= 21)
@@ -96,9 +107,9 @@ func DecoderGetSize(channels int) int {
 // C: int opus_custom_decoder_get_size(const CELTMode *mode, int channels)
 func CustomDecoderGetSize(mode *CELTMode, channels int) int {
 	size := 128 + // sizeof(struct CELTDecoder) excluding _decode_mem[1], approximate
-		channels*(DECODE_BUFFER_SIZE+mode.overlap)*4 +
-		channels*CELT_LPC_ORDER*2 +
-		4*2*mode.nbEBands*2
+		channels*(QEXT_SCALE(DECODE_BUFFER_SIZE)+mode.overlap)*4 +
+		4*2*mode.nbEBands*4 +
+		channels*CELT_LPC_ORDER*2
 	return size
 }
 
@@ -133,12 +144,12 @@ func (st *CELTDecoder) CustomDecoderInit(mode *CELTMode, channels int) int {
 	st.channels = channels
 	st.stream_channels = channels
 
-	st._decode_mem = make([]int32, channels*(DECODE_BUFFER_SIZE+mode.overlap))
+	st._decode_mem = make([]int32, channels*(QEXT_SCALE(DECODE_BUFFER_SIZE)+mode.overlap))
+	st.oldEBands = make([]int32, 2*mode.nbEBands)
+	st.oldLogE = make([]int32, 2*mode.nbEBands)
+	st.oldLogE2 = make([]int32, 2*mode.nbEBands)
+	st.backgroundLogE = make([]int32, 2*mode.nbEBands)
 	st.lpc = make([]int16, channels*CELT_LPC_ORDER)
-	st.oldEBands = make([]int16, 2*mode.nbEBands)
-	st.oldLogE = make([]int16, 2*mode.nbEBands)
-	st.oldLogE2 = make([]int16, 2*mode.nbEBands)
-	st.backgroundLogE = make([]int16, 2*mode.nbEBands)
 
 	st.downsample = 1
 	st.start = 0
@@ -157,10 +168,10 @@ func (st *CELTDecoder) CustomDecoderInit(mode *CELTMode, channels int) int {
 // quite common and we can make it faster by processing both channels in the
 // same loop, reducing overhead due to the dependency loop in the IIR filter.
 //
-// C: static void deemphasis_stereo_simple(celt_sig *in[], opus_val16 *pcm, int N, const opus_val16 coef0,
+// C: static void deemphasis_stereo_simple(celt_sig *in[], opus_res *pcm, int N, const opus_val16 coef0,
 //
 //	celt_sig *mem)
-func deemphasis_stereo_simple(in [][]int32, pcm []int16, N int, coef0 int16,
+func deemphasis_stereo_simple(in [][]int32, pcm []int32, N int, coef0 int16,
 	mem []int32) {
 	var x0, x1 []int32
 	var m0, m1 int32
@@ -172,21 +183,21 @@ func deemphasis_stereo_simple(in [][]int32, pcm []int16, N int, coef0 int16,
 	for j = 0; j < N; j++ {
 		var tmp0, tmp1 int32
 		// Add VERY_SMALL to x[] first to reduce dependency chain.
-		tmp0 = x0[j] + VERY_SMALL + m0
-		tmp1 = x1[j] + VERY_SMALL + m1
+		tmp0 = SATURATE(x0[j]+VERY_SMALL+m0, SIG_SAT)
+		tmp1 = SATURATE(x1[j]+VERY_SMALL+m1, SIG_SAT)
 		m0 = MULT16_32_Q15(coef0, tmp0)
 		m1 = MULT16_32_Q15(coef0, tmp1)
-		pcm[2*j] = SCALEOUT(SIG2WORD16(tmp0))
-		pcm[2*j+1] = SCALEOUT(SIG2WORD16(tmp1))
+		pcm[2*j] = SIG2RES(tmp0)
+		pcm[2*j+1] = SIG2RES(tmp1)
 	}
 	mem[0] = m0
 	mem[1] = m1
 }
 
-// C: static void deemphasis(celt_sig *in[], opus_val16 *pcm, int N, int C, int downsample, const opus_val16 *coef,
+// C: static void deemphasis(celt_sig *in[], opus_res *pcm, int N, int C, int downsample, const opus_val16 *coef,
 //
 //	celt_sig *mem, int accum)
-func deemphasis(in [][]int32, pcm []int16, N, C, downsample int, coef []int16,
+func deemphasis(in [][]int32, pcm []int32, N, C, downsample int, coef []int16,
 	mem []int32, accum int) {
 	var c int
 	var Nd int
@@ -204,14 +215,14 @@ func deemphasis(in [][]int32, pcm []int16, N, C, downsample int, coef []int16,
 	for {
 		var j int
 		var x []int32
-		var y []int16
+		var y []int32
 		var m int32 = mem[c]
 		x = in[c]
 		y = pcm[c:]
 		if downsample > 1 {
 			// Shortcut for the standard (non-custom modes) case
 			for j = 0; j < N; j++ {
-				var tmp int32 = x[j] + VERY_SMALL + m
+				var tmp int32 = SATURATE(x[j]+VERY_SMALL+m, SIG_SAT)
 				m = MULT16_32_Q15(coef0, tmp)
 				scratch[j] = tmp
 			}
@@ -220,15 +231,15 @@ func deemphasis(in [][]int32, pcm []int16, N, C, downsample int, coef []int16,
 			// Shortcut for the standard (non-custom modes) case
 			if accum != 0 {
 				for j = 0; j < N; j++ {
-					var tmp int32 = x[j] + VERY_SMALL + m
+					var tmp int32 = SATURATE(x[j]+m+VERY_SMALL, SIG_SAT)
 					m = MULT16_32_Q15(coef0, tmp)
-					y[j*C] = SAT16(ADD32(y[j*C], SCALEOUT(SIG2WORD16(tmp))))
+					y[j*C] = ADD_RES(y[j*C], SIG2RES(tmp))
 				}
 			} else {
 				for j = 0; j < N; j++ {
-					var tmp int32 = x[j] + VERY_SMALL + m
+					var tmp int32 = SATURATE(x[j]+VERY_SMALL+m, SIG_SAT)
 					m = MULT16_32_Q15(coef0, tmp)
-					y[j*C] = SCALEOUT(SIG2WORD16(tmp))
+					y[j*C] = SIG2RES(tmp)
 				}
 			}
 		}
@@ -238,11 +249,11 @@ func deemphasis(in [][]int32, pcm []int16, N, C, downsample int, coef []int16,
 			// Perform down-sampling
 			if accum != 0 {
 				for j = 0; j < Nd; j++ {
-					y[j*C] = SAT16(ADD32(y[j*C], SCALEOUT(SIG2WORD16(scratch[j*downsample]))))
+					y[j*C] = ADD_RES(y[j*C], SIG2RES(scratch[j*downsample]))
 				}
 			} else {
 				for j = 0; j < Nd; j++ {
-					y[j*C] = SCALEOUT(SIG2WORD16(scratch[j*downsample]))
+					y[j*C] = SIG2RES(scratch[j*downsample])
 				}
 			}
 		}
@@ -255,11 +266,11 @@ func deemphasis(in [][]int32, pcm []int16, N, C, downsample int, coef []int16,
 
 // C: static void celt_synthesis(const CELTMode *mode, celt_norm *X, celt_sig * out_syn[],
 //
-//	opus_val16 *oldBandE, int start, int effEnd, int C, int CC,
+//	celt_glog *oldBandE, int start, int effEnd, int C, int CC,
 //	int isTransient, int LM, int downsample,
-//	int silence, int arch)
-func celt_synthesis(mode *CELTMode, X []int16, out_syn [][]int32,
-	oldBandE []int16, start, effEnd, C, CC int,
+//	int silence, int arch ARG_QEXT(const CELTMode *qext_mode) ARG_QEXT(const celt_glog *qext_bandLogE) ARG_QEXT(int qext_end))
+func celt_synthesis(mode *CELTMode, X []int32, out_syn [][]int32,
+	oldBandE []int32, start, effEnd, C, CC int,
 	isTransient, LM, downsample int,
 	silence int, arch int) {
 	var c, i int
@@ -389,17 +400,18 @@ func tf_decode(start, end, isTransient int, tf_res []int, LM int, dec *EcDec) {
 	}
 }
 
-// C: static int celt_plc_pitch_search(celt_sig *decode_mem[2], int C, int arch)
-func celt_plc_pitch_search(decode_mem [][]int32, C int, arch int) int {
+// C: static int celt_plc_pitch_search(CELTDecoder *st, celt_sig *decode_mem[2], int C, int arch)
+func celt_plc_pitch_search(st *CELTDecoder, decode_mem [][]int32, C int, arch int) int {
 	var pitch_index int
+	_ = st
 	lp_pitch_buf := make([]int16, DECODE_BUFFER_SIZE>>1)
 	PitchDownsample(decode_mem, lp_pitch_buf,
-		DECODE_BUFFER_SIZE, C, arch)
+		DECODE_BUFFER_SIZE>>1, C, QEXT_SCALE(2), arch)
 	PitchSearch(lp_pitch_buf[(PLC_PITCH_LAG_MAX>>1):], lp_pitch_buf,
 		DECODE_BUFFER_SIZE-PLC_PITCH_LAG_MAX,
 		PLC_PITCH_LAG_MAX-PLC_PITCH_LAG_MIN, &pitch_index, arch)
 	pitch_index = PLC_PITCH_LAG_MAX - pitch_index
-	return pitch_index
+	return QEXT_SCALE(pitch_index)
 }
 
 // prefilter_and_fold is a plain function (not a method) because the
@@ -413,13 +425,15 @@ func prefilter_and_fold(st *CELTDecoder, N int) {
 	var overlap int
 	var decode_mem [2][]int32
 	var mode *CELTMode
+	var decode_buffer_size int
+	decode_buffer_size = QEXT_SCALE(DECODE_BUFFER_SIZE)
 	mode = st.mode
 	overlap = st.overlap
 	CC = st.channels
 	etmp := make([]int32, overlap)
 	c = 0
 	for {
-		decode_mem[c] = st._decode_mem[c*(DECODE_BUFFER_SIZE+overlap) : (c+1)*(DECODE_BUFFER_SIZE+overlap)]
+		decode_mem[c] = st._decode_mem[c*(decode_buffer_size+overlap) : (c+1)*(decode_buffer_size+overlap)]
 		c++
 		if c >= CC {
 			break
@@ -431,7 +445,7 @@ func prefilter_and_fold(st *CELTDecoder, N int) {
 		// Apply the pre-filter to the MDCT overlap for the next frame because
 		// the post-filter will be re-applied in the decoder after the MDCT
 		// overlap.
-		comb_filter(etmp, 0, decode_mem[c], DECODE_BUFFER_SIZE-N,
+		comb_filter(etmp, 0, decode_mem[c], decode_buffer_size-N,
 			st.postfilter_period_old, st.postfilter_period, overlap,
 			-st.postfilter_gain_old, -st.postfilter_gain,
 			st.postfilter_tapset_old, st.postfilter_tapset, nil, 0, st.arch)
@@ -439,9 +453,9 @@ func prefilter_and_fold(st *CELTDecoder, N int) {
 		// Simulate TDAC on the concealed audio so that it blends with the
 		// MDCT of the next frame.
 		for i = 0; i < overlap/2; i++ {
-			decode_mem[c][DECODE_BUFFER_SIZE-N+i] =
-				MULT16_32_Q15(mode.window[i], etmp[overlap-1-i]) +
-					MULT16_32_Q15(mode.window[overlap-i-1], etmp[i])
+			decode_mem[c][decode_buffer_size-N+i] =
+				MULT16_32_Q15(COEF2VAL16(mode.window[i]), etmp[overlap-1-i]) +
+					MULT16_32_Q15(COEF2VAL16(mode.window[overlap-i-1]), etmp[i])
 		}
 		c++
 		if c >= CC {
@@ -461,15 +475,18 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 	var decode_mem [2][]int32
 	var out_syn [2][]int32
 	var lpc []int16
-	var oldBandE, oldLogE, oldLogE2, backgroundLogE []int16
+	var oldBandE, oldLogE, oldLogE2, backgroundLogE []int32
 	var mode *CELTMode
 	var nbEBands int
 	var overlap int
 	var start int
 	var loss_duration int
-	var noise_based int
+	var curr_frame_type int
 	var eBands []int16
-
+	var decode_buffer_size int
+	var max_period int
+	decode_buffer_size = QEXT_SCALE(DECODE_BUFFER_SIZE)
+	max_period = QEXT_SCALE(MAX_PERIOD)
 	mode = st.mode
 	nbEBands = mode.nbEBands
 	overlap = mode.overlap
@@ -477,38 +494,42 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 
 	c = 0
 	for {
-		decode_mem[c] = st._decode_mem[c*(DECODE_BUFFER_SIZE+overlap) : (c+1)*(DECODE_BUFFER_SIZE+overlap)]
-		out_syn[c] = decode_mem[c][DECODE_BUFFER_SIZE-N:]
+		decode_mem[c] = st._decode_mem[c*(decode_buffer_size+overlap) : (c+1)*(decode_buffer_size+overlap)]
+		out_syn[c] = decode_mem[c][decode_buffer_size-N:]
 		c++
 		if c >= C {
 			break
 		}
 	}
-	lpc = st.lpc
 	oldBandE = st.oldEBands
 	oldLogE = st.oldLogE
 	oldLogE2 = st.oldLogE2
 	backgroundLogE = st.backgroundLogE
+	lpc = st.lpc
 	_ = oldLogE
 	_ = oldLogE2
 
 	loss_duration = st.loss_duration
 	start = st.start
+	curr_frame_type = FRAME_PLC_PERIODIC
+	if st.plc_duration >= 40 || start != 0 || st.skip_plc != 0 {
+		curr_frame_type = FRAME_PLC_NOISE
+	}
 	// ENABLE_DEEP_PLC is not defined.
-	noise_based = b2i(loss_duration >= 40 || start != 0 || st.skip_plc != 0)
-	if noise_based != 0 {
+
+	if curr_frame_type == FRAME_PLC_NOISE {
 		// Noise-based PLC/CNG
 		var seed uint32
 		var end int
 		var effEnd int
-		var decay int16
+		var decay int32
 		end = st.end
 		effEnd = IMAX(start, IMIN(end, mode.effEBands))
 
-		X := make([]int16, C*N) // Interleaved normalised MDCTs
+		X := make([]int32, C*N) // Interleaved normalised MDCTs
 		c = 0
 		for {
-			copy(decode_mem[c][:DECODE_BUFFER_SIZE-N+overlap], decode_mem[c][N:])
+			copy(decode_mem[c][:decode_buffer_size-N+overlap], decode_mem[c][N:])
 			c++
 			if c >= C {
 				break
@@ -521,14 +542,14 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 
 		// Energy decay
 		if loss_duration == 0 {
-			decay = QCONST16(1.5, DB_SHIFT)
+			decay = GCONST(1.5)
 		} else {
-			decay = QCONST16(.5, DB_SHIFT)
+			decay = GCONST(.5)
 		}
 		c = 0
 		for {
 			for i = start; i < end; i++ {
-				oldBandE[c*nbEBands+i] = MAX16(backgroundLogE[c*nbEBands+i], oldBandE[c*nbEBands+i]-decay)
+				oldBandE[c*nbEBands+i] = MAXG(backgroundLogE[c*nbEBands+i], oldBandE[c*nbEBands+i]-decay)
 			}
 			c++
 			if c >= C {
@@ -545,14 +566,39 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 				blen = int(eBands[i+1]-eBands[i]) << uint(LM)
 				for j = 0; j < blen; j++ {
 					seed = LcgRand(seed)
-					X[boffs+j] = int16(int32(seed) >> 20)
+					X[boffs+j] = SHL32(int32(seed)>>20, NORM_SHIFT-14)
 				}
-				RenormaliseVector(X[boffs:], blen, Q15ONE, st.arch)
+				RenormaliseVector(X[boffs:], blen, Q31ONE, st.arch)
 			}
 		}
 		st.rng = seed
 
 		celt_synthesis(mode, X, out_syn[:], oldBandE, start, effEnd, C, C, 0, LM, st.downsample, 0, st.arch)
+
+		// Run the postfilter with the last parameters.
+		c = 0
+		for {
+			st.postfilter_period = IMAX(st.postfilter_period, COMBFILTER_MINPERIOD)
+			st.postfilter_period_old = IMAX(st.postfilter_period_old, COMBFILTER_MINPERIOD)
+			so := decode_buffer_size - N // index of out_syn[c][0] in decode_mem[c]
+			comb_filter(decode_mem[c], so, decode_mem[c], so, st.postfilter_period_old, st.postfilter_period, mode.shortMdctSize,
+				st.postfilter_gain_old, st.postfilter_gain, st.postfilter_tapset_old, st.postfilter_tapset,
+				mode.window, overlap, st.arch)
+			if LM != 0 {
+				comb_filter(decode_mem[c], so+mode.shortMdctSize, decode_mem[c], so+mode.shortMdctSize, st.postfilter_period, st.postfilter_period, N-mode.shortMdctSize,
+					st.postfilter_gain, st.postfilter_gain, st.postfilter_tapset, st.postfilter_tapset,
+					mode.window, overlap, st.arch)
+			}
+
+			c++
+			if c >= C {
+				break
+			}
+		}
+		st.postfilter_period_old = st.postfilter_period
+		st.postfilter_gain_old = st.postfilter_gain
+		st.postfilter_tapset_old = st.postfilter_tapset
+
 		st.prefilter_and_fold = 0
 		// Skip regular PLC until we get two consecutive packets.
 		st.skip_plc = 1
@@ -562,21 +608,25 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 		var window []int16
 		var fade int16 = Q15ONE
 		var pitch_index int
+		var curr_neural int
+		var last_neural int
 
-		if loss_duration == 0 {
-			// ENABLE_DEEP_PLC is not defined: no update_plc_state().
-			pitch_index = celt_plc_pitch_search(decode_mem[:], C, st.arch)
+		curr_neural = b2i(curr_frame_type == FRAME_PLC_NEURAL || curr_frame_type == FRAME_DRED)
+		last_neural = b2i(st.last_frame_type == FRAME_PLC_NEURAL || st.last_frame_type == FRAME_DRED)
+		if st.last_frame_type != FRAME_PLC_PERIODIC && !(last_neural != 0 && curr_neural != 0) {
+			pitch_index = celt_plc_pitch_search(st, decode_mem[:], C, st.arch)
 			st.last_pitch_index = pitch_index
 		} else {
 			pitch_index = st.last_pitch_index
 			fade = QCONST16(.8, 15)
 		}
+		// ENABLE_DEEP_PLC is not defined: no update_plc_state().
 
 		// We want the excitation for 2 pitch periods in order to look for a
-		// decaying signal, but we can't get more than MAX_PERIOD.
-		exc_length = IMIN(2*pitch_index, MAX_PERIOD)
+		// decaying signal, but we can't get more than max_period.
+		exc_length = IMIN(2*pitch_index, max_period)
 
-		_exc := make([]int16, MAX_PERIOD+CELT_LPC_ORDER)
+		_exc := make([]int16, max_period+CELT_LPC_ORDER)
 		fir_tmp := make([]int16, exc_length)
 		exc := _exc[CELT_LPC_ORDER:]
 		window = mode.window
@@ -592,16 +642,16 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 
 			buf = decode_mem[c]
 			// (C: exc[i-CELT_LPC_ORDER]; exc = _exc+CELT_LPC_ORDER.)
-			for i = 0; i < MAX_PERIOD+CELT_LPC_ORDER; i++ {
-				_exc[i] = SROUND16(buf[DECODE_BUFFER_SIZE-MAX_PERIOD-CELT_LPC_ORDER+i], SIG_SHIFT)
+			for i = 0; i < max_period+CELT_LPC_ORDER; i++ {
+				_exc[i] = SROUND16(buf[decode_buffer_size-max_period-CELT_LPC_ORDER+i], SIG_SHIFT)
 			}
 
-			if loss_duration == 0 {
+			if st.last_frame_type != FRAME_PLC_PERIODIC && !(last_neural != 0 && curr_neural != 0) {
 				var ac [CELT_LPC_ORDER + 1]int32
-				// Compute LPC coefficients for the last MAX_PERIOD samples before
+				// Compute LPC coefficients for the last max_period samples before
 				// the first loss so we can work in the excitation-filter domain.
 				Autocorr(exc, ac[:], window, overlap,
-					CELT_LPC_ORDER, MAX_PERIOD, st.arch)
+					CELT_LPC_ORDER, max_period, st.arch)
 				// Add a noise floor of -40 dB.
 				ac[0] += SHR32(ac[0], 13)
 				// Use lag windowing to stabilize the Levinson-Durbin recursion.
@@ -634,10 +684,10 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 				// Compute the excitation for exc_length samples before the loss. We need the copy
 				// because celt_fir() cannot filter in-place.
 				// (Fir reads CELT_LPC_ORDER samples behind its input, so the input
-				// slice starts at exc+MAX_PERIOD-exc_length-CELT_LPC_ORDER.)
-				Fir(_exc[MAX_PERIOD-exc_length:], lpc[c*CELT_LPC_ORDER:],
+				// slice starts at exc+max_period-exc_length-CELT_LPC_ORDER.)
+				Fir(_exc[max_period-exc_length:], lpc[c*CELT_LPC_ORDER:],
 					fir_tmp, exc_length, CELT_LPC_ORDER, st.arch)
-				copy(exc[MAX_PERIOD-exc_length:MAX_PERIOD], fir_tmp[:exc_length])
+				copy(exc[max_period-exc_length:max_period], fir_tmp[:exc_length])
 			}
 
 			// Check if the waveform is decaying, and if so how fast.
@@ -646,13 +696,13 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 			{
 				var E1, E2 int32 = 1, 1
 				var decay_length int
-				var shift int = IMAX(0, 2*int(Zlog2(Maxabs16(exc[MAX_PERIOD-exc_length:], exc_length)))-20)
+				var shift int = IMAX(0, 2*int(Zlog2(Maxabs16(exc[max_period-exc_length:], exc_length)))-20)
 				decay_length = exc_length >> 1
 				for i = 0; i < decay_length; i++ {
 					var e int16
-					e = exc[MAX_PERIOD-decay_length+i]
+					e = exc[max_period-decay_length+i]
 					E1 += SHR32(MULT16_16(e, e), shift)
-					e = exc[MAX_PERIOD-2*decay_length+i]
+					e = exc[max_period-2*decay_length+i]
 					E2 += SHR32(MULT16_16(e, e), shift)
 				}
 				E1 = MIN32(E1, E2)
@@ -662,12 +712,12 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 			// Move the decoder memory one frame to the left to give us room to
 			// add the data for the new frame. We ignore the overlap that extends
 			// past the end of the buffer, because we aren't going to use it.
-			copy(buf[:DECODE_BUFFER_SIZE-N], buf[N:DECODE_BUFFER_SIZE])
+			copy(buf[:decode_buffer_size-N], buf[N:decode_buffer_size])
 
 			// Extrapolate from the end of the excitation with a period of
 			// "pitch_index", scaling down each period by an additional factor of
 			// "decay".
-			extrapolation_offset = MAX_PERIOD - pitch_index
+			extrapolation_offset = max_period - pitch_index
 			// We need to extrapolate enough samples to cover a complete MDCT
 			// window (including overlap/2 samples on both sides).
 			extrapolation_len = N + overlap
@@ -681,30 +731,30 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 					j -= pitch_index
 					attenuation = int16(MULT16_16_Q15(attenuation, decay))
 				}
-				buf[DECODE_BUFFER_SIZE-N+i] =
+				buf[decode_buffer_size-N+i] =
 					SHL32(EXTEND32(MULT16_16_Q15(attenuation,
 						exc[extrapolation_offset+j])), SIG_SHIFT)
 				// Compute the energy of the previously decoded signal whose
 				// excitation we're copying.
 				tmp = SROUND16(
-					buf[DECODE_BUFFER_SIZE-MAX_PERIOD-N+extrapolation_offset+j],
+					buf[decode_buffer_size-max_period-N+extrapolation_offset+j],
 					SIG_SHIFT)
-				S1 += SHR32(MULT16_16(tmp, tmp), 10)
+				S1 += SHR32(MULT16_16(tmp, tmp), 11)
 			}
 			{
 				var lpc_mem [CELT_LPC_ORDER]int16
 				// Copy the last decoded samples (prior to the overlap region) to
 				// synthesis filter memory so we can have a continuous signal.
 				for i = 0; i < CELT_LPC_ORDER; i++ {
-					lpc_mem[i] = SROUND16(buf[DECODE_BUFFER_SIZE-N-1-i], SIG_SHIFT)
+					lpc_mem[i] = SROUND16(buf[decode_buffer_size-N-1-i], SIG_SHIFT)
 				}
 				// Apply the synthesis filter to convert the excitation back into
 				// the signal domain.
-				Iir(buf[DECODE_BUFFER_SIZE-N:], lpc[c*CELT_LPC_ORDER:],
-					buf[DECODE_BUFFER_SIZE-N:], extrapolation_len, CELT_LPC_ORDER,
+				Iir(buf[decode_buffer_size-N:], lpc[c*CELT_LPC_ORDER:],
+					buf[decode_buffer_size-N:], extrapolation_len, CELT_LPC_ORDER,
 					lpc_mem[:], st.arch)
 				for i = 0; i < extrapolation_len; i++ {
-					buf[DECODE_BUFFER_SIZE-N+i] = SATURATE(buf[DECODE_BUFFER_SIZE-N+i], SIG_SAT)
+					buf[decode_buffer_size-N+i] = SATURATE(buf[decode_buffer_size-N+i], SIG_SAT)
 				}
 			}
 
@@ -714,25 +764,25 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 			{
 				var S2 int32 = 0
 				for i = 0; i < extrapolation_len; i++ {
-					var tmp int16 = SROUND16(buf[DECODE_BUFFER_SIZE-N+i], SIG_SHIFT)
-					S2 += SHR32(MULT16_16(tmp, tmp), 10)
+					var tmp int16 = SROUND16(buf[decode_buffer_size-N+i], SIG_SHIFT)
+					S2 += SHR32(MULT16_16(tmp, tmp), 11)
 				}
 				// This checks for an "explosion" in the synthesis.
 				if !(S1 > SHR32(S2, 2)) {
 					for i = 0; i < extrapolation_len; i++ {
-						buf[DECODE_BUFFER_SIZE-N+i] = 0
+						buf[decode_buffer_size-N+i] = 0
 					}
 				} else if S1 < S2 {
 					var ratio int16 = int16(Sqrt(FracDiv32(SHR32(S1, 1)+1, S2+1)))
 					for i = 0; i < overlap; i++ {
 						var tmp_g int16 = int16(int32(Q15ONE) -
-							MULT16_16_Q15(window[i], int32(Q15ONE)-int32(ratio)))
-						buf[DECODE_BUFFER_SIZE-N+i] =
-							MULT16_32_Q15(tmp_g, buf[DECODE_BUFFER_SIZE-N+i])
+							MULT16_16_Q15(COEF2VAL16(window[i]), int32(Q15ONE)-int32(ratio)))
+						buf[decode_buffer_size-N+i] =
+							MULT16_32_Q15(tmp_g, buf[decode_buffer_size-N+i])
 					}
 					for i = overlap; i < extrapolation_len; i++ {
-						buf[DECODE_BUFFER_SIZE-N+i] =
-							MULT16_32_Q15(ratio, buf[DECODE_BUFFER_SIZE-N+i])
+						buf[decode_buffer_size-N+i] =
+							MULT16_32_Q15(ratio, buf[decode_buffer_size-N+i])
 					}
 				}
 			}
@@ -746,8 +796,11 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 		st.prefilter_and_fold = 1
 	}
 
-	// Saturate to soemthing large to avoid wrap-around.
+	// Saturate to something large to avoid wrap-around.
 	st.loss_duration = IMIN(10000, loss_duration+(1<<uint(LM)))
+	st.plc_duration = IMIN(10000, st.plc_duration+(1<<uint(LM)))
+	// ENABLE_DRED is not defined.
+	st.last_frame_type = curr_frame_type
 }
 
 // DecodeWithEcDred decodes one frame. data==nil or len<=1 triggers packet loss
@@ -756,20 +809,20 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 //
 // C: int celt_decode_with_ec_dred(CELTDecoder * OPUS_RESTRICT st, const unsigned char *data,
 //
-//	int len, opus_val16 * OPUS_RESTRICT pcm, int frame_size, ec_dec *dec, int accum)
-func (st *CELTDecoder) DecodeWithEcDred(data []byte, length int, pcm []int16, frame_size int, dec *EcDec, accum int) int {
+//	int len, opus_res * OPUS_RESTRICT pcm, int frame_size, ec_dec *dec, int accum
+//	ARG_QEXT(const unsigned char *qext_payload) ARG_QEXT(int qext_payload_len))
+func (st *CELTDecoder) DecodeWithEcDred(data []byte, length int, pcm []int32, frame_size int, dec *EcDec, accum int) int {
 	var c, i, N int
 	var spread_decision int
 	var bits int32
 	var _dec EcDec
 	var decode_mem [2][]int32
 	var out_syn [2][]int32
-	var lpc []int16
-	var oldBandE, oldLogE, oldLogE2, backgroundLogE []int16
+	var oldBandE, oldLogE, oldLogE2, backgroundLogE []int32
 
 	var shortBlocks int
 	var isTransient int
-	var max_background_increase int16
+	var max_background_increase int32
 	var intra_ener int
 	CC := st.channels
 	var LM, M int
@@ -795,6 +848,10 @@ func (st *CELTDecoder) DecodeWithEcDred(data []byte, length int, pcm []int16, fr
 	var nbEBands int
 	var overlap int
 	var eBands []int16
+	var decode_buffer_size int
+	// ENABLE_QEXT is not defined: qext_bytes is 0.
+	const qext_bytes = 0
+	decode_buffer_size = QEXT_SCALE(DECODE_BUFFER_SIZE)
 
 	VALIDATE_CELT_DECODER(st)
 	mode = st.mode
@@ -805,12 +862,10 @@ func (st *CELTDecoder) DecodeWithEcDred(data []byte, length int, pcm []int16, fr
 	end = st.end
 	frame_size *= st.downsample
 
-	lpc = st.lpc
 	oldBandE = st.oldEBands
 	oldLogE = st.oldLogE
 	oldLogE2 = st.oldLogE2
 	backgroundLogE = st.backgroundLogE
-	_ = lpc
 
 	{
 		for LM = 0; LM <= mode.maxLM; LM++ {
@@ -831,8 +886,8 @@ func (st *CELTDecoder) DecodeWithEcDred(data []byte, length int, pcm []int16, fr
 	N = M * mode.shortMdctSize
 	c = 0
 	for {
-		decode_mem[c] = st._decode_mem[c*(DECODE_BUFFER_SIZE+overlap) : (c+1)*(DECODE_BUFFER_SIZE+overlap)]
-		out_syn[c] = decode_mem[c][DECODE_BUFFER_SIZE-N:]
+		decode_mem[c] = st._decode_mem[c*(decode_buffer_size+overlap) : (c+1)*(decode_buffer_size+overlap)]
+		out_syn[c] = decode_mem[c][decode_buffer_size-N:]
 		c++
 		if c >= CC {
 			break
@@ -864,7 +919,7 @@ func (st *CELTDecoder) DecodeWithEcDred(data []byte, length int, pcm []int16, fr
 
 	if C == 1 {
 		for i = 0; i < nbEBands; i++ {
-			oldBandE[i] = MAX16(oldBandE[i], oldBandE[nbEBands+i])
+			oldBandE[i] = MAXG(oldBandE[i], oldBandE[nbEBands+i])
 		}
 	}
 
@@ -925,27 +980,28 @@ func (st *CELTDecoder) DecodeWithEcDred(data []byte, length int, pcm []int16, fr
 	if intra_ener == 0 && st.loss_duration != 0 {
 		c = 0
 		for {
-			var safety int16 = 0
+			var safety int32 = 0
 			var missing int = IMIN(10, st.loss_duration>>uint(LM))
 			if LM == 0 {
-				safety = QCONST16(1.5, DB_SHIFT)
+				safety = GCONST(1.5)
 			} else if LM == 1 {
-				safety = QCONST16(.5, DB_SHIFT)
+				safety = GCONST(.5)
 			}
 			for i = start; i < end; i++ {
-				if oldBandE[c*nbEBands+i] < MAX16(oldLogE[c*nbEBands+i], oldLogE2[c*nbEBands+i]) {
+				if oldBandE[c*nbEBands+i] < MAXG(oldLogE[c*nbEBands+i], oldLogE2[c*nbEBands+i]) {
 					// If energy is going down already, continue the trend.
 					var slope int32
 					var E0, E1, E2 int32
-					E0 = int32(oldBandE[c*nbEBands+i])
-					E1 = int32(oldLogE[c*nbEBands+i])
-					E2 = int32(oldLogE2[c*nbEBands+i])
+					E0 = oldBandE[c*nbEBands+i]
+					E1 = oldLogE[c*nbEBands+i]
+					E2 = oldLogE2[c*nbEBands+i]
 					slope = MAX32(E1-E0, HALF32(E2-E0))
+					slope = MING(slope, GCONST(2.0))
 					E0 -= MAX32(0, int32(1+missing)*slope)
-					oldBandE[c*nbEBands+i] = int16(MAX32(-int32(QCONST16(20., DB_SHIFT)), E0))
+					oldBandE[c*nbEBands+i] = MAX32(-GCONST(20.0), E0)
 				} else {
 					// Otherwise take the min of the last frames.
-					oldBandE[c*nbEBands+i] = MIN16(MIN16(oldBandE[c*nbEBands+i], oldLogE[c*nbEBands+i]), oldLogE2[c*nbEBands+i])
+					oldBandE[c*nbEBands+i] = MING(MING(oldBandE[c*nbEBands+i], oldLogE[c*nbEBands+i]), oldLogE2[c*nbEBands+i])
 				}
 				// Shorter frames have more natural fluctuations -- play it safe.
 				oldBandE[c*nbEBands+i] -= safety
@@ -1028,11 +1084,15 @@ func (st *CELTDecoder) DecodeWithEcDred(data []byte, length int, pcm []int16, fr
 		alloc_trim, &intensity, &dual_stereo, bits, &balance, pulses,
 		fine_quant, fine_priority, C, LM, dec, 0, 0, 0)
 
-	UnquantFineEnergy(mode, start, end, oldBandE, fine_quant, dec, C)
+	UnquantFineEnergy(mode, start, end, oldBandE, nil, fine_quant, dec, C)
+
+	X := make([]int32, C*N) // Interleaved normalised MDCTs
+
+	// ENABLE_QEXT is not defined.
 
 	c = 0
 	for {
-		copy(decode_mem[c][:DECODE_BUFFER_SIZE-N+overlap], decode_mem[c][N:])
+		copy(decode_mem[c][:decode_buffer_size-N+overlap], decode_mem[c][N:])
 		c++
 		if c >= CC {
 			break
@@ -1042,9 +1102,7 @@ func (st *CELTDecoder) DecodeWithEcDred(data []byte, length int, pcm []int16, fr
 	// Decode fixed codebook
 	collapse_masks := make([]uint8, C*nbEBands)
 
-	X := make([]int16, C*N) // Interleaved normalised MDCTs
-
-	var Y []int16
+	var Y []int32
 	if C == 2 {
 		Y = X[N:]
 	}
@@ -1057,17 +1115,20 @@ func (st *CELTDecoder) DecodeWithEcDred(data []byte, length int, pcm []int16, fr
 		anti_collapse_on = int(dec.DecBits(1))
 	}
 
-	UnquantEnergyFinalise(mode, start, end, oldBandE,
+	var finaliseBandE []int32 = oldBandE
+	if qext_bytes > 0 {
+		finaliseBandE = nil
+	}
+	UnquantEnergyFinalise(mode, start, end, finaliseBandE,
 		fine_quant, fine_priority, length*8-dec.Tell(), dec, C)
-
 	if anti_collapse_on != 0 {
 		AntiCollapse(mode, X, collapse_masks, LM, C, N,
-			start, end, oldBandE, oldLogE, oldLogE2, pulses, st.rng, st.arch)
+			start, end, oldBandE, oldLogE, oldLogE2, pulses, st.rng, 0, st.arch)
 	}
 
 	if silence != 0 {
 		for i = 0; i < C*nbEBands; i++ {
-			oldBandE[i] = -QCONST16(28.0, DB_SHIFT)
+			oldBandE[i] = -GCONST(28.0)
 		}
 	}
 	if st.prefilter_and_fold != 0 {
@@ -1080,7 +1141,7 @@ func (st *CELTDecoder) DecodeWithEcDred(data []byte, length int, pcm []int16, fr
 	for {
 		st.postfilter_period = IMAX(st.postfilter_period, COMBFILTER_MINPERIOD)
 		st.postfilter_period_old = IMAX(st.postfilter_period_old, COMBFILTER_MINPERIOD)
-		so := DECODE_BUFFER_SIZE - N // index of out_syn[c][0] in decode_mem[c]
+		so := decode_buffer_size - N // index of out_syn[c][0] in decode_mem[c]
 		comb_filter(decode_mem[c], so, decode_mem[c], so, st.postfilter_period_old, st.postfilter_period, mode.shortMdctSize,
 			st.postfilter_gain_old, st.postfilter_gain, st.postfilter_tapset_old, st.postfilter_tapset,
 			mode.window, overlap, st.arch)
@@ -1116,28 +1177,28 @@ func (st *CELTDecoder) DecodeWithEcDred(data []byte, length int, pcm []int16, fr
 		copy(oldLogE[:2*nbEBands], oldBandE[:2*nbEBands])
 	} else {
 		for i = 0; i < 2*nbEBands; i++ {
-			oldLogE[i] = MIN16(oldLogE[i], oldBandE[i])
+			oldLogE[i] = MING(oldLogE[i], oldBandE[i])
 		}
 	}
 	// In normal circumstances, we only allow the noise floor to increase by
 	// up to 2.4 dB/second, but when we're in DTX we give the weight of
 	// all missing packets to the update packet.
-	max_background_increase = int16(IMIN(160, st.loss_duration+M) * int(QCONST16(0.001, DB_SHIFT)))
+	max_background_increase = int32(IMIN(160, st.loss_duration+M)) * GCONST(0.001)
 	for i = 0; i < 2*nbEBands; i++ {
-		backgroundLogE[i] = MIN16(backgroundLogE[i]+max_background_increase, oldBandE[i])
+		backgroundLogE[i] = MING(backgroundLogE[i]+max_background_increase, oldBandE[i])
 	}
 	// In case start or end were to change
 	c = 0
 	for {
 		for i = 0; i < start; i++ {
 			oldBandE[c*nbEBands+i] = 0
-			oldLogE[c*nbEBands+i] = -QCONST16(28.0, DB_SHIFT)
-			oldLogE2[c*nbEBands+i] = -QCONST16(28.0, DB_SHIFT)
+			oldLogE[c*nbEBands+i] = -GCONST(28.0)
+			oldLogE2[c*nbEBands+i] = -GCONST(28.0)
 		}
 		for i = end; i < nbEBands; i++ {
 			oldBandE[c*nbEBands+i] = 0
-			oldLogE[c*nbEBands+i] = -QCONST16(28.0, DB_SHIFT)
-			oldLogE2[c*nbEBands+i] = -QCONST16(28.0, DB_SHIFT)
+			oldLogE[c*nbEBands+i] = -GCONST(28.0)
+			oldLogE2[c*nbEBands+i] = -GCONST(28.0)
 		}
 		c++
 		if c >= 2 {
@@ -1148,6 +1209,8 @@ func (st *CELTDecoder) DecodeWithEcDred(data []byte, length int, pcm []int16, fr
 
 	deemphasis(out_syn[:], pcm, N, CC, st.downsample, mode.preemph[:], st.preemph_memD[:], accum)
 	st.loss_duration = 0
+	st.plc_duration = 0
+	st.last_frame_type = FRAME_NORMAL
 	st.prefilter_and_fold = 0
 	if dec.Tell() > 8*length {
 		return OPUS_INTERNAL_ERROR
@@ -1163,8 +1226,8 @@ func (st *CELTDecoder) DecodeWithEcDred(data []byte, length int, pcm []int16, fr
 //
 // C: int celt_decode_with_ec(CELTDecoder * OPUS_RESTRICT st, const unsigned char *data,
 //
-//	int len, opus_val16 * OPUS_RESTRICT pcm, int frame_size, ec_dec *dec, int accum)
-func (st *CELTDecoder) DecodeWithEc(data []byte, length int, pcm []int16, frame_size int, dec *EcDec, accum int) int {
+//	int len, opus_res * OPUS_RESTRICT pcm, int frame_size, ec_dec *dec, int accum)
+func (st *CELTDecoder) DecodeWithEc(data []byte, length int, pcm []int32, frame_size int, dec *EcDec, accum int) int {
 	return st.DecodeWithEcDred(data, length, pcm, frame_size, dec, accum)
 }
 
@@ -1223,6 +1286,8 @@ func (st *CELTDecoder) Ctl(request int, args ...any) int {
 		st.error = 0
 		st.last_pitch_index = 0
 		st.loss_duration = 0
+		st.plc_duration = 0
+		st.last_frame_type = 0
 		st.skip_plc = 0
 		st.postfilter_period = 0
 		st.postfilter_period_old = 0
@@ -1239,10 +1304,11 @@ func (st *CELTDecoder) Ctl(request int, args ...any) int {
 		clear(st.oldLogE2)
 		clear(st.backgroundLogE)
 		for i = 0; i < 2*st.mode.nbEBands; i++ {
-			st.oldLogE[i] = -QCONST16(28.0, DB_SHIFT)
-			st.oldLogE2[i] = -QCONST16(28.0, DB_SHIFT)
+			st.oldLogE[i] = -GCONST(28.0)
+			st.oldLogE2[i] = -GCONST(28.0)
 		}
 		st.skip_plc = 1
+		st.last_frame_type = FRAME_NONE
 	case OPUS_GET_PITCH_REQUEST:
 		value, ok := args[0].(*int32)
 		if !ok || value == nil {

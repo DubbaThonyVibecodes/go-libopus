@@ -97,8 +97,8 @@ func MultistreamDecoderCreate(Fs int32, channels int, streams int, coupled_strea
 	return st
 }
 
-// C: typedef void (*opus_copy_channel_out_func)(void *dst, int dst_stride, int dst_channel, const opus_val16 *src, int src_stride, int frame_size, void *user_data)   (src/opus_private.h)
-type opus_copy_channel_out_func func(dst any, dst_stride int, dst_channel int, src []int16, src_stride int, frame_size int, user_data any)
+// C: typedef void (*opus_copy_channel_out_func)(void *dst, int dst_stride, int dst_channel, const opus_res *src, int src_stride, int frame_size, void *user_data)   (src/opus_private.h)
+type opus_copy_channel_out_func func(dst any, dst_stride int, dst_channel int, src []int32, src_stride int, frame_size int, user_data any)
 
 // C: static int opus_multistream_packet_validate(const unsigned char *data, opus_int32 len, int nb_streams, opus_int32 Fs)
 func opus_multistream_packet_validate(data []byte, length int32, nb_streams int, Fs int32) int {
@@ -143,7 +143,7 @@ func (st *OpusMSDecoder) MultistreamDecodeNative(data []byte, length int32, pcm 
 	// Limit frame_size to avoid excessive stack allocations.
 	celt.MustSucceed(st.Ctl(OPUS_GET_SAMPLE_RATE_REQUEST, &Fs))
 	frame_size = IMIN(frame_size, int(Fs/25*3))
-	buf := make([]int16, 2*frame_size)
+	buf := make([]int32, 2*frame_size)
 
 	if length == 0 {
 		do_plc = 1
@@ -231,14 +231,14 @@ func (st *OpusMSDecoder) MultistreamDecodeNative(data []byte, length int32, pcm 
 	return frame_size
 }
 
-// C: static void opus_copy_channel_out_float(void *dst, int dst_stride, int dst_channel, const opus_val16 *src, int src_stride, int frame_size, void *user_data)
-func opus_copy_channel_out_float(dst any, dst_stride int, dst_channel int, src []int16, src_stride int, frame_size int, user_data any) {
+// C: static void opus_copy_channel_out_float(void *dst, int dst_stride, int dst_channel, const opus_res *src, int src_stride, int frame_size, void *user_data)
+func opus_copy_channel_out_float(dst any, dst_stride int, dst_channel int, src []int32, src_stride int, frame_size int, user_data any) {
 	float_dst := dst.([]float32)
 	var i int32
 	_ = user_data
 	if src != nil {
 		for i = 0; i < int32(frame_size); i++ {
-			float_dst[int(i)*dst_stride+dst_channel] = (1 / 32768.0) * float32(src[int(i)*src_stride])
+			float_dst[int(i)*dst_stride+dst_channel] = celt.RES2FLOAT(src[int(i)*src_stride])
 		}
 	} else {
 		for i = 0; i < int32(frame_size); i++ {
@@ -247,14 +247,14 @@ func opus_copy_channel_out_float(dst any, dst_stride int, dst_channel int, src [
 	}
 }
 
-// C: static void opus_copy_channel_out_short(void *dst, int dst_stride, int dst_channel, const opus_val16 *src, int src_stride, int frame_size, void *user_data)
-func opus_copy_channel_out_short(dst any, dst_stride int, dst_channel int, src []int16, src_stride int, frame_size int, user_data any) {
+// C: static void opus_copy_channel_out_short(void *dst, int dst_stride, int dst_channel, const opus_res *src, int src_stride, int frame_size, void *user_data)
+func opus_copy_channel_out_short(dst any, dst_stride int, dst_channel int, src []int32, src_stride int, frame_size int, user_data any) {
 	short_dst := dst.([]int16)
 	var i int32
 	_ = user_data
 	if src != nil {
 		for i = 0; i < int32(frame_size); i++ {
-			short_dst[int(i)*dst_stride+dst_channel] = src[int(i)*src_stride]
+			short_dst[int(i)*dst_stride+dst_channel] = celt.RES2INT16(src[int(i)*src_stride])
 		}
 	} else {
 		for i = 0; i < int32(frame_size); i++ {
@@ -263,13 +263,38 @@ func opus_copy_channel_out_short(dst any, dst_stride int, dst_channel int, src [
 	}
 }
 
-// C: int opus_multistream_decode(OpusMSDecoder *st, const unsigned char *data, opus_int32 len, opus_int16 *pcm, int frame_size, int decode_fec)   (FIXED_POINT)
-func (st *OpusMSDecoder) MultistreamDecode(data []byte, length int32, pcm []int16, frame_size int, decode_fec int) int {
-	return st.MultistreamDecodeNative(data, length,
-		pcm, opus_copy_channel_out_short, frame_size, decode_fec, 0, nil)
+// C: static void opus_copy_channel_out_int24(void *dst, int dst_stride, int dst_channel, const opus_res *src, int src_stride, int frame_size, void *user_data)
+func opus_copy_channel_out_int24(dst any, dst_stride int, dst_channel int, src []int32, src_stride int, frame_size int, user_data any) {
+	short_dst := dst.([]int32)
+	var i int32
+	_ = user_data
+	if src != nil {
+		for i = 0; i < int32(frame_size); i++ {
+			short_dst[int(i)*dst_stride+dst_channel] = celt.RES2INT24(src[int(i)*src_stride])
+		}
+	} else {
+		for i = 0; i < int32(frame_size); i++ {
+			short_dst[int(i)*dst_stride+dst_channel] = 0
+		}
+	}
 }
 
-// C: int opus_multistream_decode_float(OpusMSDecoder *st, const unsigned char *data, opus_int32 len, float *pcm, int frame_size, int decode_fec)   (FIXED_POINT)
+// C: int opus_multistream_decode(OpusMSDecoder *st, const unsigned char *data, opus_int32 len, opus_int16 *pcm, int frame_size, int decode_fec)
+func (st *OpusMSDecoder) MultistreamDecode(data []byte, length int32, pcm []int16, frame_size int, decode_fec int) int {
+	return st.MultistreamDecodeNative(data, length,
+		pcm, opus_copy_channel_out_short, frame_size, decode_fec, OPTIONAL_CLIP, nil)
+}
+
+// MultistreamDecode24 decodes to 24-bit samples (opus_int32, left-aligned
+// in the low 24 bits).
+//
+// C: int opus_multistream_decode24(OpusMSDecoder *st, const unsigned char *data, opus_int32 len, opus_int32 *pcm, int frame_size, int decode_fec)
+func (st *OpusMSDecoder) MultistreamDecode24(data []byte, length int32, pcm []int32, frame_size int, decode_fec int) int {
+	return st.MultistreamDecodeNative(data, length,
+		pcm, opus_copy_channel_out_int24, frame_size, decode_fec, 0, nil)
+}
+
+// C: int opus_multistream_decode_float(OpusMSDecoder *st, const unsigned char *data, opus_int32 len, float *pcm, int frame_size, int decode_fec)
 func (st *OpusMSDecoder) MultistreamDecodeFloat(data []byte, length int32, pcm []float32, frame_size int, decode_fec int) int {
 	return st.MultistreamDecodeNative(data, length,
 		pcm, opus_copy_channel_out_float, frame_size, decode_fec, 0, nil)
@@ -289,7 +314,8 @@ func (st *OpusMSDecoder) Ctl(request int, args ...any) int {
 		OPUS_GET_SAMPLE_RATE_REQUEST,
 		OPUS_GET_GAIN_REQUEST,
 		OPUS_GET_LAST_PACKET_DURATION_REQUEST,
-		OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST:
+		OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST,
+		OPUS_GET_COMPLEXITY_REQUEST:
 		var dec *OpusDecoder
 		// For int32* GET params, just query the first stream
 		value, ok := args[0].(*int32)
@@ -340,6 +366,7 @@ func (st *OpusMSDecoder) Ctl(request int, args ...any) int {
 		}
 		*value = st.decoders[stream_id]
 	case OPUS_SET_GAIN_REQUEST,
+		OPUS_SET_COMPLEXITY_REQUEST,
 		OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST:
 		var s int
 		// This works for int32 params

@@ -99,6 +99,7 @@ func (psEnc *EncoderStateFIX) FindPredCoefsFIX(psEncCtrl *EncoderControlFIX, res
 		clear(psEncCtrl.LTPCoef_Q14[:psEnc.sCmn.nb_subfr*LTP_ORDER])
 		psEncCtrl.LTPredCodGain_Q7 = 0
 		psEnc.sCmn.sum_log_gain_Q7 = 0
+		psEncCtrl.LTP_scale_Q14 = 0
 	}
 
 	/* Limit on total predictive coding gain */

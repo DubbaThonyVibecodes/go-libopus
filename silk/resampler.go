@@ -1,5 +1,7 @@
 package silk
 
+import "github.com/DubbaThonyVibecodes/go-libopus/celt"
+
 // C: silk/resampler.c
 
 /*
@@ -21,27 +23,28 @@ package silk
  */
 
 // Tables with delay compensation values to equalize total delay for different modes
-var delay_matrix_enc = [5][3]int8{
+var delay_matrix_enc = [6][3]int8{
 	/* in  \ out  8  12  16 */
 	/*  8 */ {6, 0, 3},
 	/* 12 */ {0, 7, 3},
 	/* 16 */ {0, 1, 10},
 	/* 24 */ {0, 2, 6},
 	/* 48 */ {18, 10, 12},
+	/* 96 */ {0, 0, 44},
 }
 
-var delay_matrix_dec = [3][5]int8{
-	/* in  \ out  8  12  16  24  48 */
-	/*  8 */ {4, 0, 2, 0, 0},
-	/* 12 */ {0, 9, 4, 7, 4},
-	/* 16 */ {0, 3, 12, 7, 7},
+var delay_matrix_dec = [3][6]int8{
+	/* in  \ out  8  12  16  24  48  96*/
+	/*  8 */ {4, 0, 2, 0, 0, 0},
+	/* 12 */ {0, 9, 4, 7, 4, 4},
+	/* 16 */ {0, 3, 12, 7, 7, 7},
 }
 
 // Simple way to make [8000, 12000, 16000, 24000, 48000] to [0, 1, 2, 3, 4]
 //
-// C: #define rateID(R) ( ( ( ((R)>>12) - ((R)>16000) ) >> ((R)>24000) ) - 1 )
+// C: #define rateID(R) IMIN(5, ( ( ( ((R)>>12) - ((R)>16000) ) >> ((R)>24000) ) - 1 ))
 func rateID(R int32) int32 {
-	return (((R >> 12) - int32(b2i(R > 16000))) >> b2i(R > 24000)) - 1
+	return celt.IMIN(5, (((R>>12)-int32(b2i(R > 16000)))>>b2i(R > 24000))-1)
 }
 
 // C: #define USE_silk_resampler_* — selects the private resampler function

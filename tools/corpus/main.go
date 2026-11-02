@@ -105,6 +105,8 @@ var gainSched = decVariant{"gainsched", []string{"--gain", "3000", "--sched", "f
 var asFloat = decVariant{"float", a("--float")}
 var decReset = decVariant{"reset", []string{"--sched", "f=50:reset=1,f=51:reset=1,f=130:reset=1"}}
 var noPhaseInv = decVariant{"nophaseinv", a("--nophaseinv")}
+var asPcm24 = decVariant{"pcm24", a("--pcm24")}
+var ignoreExt = decVariant{"ignoreext", a("--ignore-ext")}
 
 func clip(name string, rate, ch int) input  { return input{"clip:" + name, rate, ch} }
 func synth(spec string, rate, ch int) input { return input{"synth:" + spec, rate, ch} }
@@ -399,6 +401,21 @@ func cases() []encCase {
 	ms("surround_fam0_stereo", synth("multitone", 48000, 2), "--app audio --bitrate 64000 --family 0", "--streams 1 --coupled 1 --mapping 0,1")
 	ms("surround_fam1_6ch_16k", synth("bursts", 16000, 6), "--app audio --bitrate 128000 --family 1", famMaps[6])
 	ms("surround_fam1_6ch_voip_fs40", synth("bursts", 48000, 6), "--app voip --bitrate 128000 --framesize 40 --family 1", famMaps[6])
+
+	// libopus 1.6: 24-bit API, restricted SILK/CELT applications, ignore-extensions ctl
+	add("mix_48k_audio_pcm24", m48, "--app audio --bitrate 64000 --pcm24", asPcm24, loss(10, 80), ignoreExt)
+	add("speech_a_16k_voip_pcm24", sa16, "--app voip --bitrate 24000 --pcm24", asPcm24, fecloss(10, 81))
+	add("piano_48k_audio_pcm24_fs10", p48, "--app audio --bitrate 96000 --framesize 10 --pcm24", asPcm24, decVariant{"pcm24_loss", a("--pcm24 --lossperc 10 --seed 82")})
+	add("synth_clip_48k_audio_pcm24", synth("clip", 48000, 2), "--app audio --bitrate 64000 --pcm24", asPcm24)
+	add("piano_48k_audio_64k_pcm24dec", p48, "--app audio --bitrate 64000", asPcm24, decVariant{"pcm24_at16k", a("--pcm24 --rate 16000")})
+	add("mix_48k_silkapp_32k", m48, "--app silk --bitrate 32000", loss(10, 83), asPcm24)
+	add("mix_48k_silkapp_64k_fs10", m48, "--app silk --bitrate 64000 --framesize 10")
+	add("speech_a_16k_silkapp_24k", sa16, "--app silk --bitrate 24000", fecloss(10, 84))
+	add("mix_48k_celtapp_48k", m48, "--app celt --bitrate 48000", loss(10, 85))
+	add("mix_48k_celtapp_24k_fs5", m48, "--app celt --bitrate 24000 --framesize 5")
+	add("speech_a_16k_celtapp_24k", sa16, "--app celt --bitrate 24000")
+	ms("ms_51_pcm24", synth("pink", 48000, 6), "--app audio --bitrate 192000 --pcm24 --streams 4 --coupled 2 --mapping 0,4,1,2,3,5", "--streams 4 --coupled 2 --mapping 0,4,1,2,3,5", asPcm24)
+	ms("projection_fam3_9ch_pcm24", synth("sweep", 48000, 9), "--app audio --bitrate 216000 --pcm24 --projection", "--projection", asPcm24)
 
 	// libopus 1.4: FEC mode 2 (FEC without forcing SILK for music) and the new DTX timing
 	add("mix_48k_audio_fec2_loss20", m48, "--app audio --bitrate 48000 --fec2 --lossperc 20", fecloss(20, 70), loss(20, 70))

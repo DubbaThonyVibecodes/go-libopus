@@ -6,18 +6,19 @@ import "github.com/DubbaThonyVibecodes/go-libopus/celt"
 
 // OpusRepacketizer is the C struct OpusRepacketizer.
 type OpusRepacketizer struct {
-	toc         byte
-	nb_frames   int
-	frames      [48][]byte
-	len         [48]int16
-	framesize   int
-	paddings    [48][]byte
-	padding_len [48]int32
+	toc               byte
+	nb_frames         int
+	frames            [48][]byte
+	len               [48]int16
+	framesize         int
+	paddings          [48][]byte
+	padding_len       [48]int32
+	padding_nb_frames [48]byte
 }
 
 // C: int opus_repacketizer_get_size(void)
 func RepacketizerGetSize() int {
-	return 48*8 + 48*2 + 16 + 48*8 + 48*4 // sizeof(OpusRepacketizer) == 1072 on a 64-bit platform, for API parity
+	return 48*8 + 48*2 + 16 + 48*8 + 48*4 + 48 // sizeof(OpusRepacketizer) == 1120 on a 64-bit platform, for API parity
 }
 
 // C: OpusRepacketizer *opus_repacketizer_init(OpusRepacketizer *rp)
@@ -65,11 +66,13 @@ func (rp *OpusRepacketizer) repacketizerCatImpl(data []byte, length int32, self_
 	if ret < 1 {
 		return ret
 	}
+	rp.padding_nb_frames[rp.nb_frames] = byte(ret)
 
 	// set padding length to zero for all but the first frame
 	for curr_nb_frames > 1 {
 		rp.nb_frames++
 		rp.padding_len[rp.nb_frames] = 0
+		rp.padding_nb_frames[rp.nb_frames] = 0
 		rp.paddings[rp.nb_frames] = nil
 		curr_nb_frames--
 	}
@@ -121,7 +124,8 @@ func (rp *OpusRepacketizer) repacketizerOutRangeImpl(begin, end int, data []byte
 	// figure out total number of extensions
 	total_ext_count = nb_extensions
 	for i = begin; i < end; i++ {
-		n := int(PacketExtensionsCount(rp.paddings[i], rp.padding_len[i]))
+		n := int(PacketExtensionsCount(rp.paddings[i], rp.padding_len[i],
+			int(rp.padding_nb_frames[i])))
 		if n > 0 {
 			total_ext_count += n
 		}
@@ -139,10 +143,11 @@ func (rp *OpusRepacketizer) repacketizerOutRangeImpl(begin, end int, data []byte
 	// incorporate any extensions from the repacketizer padding
 	for i = begin; i < end; i++ {
 		var j int
+		var ret int32
 		var frame_ext_count int32
 		frame_ext_count = int32(total_ext_count - ext_count)
-		ret := PacketExtensionsParse(rp.paddings[i], rp.padding_len[i],
-			all_extensions[ext_count:], &frame_ext_count)
+		ret = PacketExtensionsParse(rp.paddings[i], rp.padding_len[i],
+			all_extensions[ext_count:], &frame_ext_count, int(rp.padding_nb_frames[i]))
 		if ret < 0 {
 			return OPUS_INTERNAL_ERROR
 		}
@@ -232,12 +237,17 @@ func (rp *OpusRepacketizer) repacketizerOutRangeImpl(begin, end int, data []byte
 		}
 		if ext_count > 0 {
 			// figure out how much space we need for the extensions
-			ext_len = int(PacketExtensionsGenerate(nil, maxlen-tot_size, all_extensions, int32(ext_count), 0))
+			ext_len = int(PacketExtensionsGenerate(nil, maxlen-tot_size,
+				all_extensions, int32(ext_count), count, 0))
 			if ext_len < 0 {
 				return int32(ext_len)
 			}
 			if pad == 0 {
-				pad_amount = ext_len + ext_len/254 + 1
+				if ext_len != 0 {
+					pad_amount = ext_len + (ext_len+253)/254
+				} else {
+					pad_amount = ext_len + 1
+				}
 			}
 		}
 		if pad_amount != 0 {
@@ -279,7 +289,8 @@ func (rp *OpusRepacketizer) repacketizerOutRangeImpl(begin, end int, data []byte
 		ptr += int(length[i])
 	}
 	if ext_len > 0 {
-		ret := PacketExtensionsGenerate(data[ext_begin:], int32(ext_len), all_extensions, int32(ext_count), 0)
+		ret := PacketExtensionsGenerate(data[ext_begin:], int32(ext_len),
+			all_extensions, int32(ext_count), count, 0)
 		celt.Assert(int(ret) == ext_len)
 	}
 	for i = ones_begin; i < ones_end; i++ {

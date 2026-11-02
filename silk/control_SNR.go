@@ -48,7 +48,7 @@ var targetRate_WB_21 = [201 - 10]uint8{
 	247, 248, 249, 249, 250, 251, 252, 253, 255,
 }
 
-// Control SNR of redidual quantizer
+// Control SNR of residual quantizer
 //
 // C: opus_int silk_control_SNR(silk_encoder_state *psEncC, opus_int32 TargetRate_bps)
 func (psEncC *EncoderState) ControlSNR(TargetRate_bps int32) int {

@@ -14,12 +14,13 @@ const ALLOC_NONE = 1
 // OpusDecoder is the C struct OpusDecoder. The SILK and CELT states that C
 // places after the struct in the same allocation are embedded fields.
 type OpusDecoder struct {
-	channels    int
-	Fs          int32 // Sampling rate (at the API level)
-	DecControl  silk.DecControlStruct
-	decode_gain int
-	complexity  int
-	arch        int
+	channels          int
+	Fs                int32 // Sampling rate (at the API level)
+	DecControl        silk.DecControlStruct
+	decode_gain       int
+	complexity        int
+	ignore_extensions int
+	arch              int
 	// LPCNetPLCState lpcnet exists only with ENABLE_DEEP_PLC.
 
 	// Everything beyond this point gets cleared on a reset (OPUS_DECODER_RESET_START)
@@ -70,7 +71,7 @@ func DecoderGetSize(channels int) int {
 	}
 	silkDecSizeBytes = align(silkDecSizeBytes)
 	celtDecSizeBytes = celt.DecoderGetSize(channels)
-	return align(88) + silkDecSizeBytes + celtDecSizeBytes // sizeof(OpusDecoder) == 88 in the fixed-point build on x86-64
+	return align(92) + silkDecSizeBytes + celtDecSizeBytes // sizeof(OpusDecoder) == 92 in the fixed-point build on x86-64
 }
 
 // C: int opus_decoder_init(OpusDecoder *st, opus_int32 Fs, int channels)
@@ -133,15 +134,18 @@ func DecoderCreate(Fs int32, channels int, error *int) *OpusDecoder {
 	return st
 }
 
-// C: static void smooth_fade(const opus_val16 *in1, const opus_val16 *in2, opus_val16 *out, int overlap, int channels, const opus_val16 *window, opus_int32 Fs)
-func smooth_fade(in1, in2 []int16, out []int16, overlap, channels int, window []int16, Fs int32) {
+// smooth_fade is the ENABLE_RES24 variant; window is celt_coef (opus_val16
+// without ENABLE_QEXT).
+//
+// C: static void smooth_fade(const opus_res *in1, const opus_res *in2, opus_res *out, int overlap, int channels, const celt_coef *window, opus_int32 Fs)   (ENABLE_RES24)
+func smooth_fade(in1, in2 []int32, out []int32, overlap, channels int, window []int16, Fs int32) {
 	var i, c int
 	inc := int(48000 / Fs)
 	for c = 0; c < channels; c++ {
 		for i = 0; i < overlap; i++ {
-			var w int16 = int16(celt.MULT16_16_Q15(window[i*inc], window[i*inc]))
-			out[i*channels+c] = int16(celt.SHR32(celt.MAC16_16(celt.MULT16_16(w, in2[i*channels+c]),
-				int32(celt.Q15ONE)-int32(w), in1[i*channels+c]), 15))
+			var w int16 = int16(celt.MULT_COEF(window[i*inc], window[i*inc]))
+			out[i*channels+c] = celt.ADD32(celt.MULT_COEF_32(w, in2[i*channels+c]),
+				celt.MULT_COEF_32(celt.COEF_ONE-w, in1[i*channels+c]))
 		}
 	}
 }
@@ -159,23 +163,23 @@ func opus_packet_get_mode(data []byte) int {
 	return mode
 }
 
-// C: static int opus_decode_frame(OpusDecoder *st, const unsigned char *data, opus_int32 len, opus_val16 *pcm, int frame_size, int decode_fec)
-func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame_size int, decode_fec int) int {
+// C: static int opus_decode_frame(OpusDecoder *st, const unsigned char *data, opus_int32 len, opus_res *pcm, int frame_size, int decode_fec ARG_QEXT(opus_extension_data *ext))
+//
+// ARG_QEXT(...) is empty without ENABLE_QEXT.
+func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int32, frame_size int, decode_fec int) int {
 	silk_dec := &st.silk_dec
 	celt_dec := &st.celt_dec
 	var i int
 	var silk_ret, celt_ret int = 0, 0
 	var dec celt.EcDec
 	var silk_frame_size int32
-	var pcm_silk_size int
-	var pcm_silk []int16
 	var pcm_transition_silk_size int
-	var pcm_transition_silk []int16
+	var pcm_transition_silk []int32
 	var pcm_transition_celt_size int
-	var pcm_transition_celt []int16
-	var pcm_transition []int16 = nil
+	var pcm_transition_celt []int32
+	var pcm_transition []int32 = nil
 	var redundant_audio_size int
-	var redundant_audio []int16
+	var redundant_audio []int32
 
 	var audiosize int
 	var mode int
@@ -255,7 +259,7 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 
 	// In fixed-point, we can tell CELT to do the accumulation on top of the
 	// SILK PCM buffer. This saves some stack space.
-	celt_accum = b2i((mode != MODE_CELT_ONLY) && (frame_size >= F10))
+	celt_accum = b2i(mode != MODE_CELT_ONLY)
 
 	pcm_transition_silk_size = ALLOC_NONE
 	pcm_transition_celt_size = ALLOC_NONE
@@ -269,7 +273,7 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 			pcm_transition_silk_size = F5 * st.channels
 		}
 	}
-	pcm_transition_celt = make([]int16, pcm_transition_celt_size)
+	pcm_transition_celt = make([]int32, pcm_transition_celt_size)
 	if transition != 0 && mode == MODE_CELT_ONLY {
 		pcm_transition = pcm_transition_celt
 		st.decodeFrame(nil, 0, pcm_transition, IMIN(F5, audiosize), 0)
@@ -281,22 +285,22 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 		frame_size = audiosize
 	}
 
-	// Don't allocate any memory when in CELT-only mode
-	if mode != MODE_CELT_ONLY && celt_accum == 0 {
-		pcm_silk_size = IMAX(F10, frame_size) * st.channels
-	} else {
-		pcm_silk_size = ALLOC_NONE
-	}
-	pcm_silk = make([]int16, pcm_silk_size)
-
 	// SILK processing
 	if mode != MODE_CELT_ONLY {
 		var lost_flag, decoded_samples int
-		var pcm_ptr []int16
-		if celt_accum != 0 {
-			pcm_ptr = pcm
-		} else {
+		var pcm_ptr []int32
+		var pcm_too_small int
+		var pcm_silk_size int = ALLOC_NONE
+		var pcm_silk []int32
+		pcm_too_small = b2i(frame_size < F10)
+		if pcm_too_small != 0 {
+			pcm_silk_size = F10 * st.channels
+		}
+		pcm_silk = make([]int32, pcm_silk_size)
+		if pcm_too_small != 0 {
 			pcm_ptr = pcm_silk
+		} else {
+			pcm_ptr = pcm
 		}
 
 		if st.prev_mode == MODE_CELT_ONLY {
@@ -357,6 +361,9 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 				break
 			}
 		}
+		if pcm_too_small != 0 {
+			copy(pcm[:frame_size*st.channels], pcm_silk[:frame_size*st.channels])
+		}
 	}
 
 	start_band = 0
@@ -398,7 +405,7 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 		pcm_transition_silk_size = ALLOC_NONE
 	}
 
-	pcm_transition_silk = make([]int16, pcm_transition_silk_size)
+	pcm_transition_silk = make([]int32, pcm_transition_silk_size)
 
 	if transition != 0 && mode != MODE_CELT_ONLY {
 		pcm_transition = pcm_transition_silk
@@ -430,7 +437,7 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 	} else {
 		redundant_audio_size = ALLOC_NONE
 	}
-	redundant_audio = make([]int16, redundant_audio_size)
+	redundant_audio = make([]int32, redundant_audio_size)
 
 	// 5 ms redundant frame for CELT->SILK
 	if redundancy != 0 && celt_to_silk != 0 {
@@ -462,7 +469,9 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 		celt_ret = celt_dec.DecodeWithEcDred(cdata,
 			int(length), pcm, celt_frame_size, &dec, celt_accum,
 			// #ifdef ENABLE_DEEP_PLC: &st->lpcnet is not passed in this build.
+			// ARG_QEXT(ext ? ext->data : NULL) ARG_QEXT(ext ? ext->len : 0) are empty without ENABLE_QEXT.
 		)
+		celt_dec.Ctl(celt.OPUS_GET_FINAL_RANGE_REQUEST, &st.rangeFinal)
 	} else {
 		silence := []byte{0xFF, 0xFF}
 		if celt_accum == 0 {
@@ -476,12 +485,7 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 			celt.MustSucceed(celt_dec.Ctl(celt.CELT_SET_START_BAND_REQUEST, int32(0)))
 			celt_dec.DecodeWithEc(silence, 2, pcm, F2_5, nil, celt_accum)
 		}
-	}
-
-	if mode != MODE_CELT_ONLY && celt_accum == 0 {
-		for i = 0; i < frame_size*st.channels; i++ {
-			pcm[i] = celt.SAT16(celt.ADD32(pcm[i], pcm_silk[i]))
-		}
+		st.rangeFinal = dec.Rng()
 	}
 
 	{
@@ -537,15 +541,16 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 		gain = celt.Exp2(int16(celt.MULT16_16_P15(celt.QCONST16(6.48814081e-4, 25), st.decode_gain)))
 		for i = 0; i < frame_size*st.channels; i++ {
 			var x int32
-			x = celt.MULT16_32_P16(pcm[i], gain)
-			pcm[i] = int16(celt.SATURATE(x, 32767))
+			// #ifdef ENABLE_RES24
+			x = celt.MULT32_32_Q16(pcm[i], gain)
+			pcm[i] = celt.SATURATE(x, 32767)
 		}
 	}
 
 	if length <= 1 {
 		st.rangeFinal = 0
 	} else {
-		st.rangeFinal = dec.Rng() ^ redundant_rng
+		st.rangeFinal ^= redundant_rng
 	}
 
 	st.prev_mode = mode
@@ -561,13 +566,15 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 
 // C: int opus_decode_native(OpusDecoder *st, const unsigned char *data,
 //
-//	opus_int32 len, opus_val16 *pcm, int frame_size, int decode_fec,
+//	opus_int32 len, opus_res *pcm, int frame_size, int decode_fec,
 //	int self_delimited, opus_int32 *packet_offset, int soft_clip, const OpusDRED *dred, opus_int32 dred_offset)
 //
-// soft_clip is only used in the float build (#ifndef FIXED_POINT) and dred /
-// dred_offset only with ENABLE_DRED; they are kept for signature parity.
+// pcm receives opus_res samples (int32, 16-bit samples shifted left by
+// celt.RES_SHIFT). soft_clip is only used in the float build (#ifndef
+// FIXED_POINT) and dred / dred_offset only with ENABLE_DRED; they are kept
+// for signature parity.
 func (st *OpusDecoder) DecodeNative(data []byte,
-	length int32, pcm []int16, frame_size int, decode_fec int,
+	length int32, pcm []int32, frame_size int, decode_fec int,
 	self_delimited int, packet_offset *int32, soft_clip int, dred *OpusDRED, dred_offset int32) int {
 	var i, nb_samples int
 	var count, offset int
@@ -575,6 +582,9 @@ func (st *OpusDecoder) DecodeNative(data []byte,
 	var packet_frame_size, packet_bandwidth, packet_mode, packet_stream_channels int
 	// 48 x 2.5 ms = 120 ms
 	var size [48]int16
+	var padding []byte
+	var padding_len int32
+	var iter OpusExtensionIterator
 	VALIDATE_OPUS_DECODER(st)
 	if decode_fec < 0 || decode_fec > 1 {
 		return OPUS_BAD_ARG
@@ -613,10 +623,15 @@ func (st *OpusDecoder) DecodeNative(data []byte,
 	packet_stream_channels = PacketGetNbChannels(data)
 
 	count = opus_packet_parse_impl(data, length, self_delimited, &toc, nil,
-		size[:], &offset, packet_offset, nil, nil)
+		size[:], &offset, packet_offset, &padding, &padding_len)
+	if st.ignore_extensions != 0 {
+		padding = nil
+		padding_len = 0
+	}
 	if count < 0 {
 		return count
 	}
+	iter.ExtensionIteratorInit(padding, padding_len, int32(count))
 
 	data = data[offset:]
 
@@ -665,6 +680,8 @@ func (st *OpusDecoder) DecodeNative(data []byte,
 	nb_samples = 0
 	for i = 0; i < count; i++ {
 		var ret int
+		// #ifdef ENABLE_QEXT: the QEXT_EXTENSION_ID lookup through iter is not
+		// compiled in this build.
 		ret = st.decodeFrame(data, int32(size[i]), pcm[nb_samples*st.channels:], frame_size-nb_samples, 0)
 		if ret < 0 {
 			return ret
@@ -674,28 +691,71 @@ func (st *OpusDecoder) DecodeNative(data []byte,
 		nb_samples += ret
 	}
 	st.last_packet_duration = nb_samples
-	// #ifndef FIXED_POINT: opus_pcm_soft_clip(pcm, nb_samples, st->channels, st->softclip_mem)
+	// #ifndef FIXED_POINT: opus_pcm_soft_clip_impl(pcm, nb_samples, st->channels, st->softclip_mem, st->arch)
 	// is only compiled in the float build.
 	return nb_samples
 }
 
-// Decode decodes an Opus packet. data==nil or len==0 triggers packet loss
-// concealment. Returns the number of decoded samples per channel.
+// C: #define OPTIONAL_CLIP 0   (FIXED_POINT)
+const OPTIONAL_CLIP = 0
+
+// Decode decodes an Opus packet to 16-bit samples. data==nil or len==0
+// triggers packet loss concealment. Returns the number of decoded samples
+// per channel. This is the ENABLE_RES24 variant: the decoder produces
+// opus_res samples that are converted with RES2INT16.
 //
-// C: int opus_decode(OpusDecoder *st, const unsigned char *data, opus_int32 len, opus_val16 *pcm, int frame_size, int decode_fec)
+// C: int opus_decode(OpusDecoder *st, const unsigned char *data, opus_int32 len, opus_int16 *pcm, int frame_size, int decode_fec)   (!(FIXED_POINT && !ENABLE_RES24))
 func (st *OpusDecoder) Decode(data []byte,
 	length int32, pcm []int16, frame_size int, decode_fec int) int {
+	var out []int32
+	var ret int
+	var nb_samples int
+
+	if frame_size <= 0 {
+		return OPUS_BAD_ARG
+	}
+	if data != nil && length > 0 && decode_fec == 0 {
+		nb_samples = st.DecoderGetNbSamples(data, length)
+		if nb_samples > 0 {
+			frame_size = IMIN(frame_size, nb_samples)
+		} else {
+			return OPUS_INVALID_PACKET
+		}
+	}
+	celt.Assert(st.channels == 1 || st.channels == 2)
+	out = make([]int32, frame_size*st.channels)
+
+	ret = st.DecodeNative(data, length, out, frame_size, decode_fec, 0, nil, OPTIONAL_CLIP, nil, 0)
+	if ret > 0 {
+		// # if defined(FIXED_POINT)
+		var i int
+		for i = 0; i < ret*st.channels; i++ {
+			pcm[i] = celt.RES2INT16(out[i])
+		}
+	}
+	return ret
+}
+
+// Decode24 decodes an Opus packet to 24-bit samples (opus_int32,
+// left-aligned in the low 24 bits). data==nil or len==0 triggers packet
+// loss concealment. Returns the number of decoded samples per channel.
+//
+// C: int opus_decode24(OpusDecoder *st, const unsigned char *data, opus_int32 len, opus_int32 *pcm, int frame_size, int decode_fec)   (FIXED_POINT && ENABLE_RES24)
+func (st *OpusDecoder) Decode24(data []byte,
+	length int32, pcm []int32, frame_size int, decode_fec int) int {
 	if frame_size <= 0 {
 		return OPUS_BAD_ARG
 	}
 	return st.DecodeNative(data, length, pcm, frame_size, decode_fec, 0, nil, 0, nil, 0)
 }
 
-// DecodeFloat is the float output variant (fixed-point build: converts).
+// DecodeFloat is the float output variant (fixed-point build: converts
+// with RES2FLOAT).
 //
-// C: int opus_decode_float(OpusDecoder *st, const unsigned char *data, opus_int32 len, float *pcm, int frame_size, int decode_fec)
+// C: int opus_decode_float(OpusDecoder *st, const unsigned char *data, opus_int32 len, float *pcm, int frame_size, int decode_fec)   (FIXED_POINT)
 func (st *OpusDecoder) DecodeFloat(data []byte,
 	length int32, pcm []float32, frame_size int, decode_fec int) int {
+	var out []int32
 	var ret, i int
 	var nb_samples int
 
@@ -711,12 +771,12 @@ func (st *OpusDecoder) DecodeFloat(data []byte,
 		}
 	}
 	celt.Assert(st.channels == 1 || st.channels == 2)
-	out := make([]int16, frame_size*st.channels)
+	out = make([]int32, frame_size*st.channels)
 
 	ret = st.DecodeNative(data, length, out, frame_size, decode_fec, 0, nil, 0, nil, 0)
 	if ret > 0 {
 		for i = 0; i < ret*st.channels; i++ {
-			pcm[i] = (1.0 / 32768.0) * float32(out[i])
+			pcm[i] = celt.RES2FLOAT(out[i])
 		}
 	}
 	return ret
@@ -751,6 +811,8 @@ func (st *OpusDecoder) Ctl(request int, args ...any) int {
 			return OPUS_BAD_ARG // goto bad_arg
 		}
 		*value = int32(st.complexity)
+	// #ifdef ENABLE_OSCE_BWE: OPUS_SET_OSCE_BWE_REQUEST / OPUS_GET_OSCE_BWE_REQUEST
+	// are not compiled in this build (fall through to OPUS_UNIMPLEMENTED).
 	case OPUS_GET_FINAL_RANGE_REQUEST:
 		value, ok := args[0].(*uint32)
 		if !ok || value == nil {
@@ -820,6 +882,18 @@ func (st *OpusDecoder) Ctl(request int, args ...any) int {
 			return OPUS_BAD_ARG // goto bad_arg
 		}
 		ret = celt_dec.Ctl(celt.OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST, value)
+	case OPUS_SET_IGNORE_EXTENSIONS_REQUEST:
+		value, ok := argInt32(args, 0)
+		if !ok || value < 0 || value > 1 {
+			return OPUS_BAD_ARG // goto bad_arg
+		}
+		st.ignore_extensions = int(value)
+	case OPUS_GET_IGNORE_EXTENSIONS_REQUEST:
+		value, ok := args[0].(*int32)
+		if !ok || value == nil {
+			return OPUS_BAD_ARG // goto bad_arg
+		}
+		*value = int32(st.ignore_extensions)
 	// #ifdef USE_WEIGHTS_FILE: OPUS_SET_DNN_BLOB_REQUEST is not compiled in
 	// this build (falls through to OPUS_UNIMPLEMENTED).
 	default:
@@ -939,6 +1013,9 @@ func PacketHasLbrr(packet []byte, length int32) int {
 	ret = PacketParse(packet, length, nil, frames[:], size[:], nil)
 	if ret <= 0 {
 		return ret
+	}
+	if size[0] == 0 {
+		return 0
 	}
 	lbrr = int(frames[0][0]>>(7-nb_frames)) & 0x1
 	if packet_stream_channels == 2 {
@@ -1061,6 +1138,15 @@ func (dred_dec *OpusDREDDecoder) DredProcess(src *OpusDRED, dst *OpusDRED) int {
 
 // C: int opus_decoder_dred_decode(OpusDecoder *st, const OpusDRED *dred, opus_int32 dred_offset, opus_int16 *pcm, opus_int32 frame_size)
 func (st *OpusDecoder) DecoderDredDecode(dred *OpusDRED, dred_offset int32, pcm []int16, frame_size int32) int {
+	_ = dred
+	_ = dred_offset
+	_ = pcm
+	_ = frame_size
+	return OPUS_UNIMPLEMENTED
+}
+
+// C: int opus_decoder_dred_decode24(OpusDecoder *st, const OpusDRED *dred, opus_int32 dred_offset, opus_int32 *pcm, opus_int32 frame_size)
+func (st *OpusDecoder) DecoderDredDecode24(dred *OpusDRED, dred_offset int32, pcm []int32, frame_size int32) int {
 	_ = dred
 	_ = dred_offset
 	_ = pcm

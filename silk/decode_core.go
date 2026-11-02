@@ -66,7 +66,7 @@ func (psDec *DecoderState) DecodeCore(psDecCtrl *DecoderControl, xq []int16, pul
 		pres_Q14 = res_Q14
 		A_Q12 = psDecCtrl.PredCoef_Q12[k>>1][:]
 
-		/* Preload LPC coeficients to array on stack. Gives small performance gain */
+		/* Preload LPC coefficients to array on stack. Gives small performance gain */
 		copy(A_Q12_tmp[:psDec.LPC_order], A_Q12[:psDec.LPC_order])
 		B_Q14 = psDecCtrl.LTPCoef_Q14[k*LTP_ORDER:]
 		signalType = int(psDec.indices.signalType)

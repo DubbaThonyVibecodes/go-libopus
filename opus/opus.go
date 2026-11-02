@@ -4,28 +4,42 @@ import "github.com/DubbaThonyVibecodes/go-libopus/celt"
 
 // C: src/opus.c
 
-// PcmSoftClip applies soft-clipping to bring a float signal within the
+// PcmSoftClipImpl applies soft-clipping to bring a float signal within the
 // [-1,1] range. This is genuine C float code (DISABLE_FLOAT_API not
 // defined); every product that feeds an addition is converted to float32
 // to prevent FMA fusion.
 //
-// C: void opus_pcm_soft_clip(float *_x, int N, int C, float *declip_mem)
-func PcmSoftClip(_x []float32, N int, C int, declip_mem []float32) {
+// C: void opus_pcm_soft_clip_impl(float *_x, int N, int C, float *declip_mem, int arch)
+func PcmSoftClipImpl(_x []float32, N int, C int, declip_mem []float32, arch int) {
 	var c int
 	var i int
 	var x []float32
+	var all_within_neg1pos1 int
 
 	if C < 1 || N < 1 || _x == nil || declip_mem == nil {
 		return
 	}
 
-	// First thing: saturate everything to +/- 2 which is the highest level our
-	// non-linearity can handle. At the point where the signal reaches +/-2,
-	// the derivative will be zero anyway, so this doesn't introduce any
-	// discontinuity in the derivative.
-	for i = 0; i < N*C; i++ {
-		_x[i] = max(-2.0, min(2.0, _x[i]))
-	}
+	// Clamp everything within the range [-2, +2] which is the domain of the soft
+	// clipping non-linearity. Outside the defined range the derivative will be zero,
+	// therefore there is no discontinuity introduced here. The implementation
+	// might provide a hint if all input samples are within the [-1, +1] range.
+	//
+	// `opus_limit2_checkwithin1()`:
+	//    - Clamps all samples within the valid range [-2, +2].
+	//    - Generic C implementation:
+	//       * Does not attempt early detection whether samples are within hinted range.
+	//       * Always returns 0.
+	//    - Architecture specific implementation:
+	//       * Uses SIMD instructions to efficiently detect if all samples are
+	//         within the hinted range [-1, +1].
+	//       * Returns 1 if no samples exceed the hinted range, 0 otherwise.
+	//
+	// `all_within_neg1pos1`:
+	//    - Optimization hint to skip per-sample out-of-bound checks.
+	//      If true, the check can be skipped.
+	all_within_neg1pos1 = celt.Limit2Checkwithin1(_x, N*C, arch)
+
 	for c = 0; c < C; c++ {
 		var a float32
 		var x0 float32
@@ -49,9 +63,14 @@ func PcmSoftClip(_x []float32, N int, C int, declip_mem []float32) {
 			var maxval float32
 			var special int = 0
 			var peak_pos int
-			for i = curr; i < N; i++ {
-				if x[i*C] > 1 || x[i*C] < -1 {
-					break
+			// Detection for early exit can be skipped if hinted by `all_within_neg1pos1`
+			if all_within_neg1pos1 != 0 {
+				i = N
+			} else {
+				for i = curr; i < N; i++ {
+					if x[i*C] > 1 || x[i*C] < -1 {
+						break
+					}
 				}
 			}
 			if i == N {
@@ -111,6 +130,14 @@ func PcmSoftClip(_x []float32, N int, C int, declip_mem []float32) {
 		}
 		declip_mem[c] = a
 	}
+}
+
+// PcmSoftClip applies soft-clipping to bring a float signal within the
+// [-1,1] range.
+//
+// C: void opus_pcm_soft_clip(float *_x, int N, int C, float *declip_mem)
+func PcmSoftClip(_x []float32, N int, C int, declip_mem []float32) {
+	PcmSoftClipImpl(_x, N, C, declip_mem, 0)
 }
 
 // abs32 is the C ABS16() macro applied to a float (float build of arch.h).
@@ -195,6 +222,12 @@ func opus_packet_parse_impl(data []byte, length int32,
 	var pad int32 = 0
 	data0 := data
 	pos := 0 // index of the C `data` pointer in data0
+
+	// Make sure we return NULL/0 on error.
+	if padding != nil {
+		*padding = nil
+		*padding_len = 0
+	}
 
 	if size == nil || length < 0 {
 		return OPUS_BAD_ARG

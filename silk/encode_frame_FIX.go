@@ -53,7 +53,7 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 	var ret int = 0
 	var x_frame []int16
 	var sRangeEnc_copy, sRangeEnc_copy2 celt.EcEnc
-	var sNSQ_copy, sNSQ_copy2 NsqState
+	var sNSQ_copy []NsqState
 	var seed_copy, nBits, nBits_lower, nBits_upper, gainMult_lower, gainMult_upper int32
 	var gainsID, gainsID_lower, gainsID_upper int32
 	var gainMult_Q8 int16
@@ -64,6 +64,10 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 	var best_gain_mult [MAX_NB_SUBFR]int16
 	var best_sum [MAX_NB_SUBFR]int
 	var bits_margin int
+
+	/* Using ALLOC() instead of a regular stack allocation to minimize real stack use when using the pseudostack.
+	   This is useful on some embedded systems. */
+	sNSQ_copy = make([]NsqState, 2)
 
 	/* For CBR, 5 bits below budget is close enough. For VBR, allow up to 25% below the cap if we initially busted the budget. */
 	if useCBR != 0 {
@@ -141,7 +145,7 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 		/* Copy part of the input state */
 		/* (struct copy; the buf slice keeps pointing at the same backing array, like the C pointer) */
 		sRangeEnc_copy = *psRangeEnc
-		sNSQ_copy = psEnc.sCmn.sNSQ
+		sNSQ_copy[0] = psEnc.sCmn.sNSQ
 		seed_copy = int32(psEnc.sCmn.indices.Seed)
 		ec_prevLagIndex_copy = psEnc.sCmn.ec_prevLagIndex
 		ec_prevSignalType_copy = psEnc.sCmn.ec_prevSignalType
@@ -155,7 +159,7 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 				/* Restore part of the input state */
 				if iter > 0 {
 					*psRangeEnc = sRangeEnc_copy
-					psEnc.sCmn.sNSQ = sNSQ_copy
+					psEnc.sCmn.sNSQ = sNSQ_copy[0]
 					psEnc.sCmn.indices.Seed = int8(seed_copy)
 					psEnc.sCmn.ec_prevLagIndex = ec_prevLagIndex_copy
 					psEnc.sCmn.ec_prevSignalType = ec_prevSignalType_copy
@@ -231,7 +235,7 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 					*psRangeEnc = sRangeEnc_copy2
 					silk_assert(sRangeEnc_copy2.RangeBytes() <= 1275)
 					copy(psRangeEnc.GetBuffer()[:sRangeEnc_copy2.RangeBytes()], ec_buf_copy[:sRangeEnc_copy2.RangeBytes()])
-					psEnc.sCmn.sNSQ = sNSQ_copy2
+					psEnc.sCmn.sNSQ = sNSQ_copy[1]
 					psEnc.sShape.LastGainIndex = LastGainIndex_copy2
 				}
 				break
@@ -259,7 +263,7 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 					sRangeEnc_copy2 = *psRangeEnc
 					silk_assert(psRangeEnc.RangeBytes() <= 1275)
 					copy(ec_buf_copy[:psRangeEnc.RangeBytes()], psRangeEnc.GetBuffer()[:psRangeEnc.RangeBytes()])
-					sNSQ_copy2 = psEnc.sCmn.sNSQ
+					sNSQ_copy[1] = psEnc.sCmn.sNSQ
 					LastGainIndex_copy2 = psEnc.sShape.LastGainIndex
 				}
 			} else {
@@ -292,7 +296,7 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 			} else {
 				/* Adjust gain by interpolating */
 				gainMult_Q8 = int16(gainMult_lower + DIV32_16(MUL(gainMult_upper-gainMult_lower, int32(maxBits)-nBits_lower), nBits_upper-nBits_lower))
-				/* New gain multplier must be between 25% and 75% of old range (note that gainMult_upper < gainMult_lower) */
+				/* New gain multiplier must be between 25% and 75% of old range (note that gainMult_upper < gainMult_lower) */
 				if int32(gainMult_Q8) > ADD_RSHIFT32(gainMult_lower, gainMult_upper-gainMult_lower, 2) {
 					gainMult_Q8 = int16(ADD_RSHIFT32(gainMult_lower, gainMult_upper-gainMult_lower, 2))
 				} else if int32(gainMult_Q8) < SUB_RSHIFT32(gainMult_upper, gainMult_upper-gainMult_lower, 2) {
@@ -351,16 +355,20 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 func lBRREncodeFIX(psEnc *EncoderStateFIX, psEncCtrl *EncoderControlFIX, x16 []int16, condCoding int) {
 	var TempGains_Q16 [MAX_NB_SUBFR]int32
 	psIndices_LBRR := &psEnc.sCmn.indices_LBRR[psEnc.sCmn.nFramesEncoded]
-	var sNSQ_LBRR NsqState
+	var sNSQ_LBRR []NsqState
 
 	/*******************************************/
 	/* Control use of inband LBRR              */
 	/*******************************************/
 	if psEnc.sCmn.LBRR_enabled != 0 && psEnc.sCmn.speech_activity_Q8 > int(SILK_FIX_CONST(LBRR_SPEECH_ACTIVITY_THRES, 8)) {
+		/* Using ALLOC() instead of a regular stack allocation to minimize real stack use when using the pseudostack.
+		   This is useful on some embedded systems. */
+		sNSQ_LBRR = make([]NsqState, 1)
+
 		psEnc.sCmn.LBRR_flags[psEnc.sCmn.nFramesEncoded] = 1
 
 		/* Copy noise shaping quantizer state and quantization indices from regular encoding */
-		sNSQ_LBRR = psEnc.sCmn.sNSQ
+		sNSQ_LBRR[0] = psEnc.sCmn.sNSQ
 		*psIndices_LBRR = psEnc.sCmn.indices
 
 		/* Save original gains */
@@ -384,12 +392,12 @@ func lBRREncodeFIX(psEnc *EncoderStateFIX, psEncCtrl *EncoderControlFIX, x16 []i
 		/* Noise shaping quantization            */
 		/*****************************************/
 		if psEnc.sCmn.nStatesDelayedDecision > 1 || psEnc.sCmn.warping_Q16 > 0 {
-			psEnc.sCmn.NSQDelDec(&sNSQ_LBRR, psIndices_LBRR, x16,
+			psEnc.sCmn.NSQDelDec(&sNSQ_LBRR[0], psIndices_LBRR, x16,
 				psEnc.sCmn.pulses_LBRR[psEnc.sCmn.nFramesEncoded][:], predCoefFlat(&psEncCtrl.PredCoef_Q12), psEncCtrl.LTPCoef_Q14[:],
 				psEncCtrl.AR_Q13[:], psEncCtrl.HarmShapeGain_Q14[:], psEncCtrl.Tilt_Q14[:], psEncCtrl.LF_shp_Q14[:],
 				psEncCtrl.Gains_Q16[:], psEncCtrl.pitchL[:], psEncCtrl.Lambda_Q10, psEncCtrl.LTP_scale_Q14, psEnc.sCmn.arch)
 		} else {
-			psEnc.sCmn.NSQ(&sNSQ_LBRR, psIndices_LBRR, x16,
+			psEnc.sCmn.NSQ(&sNSQ_LBRR[0], psIndices_LBRR, x16,
 				psEnc.sCmn.pulses_LBRR[psEnc.sCmn.nFramesEncoded][:], predCoefFlat(&psEncCtrl.PredCoef_Q12), psEncCtrl.LTPCoef_Q14[:],
 				psEncCtrl.AR_Q13[:], psEncCtrl.HarmShapeGain_Q14[:], psEncCtrl.Tilt_Q14[:], psEncCtrl.LF_shp_Q14[:],
 				psEncCtrl.Gains_Q16[:], psEncCtrl.pitchL[:], psEncCtrl.Lambda_Q10, psEncCtrl.LTP_scale_Q14, psEnc.sCmn.arch)

@@ -271,7 +271,7 @@ func noiseShapeQuantizer(NSQ *NsqState, signalType int, x_sc_Q10 []int32, pulses
 		/* Update states */
 		psLPC_Q14++
 		NSQ.sLPC_Q14[psLPC_Q14] = xq_Q14
-		NSQ.sDiff_shp_Q14 = SUB_LSHIFT32(xq_Q14, x_sc_Q10[i], 4)
+		NSQ.sDiff_shp_Q14 = SUB32_ovflw(xq_Q14, LSHIFT32(x_sc_Q10[i], 4))
 		sLF_AR_shp_Q14 = SUB32_ovflw(NSQ.sDiff_shp_Q14, LSHIFT32(n_AR_Q12, 2))
 		NSQ.sLF_AR_shp_Q14 = sLF_AR_shp_Q14
 
