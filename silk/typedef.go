@@ -1,5 +1,3 @@
-// Package silk is a mechanical port of libopus' silk/ and silk/fixed/
-// directories (fixed-point build). See PORTING.md at the module root.
 package silk
 
 // C: silk/typedef.h
