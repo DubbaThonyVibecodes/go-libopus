@@ -3,461 +3,316 @@ package celt
 // C: celt/cwrs.h, celt/cwrs.c — pulse vector (PVQ) enumeration.
 // The CUSTOM_MODES-only helpers (log2_frac, get_required_bits) are not ported
 // since the reference build has no custom modes; the pulse caches come from
-// static_modes_fixed.go.
+// static_modes_fixed.go. Only the !SMALL_FOOTPRINT (table-driven) path is
+// ported.
 
-const mask32 = 0xFFFFFFFF
+// Although derived separately, the pulse vector coding scheme is equivalent to
+// a Pyramid Vector Quantizer \cite{Fis86}.
+// Some additional notes about an early version appear at
+// https://people.xiph.org/~tterribe/notes/cwrs.html, but the codebook ordering
+// and the definitions of some terms have evolved since that was written.
+// See upstream cwrs.c for the full derivation.
 
-// INV_TABLE[i] holds the multiplicative inverse of (2*i+1) mod 2**32.
-var inv_table = [53]uint32{
-	0x00000001, 0xAAAAAAAB, 0xCCCCCCCD, 0xB6DB6DB7,
-	0x38E38E39, 0xBA2E8BA3, 0xC4EC4EC5, 0xEEEEEEEF,
-	0xF0F0F0F1, 0x286BCA1B, 0x3CF3CF3D, 0xE9BD37A7,
-	0xC28F5C29, 0x684BDA13, 0x4F72C235, 0xBDEF7BDF,
-	0x3E0F83E1, 0x8AF8AF8B, 0x914C1BAD, 0x96F96F97,
-	0xC18F9C19, 0x2FA0BE83, 0xA4FA4FA5, 0x677D46CF,
-	0x1A1F58D1, 0xFAFAFAFB, 0x8C13521D, 0x586FB587,
-	0xB823EE09, 0xA08AD8F3, 0xC10C9715, 0xBEFBEFBF,
-	0xC0FC0FC1, 0x07A44C6B, 0xA33F128D, 0xE327A977,
-	0xC7E3F1F9, 0x962FC963, 0x3F2B3885, 0x613716AF,
-	0x781948B1, 0x2B2E43DB, 0xFCFCFCFD, 0x6FD0EB67,
-	0xFA3F47E9, 0xD2FD2FD3, 0x3F4FD3F5, 0xD4E25B9F,
-	0x5F02A3A1, 0xBF5A814B, 0x7C32B16D, 0xD3431B57,
-	0xD8FD8FD9,
-}
-
-// Computes (_a*_b-_c)/(2*_d+1) when the quotient is known to be exact.
+// U(N,K) = U(K,N) := N>0?K>0?U(N-1,K)+U(N,K-1)+U(N-1,K-1):0:K>0?1:0
 //
-// C: static inline opus_uint32 imusdiv32odd(opus_uint32 _a,opus_uint32 _b,opus_uint32 _c,int _d)
-func imusdiv32odd(a, b, c uint32, d int) uint32 {
-	celt_assert(d <= 52)
-	return (a*b - c) * inv_table[d] & mask32
-}
+// C: #define CELT_PVQ_U(_n,_k) (CELT_PVQ_U_ROW[IMIN(_n,_k)][IMAX(_n,_k)])
+func CELT_PVQ_U(n, k int) uint32 { return CELT_PVQ_U_ROW[IMIN(n, k)][IMAX(n, k)] }
 
-// Computes (_a*_b-_c)/_d when the quotient is known to be exact.
+// V(N,K) := U(N,K)+U(N,K+1) = the number of PVQ codewords for a band of size N
+// with K pulses allocated to it.
 //
-// C: static inline opus_uint32 imusdiv32even(opus_uint32 _a,opus_uint32 _b,opus_uint32 _c,int _d)
-func imusdiv32even(a, b, c uint32, d int) uint32 {
-	var inv uint32
-	var mask, shift, one int
-	celt_assert(d > 0)
-	celt_assert(d <= 54)
-	shift = EC_ILOG(uint32(d ^ (d - 1)))
-	inv = inv_table[(d-1)>>uint(shift)]
-	shift--
-	one = 1 << uint(shift)
-	mask = one - 1
-	return (a*(b>>uint(shift)) - (c >> uint(shift)) +
-		((a*(b&uint32(mask)) + uint32(one) - (c & uint32(mask))) >> uint(shift)) - 1) * inv & mask32
+// C: #define CELT_PVQ_V(_n,_k) (CELT_PVQ_U(_n,_k)+CELT_PVQ_U(_n,(_k)+1))
+func CELT_PVQ_V(n, k int) uint32 { return CELT_PVQ_U(n, k) + CELT_PVQ_U(n, k+1) }
+
+// For each V(N,K) supported, we will access element U(min(N,K+1),max(N,K+1)).
+// Thus, the number of entries in row I is the larger of the maximum number of
+// pulses we will ever allocate for a given N=I (K=128, or however many fit in
+// 32 bits, whichever is smaller), plus one, and the maximum N for which
+// K=I-1 pulses fit in 32 bits.
+// The largest band size in an Opus Custom mode is 208.
+// Otherwise, we can limit things to the set of N which can be achieved by
+// splitting a band from a standard Opus mode: 176, 144, 96, 88, 72, 64, 48,
+// 44, 36, 32, 24, 22, 18, 16, 8, 4, 2).
+var CELT_PVQ_U_DATA = [1272]uint32{
+	// N=0, K=0...176:
+	1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	// N=1, K=1...176:
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	// N=2, K=2...176:
+	3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41,
+	43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63, 65, 67, 69, 71, 73, 75, 77, 79,
+	81, 83, 85, 87, 89, 91, 93, 95, 97, 99, 101, 103, 105, 107, 109, 111, 113,
+	115, 117, 119, 121, 123, 125, 127, 129, 131, 133, 135, 137, 139, 141, 143,
+	145, 147, 149, 151, 153, 155, 157, 159, 161, 163, 165, 167, 169, 171, 173,
+	175, 177, 179, 181, 183, 185, 187, 189, 191, 193, 195, 197, 199, 201, 203,
+	205, 207, 209, 211, 213, 215, 217, 219, 221, 223, 225, 227, 229, 231, 233,
+	235, 237, 239, 241, 243, 245, 247, 249, 251, 253, 255, 257, 259, 261, 263,
+	265, 267, 269, 271, 273, 275, 277, 279, 281, 283, 285, 287, 289, 291, 293,
+	295, 297, 299, 301, 303, 305, 307, 309, 311, 313, 315, 317, 319, 321, 323,
+	325, 327, 329, 331, 333, 335, 337, 339, 341, 343, 345, 347, 349, 351,
+	// N=3, K=3...176:
+	13, 25, 41, 61, 85, 113, 145, 181, 221, 265, 313, 365, 421, 481, 545, 613,
+	685, 761, 841, 925, 1013, 1105, 1201, 1301, 1405, 1513, 1625, 1741, 1861,
+	1985, 2113, 2245, 2381, 2521, 2665, 2813, 2965, 3121, 3281, 3445, 3613, 3785,
+	3961, 4141, 4325, 4513, 4705, 4901, 5101, 5305, 5513, 5725, 5941, 6161, 6385,
+	6613, 6845, 7081, 7321, 7565, 7813, 8065, 8321, 8581, 8845, 9113, 9385, 9661,
+	9941, 10225, 10513, 10805, 11101, 11401, 11705, 12013, 12325, 12641, 12961,
+	13285, 13613, 13945, 14281, 14621, 14965, 15313, 15665, 16021, 16381, 16745,
+	17113, 17485, 17861, 18241, 18625, 19013, 19405, 19801, 20201, 20605, 21013,
+	21425, 21841, 22261, 22685, 23113, 23545, 23981, 24421, 24865, 25313, 25765,
+	26221, 26681, 27145, 27613, 28085, 28561, 29041, 29525, 30013, 30505, 31001,
+	31501, 32005, 32513, 33025, 33541, 34061, 34585, 35113, 35645, 36181, 36721,
+	37265, 37813, 38365, 38921, 39481, 40045, 40613, 41185, 41761, 42341, 42925,
+	43513, 44105, 44701, 45301, 45905, 46513, 47125, 47741, 48361, 48985, 49613,
+	50245, 50881, 51521, 52165, 52813, 53465, 54121, 54781, 55445, 56113, 56785,
+	57461, 58141, 58825, 59513, 60205, 60901, 61601,
+	// N=4, K=4...176:
+	63, 129, 231, 377, 575, 833, 1159, 1561, 2047, 2625, 3303, 4089, 4991, 6017,
+	7175, 8473, 9919, 11521, 13287, 15225, 17343, 19649, 22151, 24857, 27775,
+	30913, 34279, 37881, 41727, 45825, 50183, 54809, 59711, 64897, 70375, 76153,
+	82239, 88641, 95367, 102425, 109823, 117569, 125671, 134137, 142975, 152193,
+	161799, 171801, 182207, 193025, 204263, 215929, 228031, 240577, 253575,
+	267033, 280959, 295361, 310247, 325625, 341503, 357889, 374791, 392217,
+	410175, 428673, 447719, 467321, 487487, 508225, 529543, 551449, 573951,
+	597057, 620775, 645113, 670079, 695681, 721927, 748825, 776383, 804609,
+	833511, 863097, 893375, 924353, 956039, 988441, 1021567, 1055425, 1090023,
+	1125369, 1161471, 1198337, 1235975, 1274393, 1313599, 1353601, 1394407,
+	1436025, 1478463, 1521729, 1565831, 1610777, 1656575, 1703233, 1750759,
+	1799161, 1848447, 1898625, 1949703, 2001689, 2054591, 2108417, 2163175,
+	2218873, 2275519, 2333121, 2391687, 2451225, 2511743, 2573249, 2635751,
+	2699257, 2763775, 2829313, 2895879, 2963481, 3032127, 3101825, 3172583,
+	3244409, 3317311, 3391297, 3466375, 3542553, 3619839, 3698241, 3777767,
+	3858425, 3940223, 4023169, 4107271, 4192537, 4278975, 4366593, 4455399,
+	4545401, 4636607, 4729025, 4822663, 4917529, 5013631, 5110977, 5209575,
+	5309433, 5410559, 5512961, 5616647, 5721625, 5827903, 5935489, 6044391,
+	6154617, 6266175, 6379073, 6493319, 6608921, 6725887, 6844225, 6963943,
+	7085049, 7207551,
+	// N=5, K=5...176:
+	321, 681, 1289, 2241, 3649, 5641, 8361, 11969, 16641, 22569, 29961, 39041,
+	50049, 63241, 78889, 97281, 118721, 143529, 172041, 204609, 241601, 283401,
+	330409, 383041, 441729, 506921, 579081, 658689, 746241, 842249, 947241,
+	1061761, 1186369, 1321641, 1468169, 1626561, 1797441, 1981449, 2179241,
+	2391489, 2618881, 2862121, 3121929, 3399041, 3694209, 4008201, 4341801,
+	4695809, 5071041, 5468329, 5888521, 6332481, 6801089, 7295241, 7815849,
+	8363841, 8940161, 9545769, 10181641, 10848769, 11548161, 12280841, 13047849,
+	13850241, 14689089, 15565481, 16480521, 17435329, 18431041, 19468809,
+	20549801, 21675201, 22846209, 24064041, 25329929, 26645121, 28010881,
+	29428489, 30899241, 32424449, 34005441, 35643561, 37340169, 39096641,
+	40914369, 42794761, 44739241, 46749249, 48826241, 50971689, 53187081,
+	55473921, 57833729, 60268041, 62778409, 65366401, 68033601, 70781609,
+	73612041, 76526529, 79526721, 82614281, 85790889, 89058241, 92418049,
+	95872041, 99421961, 103069569, 106816641, 110664969, 114616361, 118672641,
+	122835649, 127107241, 131489289, 135983681, 140592321, 145317129, 150160041,
+	155123009, 160208001, 165417001, 170752009, 176215041, 181808129, 187533321,
+	193392681, 199388289, 205522241, 211796649, 218213641, 224775361, 231483969,
+	238341641, 245350569, 252512961, 259831041, 267307049, 274943241, 282741889,
+	290705281, 298835721, 307135529, 315607041, 324252609, 333074601, 342075401,
+	351257409, 360623041, 370174729, 379914921, 389846081, 399970689, 410291241,
+	420810249, 431530241, 442453761, 453583369, 464921641, 476471169, 488234561,
+	500214441, 512413449, 524834241, 537479489, 550351881, 563454121, 576788929,
+	590359041, 604167209, 618216201, 632508801,
+	// N=6, K=6...96:
+	1683, 3653, 7183, 13073, 22363, 36365, 56695, 85305, 124515, 177045, 246047,
+	335137, 448427, 590557, 766727, 982729, 1244979, 1560549, 1937199, 2383409,
+	2908411, 3522221, 4235671, 5060441, 6009091, 7095093, 8332863, 9737793,
+	11326283, 13115773, 15124775, 17372905, 19880915, 22670725, 25765455,
+	29189457, 32968347, 37129037, 41699767, 46710137, 52191139, 58175189,
+	64696159, 71789409, 79491819, 87841821, 96879431, 106646281, 117185651,
+	128542501, 140763503, 153897073, 167993403, 183104493, 199284183, 216588185,
+	235074115, 254801525, 275831935, 298228865, 322057867, 347386557, 374284647,
+	402823977, 433078547, 465124549, 499040399, 534906769, 572806619, 612825229,
+	655050231, 699571641, 746481891, 795875861, 847850911, 902506913, 959946283,
+	1020274013, 1083597703, 1150027593, 1219676595, 1292660325, 1369097135,
+	1449108145, 1532817275, 1620351277, 1711839767, 1807415257, 1907213187,
+	2011371957, 2120032959,
+	// N=7, K=7...54
+	8989, 19825, 40081, 75517, 134245, 227305, 369305, 579125, 880685, 1303777,
+	1884961, 2668525, 3707509, 5064793, 6814249, 9041957, 11847485, 15345233,
+	19665841, 24957661, 31388293, 39146185, 48442297, 59511829, 72616013,
+	88043969, 106114625, 127178701, 151620757, 179861305, 212358985, 249612805,
+	292164445, 340600625, 395555537, 457713341, 527810725, 606639529, 695049433,
+	793950709, 904317037, 1027188385, 1163673953, 1314955181, 1482288821,
+	1667010073, 1870535785, 2094367717,
+	// N=8, K=8...37
+	48639, 108545, 224143, 433905, 795455, 1392065, 2340495, 3800305, 5984767,
+	9173505, 13726991, 20103025, 28875327, 40754369, 56610575, 77500017,
+	104692735, 139703809, 184327311, 240673265, 311207743, 398796225, 506750351,
+	638878193, 799538175, 993696769, 1226990095, 1505789553, 1837271615,
+	2229491905,
+	// N=9, K=9...28:
+	265729, 598417, 1256465, 2485825, 4673345, 8405905, 14546705, 24331777,
+	39490049, 62390545, 96220561, 145198913, 214828609, 312193553, 446304145,
+	628496897, 872893441, 1196924561, 1621925137, 2173806145,
+	// N=10, K=10...24:
+	1462563, 3317445, 7059735, 14218905, 27298155, 50250765, 89129247, 152951073,
+	254831667, 413442773, 654862247, 1014889769, 1541911931, 2300409629,
+	3375210671,
+	// N=11, K=11...19:
+	8097453, 18474633, 39753273, 81270333, 158819253, 298199265, 540279585,
+	948062325, 1616336765,
+	// N=12, K=12...18:
+	45046719, 103274625, 224298231, 464387817, 921406335, 1759885185,
+	3248227095,
+	// N=13, K=13...16:
+	251595969, 579168825, 1267854873, 2653649025,
+	// N=14, K=14:
+	1409933619,
 }
 
-// Compute U(2,_k). Note that this may be called with _k=32768 (maxK[2]+1).
-//
-// C: static inline unsigned ucwrs2(unsigned _k)
-func ucwrs2(k uint32) uint32 {
-	celt_assert(k > 0)
-	return k + (k - 1)
+// C: static const opus_uint32 *const CELT_PVQ_U_ROW[15]
+var CELT_PVQ_U_ROW = [15][]uint32{
+	CELT_PVQ_U_DATA[0:], CELT_PVQ_U_DATA[176:], CELT_PVQ_U_DATA[351:],
+	CELT_PVQ_U_DATA[525:], CELT_PVQ_U_DATA[698:], CELT_PVQ_U_DATA[870:],
+	CELT_PVQ_U_DATA[1041:], CELT_PVQ_U_DATA[1131:], CELT_PVQ_U_DATA[1178:],
+	CELT_PVQ_U_DATA[1207:], CELT_PVQ_U_DATA[1226:], CELT_PVQ_U_DATA[1240:],
+	CELT_PVQ_U_DATA[1248:], CELT_PVQ_U_DATA[1254:], CELT_PVQ_U_DATA[1257:],
 }
 
-// Compute V(2,_k).
-//
-// C: static inline opus_uint32 ncwrs2(int _k)
-func ncwrs2(k int) uint32 {
-	celt_assert(k > 0)
-	return 4 * uint32(k)
-}
-
-// Compute U(3,_k). Note that this may be called with _k=32768 (maxK[3]+1).
-//
-// C: static inline opus_uint32 ucwrs3(unsigned _k)
-func ucwrs3(k uint32) uint32 {
-	celt_assert(k > 0)
-	return (2*k-2)*k + 1
-}
-
-// Compute V(3,_k).
-//
-// C: static inline opus_uint32 ncwrs3(int _k)
-func ncwrs3(k int) uint32 {
-	celt_assert(k > 0)
-	return 2 * (2*uint32(k)*uint32(k) + 1)
-}
-
-// Compute U(4,_k).
-//
-// C: static inline opus_uint32 ucwrs4(int _k)
-func ucwrs4(k int) uint32 {
-	celt_assert(k > 0)
-	return imusdiv32odd(uint32(2*k), uint32(2*k-3)*uint32(k)+4, 3, 1)
-}
-
-// Compute V(4,_k).
-//
-// C: static inline opus_uint32 ncwrs4(int _k)
-func ncwrs4(k int) uint32 {
-	celt_assert(k > 0)
-	return ((uint32(k)*uint32(k) + 2) * uint32(k)) / 3 << 3
-}
-
-// Computes the next row/column of any recurrence that obeys the relation
-// u[i][j]=u[i-1][j]+u[i][j-1]+u[i-1][j-1]. _ui0 is the base case for the new row/column.
-//
-// C: static inline void unext(opus_uint32 *_ui,unsigned _len,opus_uint32 _ui0)
-func unext(ui []uint32, n uint32, ui0 uint32) {
-	var ui1 uint32
-	var j uint32
-	// This do-while will overrun the array if we don't have storage for at least 2 values.
-	j = 1
-	for {
-		ui1 = UADD32(UADD32(ui[j], ui[j-1]), ui0)
-		ui[j-1] = ui0
-		ui0 = ui1
-		j++
-		if j >= n {
-			break
-		}
-	}
-	ui[j-1] = ui0
-}
-
-// Computes the previous row/column of any recurrence that obeys the relation
-// u[i-1][j]=u[i][j]-u[i][j-1]-u[i-1][j-1]. _ui0 is the base case for the new row/column.
-//
-// C: static inline void uprev(opus_uint32 *_ui,unsigned _n,opus_uint32 _ui0)
-func uprev(ui []uint32, n uint32, ui0 uint32) {
-	var ui1 uint32
-	var j uint32
-	j = 1
-	for {
-		ui1 = USUB32(USUB32(ui[j], ui[j-1]), ui0)
-		ui[j-1] = ui0
-		ui0 = ui1
-		j++
-		if j >= n {
-			break
-		}
-	}
-	ui[j-1] = ui0
-}
-
-// Compute V(_n,_k), as well as U(_n,0..._k+1).
-// _u: On exit, _u[i] contains U(_n,i) for i in [0..._k+1].
-//
-// C: static opus_uint32 ncwrs_urow(unsigned _n,unsigned _k,opus_uint32 *_u)
-func ncwrs_urow(n, k uint32, u []uint32) uint32 {
-	var um2 uint32
-	var length, kk uint32
-	length = k + 2
-	// We require storage at least 3 values (e.g., _k>0).
-	celt_assert(length >= 3)
-	u[0] = 0
-	um2 = 1
-	u[1] = um2
-	// _k>52 doesn't work in the false branch due to the limits of INV_TABLE,
-	// but _k isn't tested here because k<=52 for n=7
-	if n <= 6 {
-		// If _n==0, _u[0] should be 1 and the rest should be 0.
-		// If _n==1, _u[i] should be 1 for i>1.
-		celt_assert(n >= 2)
-		// If _k==0, the following do-while loop will overflow the buffer.
-		celt_assert(k > 0)
-		kk = 2
-		for {
-			u[kk] = (kk << 1) - 1
-			kk++
-			if kk >= length {
-				break
-			}
-		}
-		for kk = 2; kk < n; kk++ {
-			unext(u[1:], k+1, 1)
-		}
-	} else {
-		var um1, n2m1 uint32
-		n2m1 = (n << 1) - 1
-		um1 = n2m1
-		u[2] = um1
-		for kk = 3; kk < length; kk++ {
-			// U(N,K) = ((2*N-1)*U(N,K-1)-U(N,K-2))/(K-1) + U(N,K-2)
-			um2 = imusdiv32even(n2m1, um1, um2, int(kk-1)) + um2
-			u[kk] = um2
-			kk++
-			if kk >= length {
-				break
-			}
-			um1 = imusdiv32odd(n2m1, um2, um1, int(kk-1)>>1) + um1
-			u[kk] = um1
-		}
-	}
-	return u[k] + u[k+1]
-}
-
-// Returns the _i'th combination of _k elements (at most 32767) chosen from a
-// set of size 1 with associated sign bits. _y: Returns the vector of pulses.
-//
-// C: static inline void cwrsi1(int _k,opus_uint32 _i,int *_y)
-func cwrsi1(k int, i uint32, y []int) {
-	var s int
-	s = -int(i)
-	y[0] = (k + s) ^ s
-}
-
-// C: static inline void cwrsi2(int _k,opus_uint32 _i,int *_y)
-func cwrsi2(k int, i uint32, y []int) {
-	var p uint32
-	var s, yj int
-	p = ucwrs2(uint32(k) + 1)
-	if i >= p {
-		s = -1
-	}
-	i -= p & uint32(s)
-	yj = k
-	k = int((i + 1) >> 1)
-	if k != 0 {
-		p = ucwrs2(uint32(k))
-	} else {
-		p = 0
-	}
-	i -= p
-	yj -= k
-	y[0] = (yj + s) ^ s
-	cwrsi1(k, i, y[1:])
-}
-
-// C: static void cwrsi3(int _k,opus_uint32 _i,int *_y)
-func cwrsi3(k int, i uint32, y []int) {
-	var p uint32
-	var s, yj int
-	p = ucwrs3(uint32(k) + 1)
-	if i >= p {
-		s = -1
-	}
-	i -= p & uint32(s)
-	yj = k
-	// Finds the maximum _k such that ucwrs3(_k)<=_i (tested for all
-	// _i<2147418113=U(3,32768)).
-	if i > 0 {
-		k = int((Isqrt32(2*i-1) + 1) >> 1)
-	} else {
-		k = 0
-	}
-	if k != 0 {
-		p = ucwrs3(uint32(k))
-	} else {
-		p = 0
-	}
-	i -= p
-	yj -= k
-	y[0] = (yj + s) ^ s
-	cwrsi2(k, i, y[1:])
-}
-
-// C: static void cwrsi4(int _k,opus_uint32 _i,int *_y)
-func cwrsi4(k int, i uint32, y []int) {
-	var p uint32
-	var s, yj, kl, kr int
-	p = ucwrs4(k + 1)
-	if i >= p {
-		s = -1
-	}
-	i -= p & uint32(s)
-	yj = k
-	// We could solve a cubic for k here, but the form of the direct solution does
-	// not lend itself well to exact integer arithmetic.
-	// Instead we do a binary search on U(4,K).
-	kl = 0
-	kr = k
-	for {
-		k = (kl + kr) >> 1
-		if k != 0 {
-			p = ucwrs4(k)
-		} else {
-			p = 0
-		}
-		if p < i {
-			if k >= kr {
-				break
-			}
-			kl = k + 1
-		} else if p > i {
-			kr = k - 1
-		} else {
-			break
-		}
-	}
-	i -= p
-	yj -= k
-	y[0] = (yj + s) ^ s
-	cwrsi3(k, i, y[1:])
-}
-
-// Returns the _i'th combination of _k elements chosen from a set of size _n
-// with associated sign bits.
-// _y: Returns the vector of pulses.
-// _u: Must contain entries [0..._k+1] of row _n of U() on input.
-// Its contents will be destructively modified.
-//
-// C: static void cwrsi(int _n,int _k,opus_uint32 _i,int *_y,opus_uint32 *_u)
-func cwrsi(n, k int, i uint32, y []int, u []uint32) {
+// C: static opus_uint32 icwrs(int _n,const int *_y)
+func icwrs(_n int, _y []int) uint32 {
+	var i uint32
 	var j int
-	celt_assert(n > 0)
-	j = 0
+	var k int
+	celt_assert(_n >= 2)
+	j = _n - 1
+	i = b2u32(_y[j] < 0)
+	k = ABS(_y[j])
 	for {
-		var p uint32
-		var s, yj int
-		p = u[k+1]
-		if i >= p {
-			s = -1
-		} else {
-			s = 0
+		j--
+		i += CELT_PVQ_U(_n-j, k)
+		k += ABS(_y[j])
+		if _y[j] < 0 {
+			i += CELT_PVQ_U(_n-j, k+1)
 		}
-		i -= p & uint32(s)
-		yj = k
-		p = u[k]
-		for p > i {
-			k--
-			p = u[k]
-		}
-		i -= p
-		yj -= k
-		y[j] = (yj + s) ^ s
-		uprev(u, uint32(k+2), 0)
-		j++
-		if j >= n {
+		if j <= 0 {
 			break
 		}
 	}
-}
-
-// Returns the index of the given combination of K elements chosen from a set
-// of size 1 with associated sign bits.
-// _y: The vector of pulses, whose sum of absolute values is K. _k: Returns K.
-//
-// C: static inline opus_uint32 icwrs1(const int *_y,int *_k)
-func icwrs1(y []int, k *int) uint32 {
-	*k = ABS(y[0])
-	if y[0] < 0 {
-		return 1
-	}
-	return 0
-}
-
-// C: static inline opus_uint32 icwrs2(const int *_y,int *_k)
-func icwrs2(y []int, k *int) uint32 {
-	var i uint32
-	var kk int
-	i = icwrs1(y[1:], &kk)
-	if kk != 0 {
-		i += ucwrs2(uint32(kk))
-	}
-	kk += ABS(y[0])
-	if y[0] < 0 {
-		i += ucwrs2(uint32(kk) + 1)
-	}
-	*k = kk
-	return i
-}
-
-// C: static inline opus_uint32 icwrs3(const int *_y,int *_k)
-func icwrs3(y []int, k *int) uint32 {
-	var i uint32
-	var kk int
-	i = icwrs2(y[1:], &kk)
-	if kk != 0 {
-		i += ucwrs3(uint32(kk))
-	}
-	kk += ABS(y[0])
-	if y[0] < 0 {
-		i += ucwrs3(uint32(kk) + 1)
-	}
-	*k = kk
-	return i
-}
-
-// C: static inline opus_uint32 icwrs4(const int *_y,int *_k)
-func icwrs4(y []int, k *int) uint32 {
-	var i uint32
-	var kk int
-	i = icwrs3(y[1:], &kk)
-	if kk != 0 {
-		i += ucwrs4(kk)
-	}
-	kk += ABS(y[0])
-	if y[0] < 0 {
-		i += ucwrs4(kk + 1)
-	}
-	*k = kk
-	return i
-}
-
-// Returns the index of the given combination of K elements chosen from a set
-// of size _n with associated sign bits.
-// _y:  The vector of pulses, whose sum of absolute values must be _k.
-// _nc: Returns V(_n,_k).
-//
-// C: static inline opus_uint32 icwrs(int _n,int _k,opus_uint32 *_nc,const int *_y,opus_uint32 *_u)
-func icwrs(n, k int, nc *uint32, y []int, u []uint32) uint32 {
-	var i uint32
-	var j, kk int
-	// We can't unroll the first two iterations of the loop unless _n>=2.
-	celt_assert(n >= 2)
-	u[0] = 0
-	for kk = 1; kk <= k+1; kk++ {
-		u[kk] = uint32(kk<<1) - 1
-	}
-	i = icwrs1(y[n-1:], &kk)
-	j = n - 2
-	i += u[kk]
-	kk += ABS(y[j])
-	if y[j] < 0 {
-		i += u[kk+1]
-	}
-	for j > 0 {
-		j--
-		unext(u, uint32(k+2), 0)
-		i += u[kk]
-		kk += ABS(y[j])
-		if y[j] < 0 {
-			i += u[kk+1]
-		}
-	}
-	*nc = u[kk] + u[kk+1]
 	return i
 }
 
 // C: void encode_pulses(const int *_y,int _n,int _k,ec_enc *_enc)
-func EncodePulses(y []int, n, k int, enc *EcEnc) {
-	var i uint32
-	celt_assert(k > 0)
-	switch n {
-	case 2:
-		i = icwrs2(y, &k)
-		enc.EncUint(i, ncwrs2(k))
-	case 3:
-		i = icwrs3(y, &k)
-		enc.EncUint(i, ncwrs3(k))
-	case 4:
-		i = icwrs4(y, &k)
-		enc.EncUint(i, ncwrs4(k))
-	default:
-		var nc uint32
-		u := make([]uint32, k+2)
-		i = icwrs(n, k, &nc, y, u)
-		enc.EncUint(i, nc)
-	}
+func EncodePulses(_y []int, _n, _k int, _enc *EcEnc) {
+	celt_assert(_k > 0)
+	_enc.EncUint(icwrs(_n, _y), CELT_PVQ_V(_n, _k))
 }
 
-// C: void decode_pulses(int *_y,int _n,int _k,ec_dec *_dec)
-func DecodePulses(y []int, n, k int, dec *EcDec) {
-	celt_assert(k > 0)
-	switch n {
-	case 2:
-		cwrsi2(k, dec.DecUint(ncwrs2(k)), y)
-	case 3:
-		cwrsi3(k, dec.DecUint(ncwrs3(k)), y)
-	case 4:
-		cwrsi4(k, dec.DecUint(ncwrs4(k)), y)
-	default:
-		u := make([]uint32, k+2)
-		cwrsi(n, k, dec.DecUint(ncwrs_urow(uint32(n), uint32(k), u)), y, u)
+// C: static opus_val32 cwrsi(int _n,int _k,opus_uint32 _i,int *_y)
+func cwrsi(_n, _k int, _i uint32, _y []int) int32 {
+	var p uint32
+	var s int
+	var k0 int
+	var val int16
+	var yy int32 = 0
+	celt_assert(_k > 0)
+	celt_assert(_n > 1)
+	yi := 0
+	for _n > 2 {
+		var q uint32
+		// Lots of pulses case:
+		if _k >= _n {
+			var row []uint32
+			row = CELT_PVQ_U_ROW[_n]
+			// Are the pulses in this dimension negative?
+			p = row[_k+1]
+			s = -int(b2u32(_i >= p))
+			_i -= p & uint32(s)
+			// Count how many pulses were placed in this dimension.
+			k0 = _k
+			q = row[_n]
+			if q > _i {
+				celt_assert(p > q)
+				_k = _n
+				for {
+					_k--
+					p = CELT_PVQ_U_ROW[_k][_n]
+					if !(p > _i) {
+						break
+					}
+				}
+			} else {
+				for p = row[_k]; p > _i; p = row[_k] {
+					_k--
+				}
+			}
+			_i -= p
+			val = int16((k0 - _k + s) ^ s)
+			_y[yi] = int(val)
+			yi++
+			yy = MAC16_16(yy, val, val)
+		} else {
+			// Lots of dimensions case:
+			// Are there any pulses in this dimension at all?
+			p = CELT_PVQ_U_ROW[_k][_n]
+			q = CELT_PVQ_U_ROW[_k+1][_n]
+			if p <= _i && _i < q {
+				_i -= p
+				_y[yi] = 0
+				yi++
+			} else {
+				// Are the pulses in this dimension negative?
+				s = -int(b2u32(_i >= q))
+				_i -= q & uint32(s)
+				// Count how many pulses were placed in this dimension.
+				k0 = _k
+				for {
+					_k--
+					p = CELT_PVQ_U_ROW[_k][_n]
+					if !(p > _i) {
+						break
+					}
+				}
+				_i -= p
+				val = int16((k0 - _k + s) ^ s)
+				_y[yi] = int(val)
+				yi++
+				yy = MAC16_16(yy, val, val)
+			}
+		}
+		_n--
 	}
+	// _n==2
+	p = uint32(2*_k + 1)
+	s = -int(b2u32(_i >= p))
+	_i -= p & uint32(s)
+	k0 = _k
+	_k = int((_i + 1) >> 1)
+	if _k != 0 {
+		_i -= uint32(2*_k - 1)
+	}
+	val = int16((k0 - _k + s) ^ s)
+	_y[yi] = int(val)
+	yi++
+	yy = MAC16_16(yy, val, val)
+	// _n==1
+	s = -int(_i)
+	val = int16((_k + s) ^ s)
+	_y[yi] = int(val)
+	yy = MAC16_16(yy, val, val)
+	return yy
+}
+
+// C: opus_val32 decode_pulses(int *_y,int _n,int _k,ec_dec *_dec)
+func DecodePulses(_y []int, _n, _k int, _dec *EcDec) int32 {
+	return cwrsi(_n, _k, _dec.DecUint(CELT_PVQ_V(_n, _k)), _y)
+}
+
+// b2u32 is the C int value of a boolean expression.
+func b2u32(b bool) uint32 {
+	if b {
+		return 1
+	}
+	return 0
 }

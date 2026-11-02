@@ -70,34 +70,38 @@ func (psEnc *EncoderStateFIX) ControlEncoder(encControl *EncControlStruct, Targe
 // C: static opus_int silk_setup_resamplers(silk_encoder_state_Fxx *psEnc, opus_int fs_kHz)
 func setupResamplers(psEnc *EncoderStateFIX, fs_kHz int) int {
 	var ret int = SILK_NO_ERROR
-	var nSamples_temp int32
 
 	if psEnc.sCmn.fs_kHz != fs_kHz || psEnc.sCmn.prev_API_fs_Hz != psEnc.sCmn.API_fs_Hz {
 		if psEnc.sCmn.fs_kHz == 0 {
 			/* Initialize the resampler for enc_API.c preparing resampling from API_fs_Hz to fs_kHz */
 			ret += psEnc.sCmn.resampler_state.ResamplerInit(psEnc.sCmn.API_fs_Hz, int32(fs_kHz*1000), 1)
 		} else {
-			/* Allocate worst case space for temporary upsampling, 8 to 48 kHz, so a factor 6 */
-			var x_buf_API_fs_Hz [(2*MAX_FRAME_LENGTH_MS + LA_SHAPE_MS) * MAX_API_FS_KHZ]int16
-			var temp_resampler_state ResamplerStateStruct
+			var x_buf_API_fs_Hz []int16
+			var temp_resampler_state *ResamplerStateStruct
 			x_bufFIX := psEnc.x_buf[:]
+			var api_buf_samples int32
+			var old_buf_samples int32
+			var buf_length_ms int32
 
-			nSamples_temp = LSHIFT(psEnc.sCmn.frame_length, 1) + int32(LA_SHAPE_MS*psEnc.sCmn.fs_kHz)
+			buf_length_ms = LSHIFT(psEnc.sCmn.nb_subfr*5, 1) + LA_SHAPE_MS
+			old_buf_samples = buf_length_ms * int32(psEnc.sCmn.fs_kHz)
 
 			/* Initialize resampler for temporary resampling of x_buf data to API_fs_Hz */
+			temp_resampler_state = new(ResamplerStateStruct)
 			ret += temp_resampler_state.ResamplerInit(SMULBB(psEnc.sCmn.fs_kHz, 1000), psEnc.sCmn.API_fs_Hz, 0)
 
-			/* Temporary resampling of x_buf data to API_fs_Hz */
-			ret += temp_resampler_state.Resampler(x_buf_API_fs_Hz[:], x_bufFIX, nSamples_temp)
+			/* Calculate number of samples to temporarily upsample */
+			api_buf_samples = buf_length_ms * DIV32_16(psEnc.sCmn.API_fs_Hz, 1000)
 
-			/* Calculate number of samples that has been temporarily upsampled */
-			nSamples_temp = DIV32_16(nSamples_temp*psEnc.sCmn.API_fs_Hz, SMULBB(psEnc.sCmn.fs_kHz, 1000))
+			/* Temporary resampling of x_buf data to API_fs_Hz */
+			x_buf_API_fs_Hz = make([]int16, api_buf_samples)
+			ret += temp_resampler_state.Resampler(x_buf_API_fs_Hz, x_bufFIX, old_buf_samples)
 
 			/* Initialize the resampler for enc_API.c preparing resampling from API_fs_Hz to fs_kHz */
 			ret += psEnc.sCmn.resampler_state.ResamplerInit(psEnc.sCmn.API_fs_Hz, SMULBB(fs_kHz, 1000), 1)
 
 			/* Correct resampler state by resampling buffered data from API_fs_Hz to fs_kHz */
-			ret += psEnc.sCmn.resampler_state.Resampler(x_bufFIX, x_buf_API_fs_Hz[:], nSamples_temp)
+			ret += psEnc.sCmn.resampler_state.Resampler(x_bufFIX, x_buf_API_fs_Hz, api_buf_samples)
 		}
 	}
 
@@ -298,11 +302,13 @@ func setupComplexity(psEncC *EncoderState, Complexity int) int {
 	return ret
 }
 
-// C: static inline opus_int silk_setup_LBRR(silk_encoder_state *psEncC, const opus_int32 TargetRate_bps)
+// C: static OPUS_INLINE opus_int silk_setup_LBRR(silk_encoder_state *psEncC, const opus_int32 TargetRate_bps)
 func setupLBRR(psEncC *EncoderState, TargetRate_bps int32) int {
+	var LBRR_in_previous_packet int
 	var ret int = SILK_NO_ERROR
 	var LBRR_rate_thres_bps int32
 
+	LBRR_in_previous_packet = psEncC.LBRR_enabled
 	psEncC.LBRR_enabled = 0
 	if psEncC.useInBandFEC != 0 && psEncC.PacketLoss_perc > 0 {
 		if psEncC.fs_kHz == 8 {
@@ -316,8 +322,13 @@ func setupLBRR(psEncC *EncoderState, TargetRate_bps int32) int {
 
 		if TargetRate_bps > LBRR_rate_thres_bps {
 			/* Set gain increase for coding LBRR excitation */
+			if LBRR_in_previous_packet == 0 {
+				/* Previous packet did not have LBRR, and was therefore coded at a higher bitrate */
+				psEncC.LBRR_GainIncreases = 7
+			} else {
+				psEncC.LBRR_GainIncreases = max_int(7-int(SMULWB(int32(psEncC.PacketLoss_perc), SILK_FIX_CONST(0.4, 16))), 2)
+			}
 			psEncC.LBRR_enabled = 1
-			psEncC.LBRR_GainIncreases = max_int(7-int(SMULWB(int32(psEncC.PacketLoss_perc), SILK_FIX_CONST(0.4, 16))), 2)
 		}
 	}
 

@@ -43,6 +43,8 @@ type EncControlStruct struct {
 	ToMono int
 	// I:   Opus encoder is allowing us to switch bandwidth
 	OpusCanSwitch int
+	// I: Make frames as independent as possible (but still use LPC)
+	ReducedDependency int32
 	// O:   Internal sampling rate used, in Hertz; 8000/12000/16000
 	InternalSampleRate int32
 	// O: Flag that bandwidth switching is allowed (because low voice activity)

@@ -17,8 +17,10 @@ func ResamplerDown23(S []int32, out []int16, in []int16, inLen int32) {
 	const ORDER_FIR = 4
 
 	var nSamplesIn, counter, res_Q6 int32
-	var buf [RESAMPLER_MAX_BATCH_SIZE_IN + ORDER_FIR]int32
+	var buf []int32
 	var buf_ptr []int32
+
+	buf = make([]int32, RESAMPLER_MAX_BATCH_SIZE_IN+ORDER_FIR)
 
 	/* Copy buffered samples to start of buffer */
 	copy(buf[:ORDER_FIR], S[:ORDER_FIR])
@@ -32,7 +34,7 @@ func ResamplerDown23(S []int32, out []int16, in []int16, inLen int32) {
 			Resampler_2_3_COEFS_LQ[:], nSamplesIn)
 
 		/* Interpolate filtered signal */
-		buf_ptr = buf[:]
+		buf_ptr = buf
 		counter = nSamplesIn
 		for counter > 2 {
 			/* Inner product */

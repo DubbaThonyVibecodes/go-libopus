@@ -116,6 +116,26 @@ const (
 	ModeCELT   Mode = opus.MODE_CELT_ONLY
 )
 
+// FrameDuration selects the frame size the encoder uses regardless of the
+// number of samples passed to Encode (OPUS_SET_EXPERT_FRAME_DURATION,
+// libopus 1.1+). With FrameDurationArg (the default) the frame size is the
+// number of samples passed; with FrameDurationVariable the encoder picks
+// the size itself. When the encoder consumes fewer samples than offered,
+// the packet says how many were used (see PacketSamples) and the caller
+// must feed the rest again.
+type FrameDuration int
+
+const (
+	FrameDurationArg      FrameDuration = opus.OPUS_FRAMESIZE_ARG
+	FrameDuration2_5ms    FrameDuration = opus.OPUS_FRAMESIZE_2_5_MS
+	FrameDuration5ms      FrameDuration = opus.OPUS_FRAMESIZE_5_MS
+	FrameDuration10ms     FrameDuration = opus.OPUS_FRAMESIZE_10_MS
+	FrameDuration20ms     FrameDuration = opus.OPUS_FRAMESIZE_20_MS
+	FrameDuration40ms     FrameDuration = opus.OPUS_FRAMESIZE_40_MS
+	FrameDuration60ms     FrameDuration = opus.OPUS_FRAMESIZE_60_MS
+	FrameDurationVariable FrameDuration = opus.OPUS_FRAMESIZE_VARIABLE
+)
+
 // Auto is the OPUS_AUTO value for settings that accept it (bitrate, forced channels).
 const Auto = opus.OPUS_AUTO
 
@@ -332,6 +352,28 @@ func (e *Encoder) SetForceMode(m Mode) error {
 // private OPUS_SET_VOICE_RATIO request.
 func (e *Encoder) SetVoiceRatio(r int) error {
 	return e.Ctl(opus.OPUS_SET_VOICE_RATIO_REQUEST, int32(r))
+}
+
+// SetExpertFrameDuration sets the frame duration policy (libopus 1.1+).
+func (e *Encoder) SetExpertFrameDuration(d FrameDuration) error {
+	return e.Ctl(opus.OPUS_SET_EXPERT_FRAME_DURATION_REQUEST, int32(d))
+}
+
+// ExpertFrameDuration returns the frame duration policy.
+func (e *Encoder) ExpertFrameDuration() FrameDuration {
+	return FrameDuration(e.getInt(opus.OPUS_GET_EXPERT_FRAME_DURATION_REQUEST))
+}
+
+// SetPredictionDisabled disables almost all inter-frame prediction so that
+// any packet can be decoded almost independently (libopus 1.1+). Costs
+// bitrate and quality.
+func (e *Encoder) SetPredictionDisabled(off bool) error {
+	return e.Ctl(opus.OPUS_SET_PREDICTION_DISABLED_REQUEST, b2i(off))
+}
+
+// PredictionDisabled reports whether inter-frame prediction is disabled.
+func (e *Encoder) PredictionDisabled() bool {
+	return e.getInt(opus.OPUS_GET_PREDICTION_DISABLED_REQUEST) != 0
 }
 
 // FinalRange returns the range coder's final state for the last packet
@@ -561,6 +603,65 @@ func (r *Repacketizer) OutRange(begin, end int, out []byte) (int, error) {
 	return int(n), nil
 }
 
+// PacketPad pads packet in place to newLen bytes (libopus 1.1+). packet
+// must have capacity for newLen bytes; the returned slice has length newLen.
+func PacketPad(packet []byte, newLen int) ([]byte, error) {
+	if newLen > cap(packet) {
+		return nil, ErrBadArg
+	}
+	p := packet[:newLen]
+	if code := opus.PacketPad(p, int32(len(packet)), int32(newLen)); code != opus.OPUS_OK {
+		return nil, Error(code)
+	}
+	return p, nil
+}
+
+// PacketUnpad removes all padding from packet in place and returns the
+// shortened slice (libopus 1.1+).
+func PacketUnpad(packet []byte) ([]byte, error) {
+	n := opus.PacketUnpad(packet, int32(len(packet)))
+	if n < 0 {
+		return nil, Error(int(n))
+	}
+	return packet[:n], nil
+}
+
+// MultistreamPacketPad pads a multistream packet in place to newLen bytes
+// (libopus 1.1+); see PacketPad.
+func MultistreamPacketPad(packet []byte, newLen, streams int) ([]byte, error) {
+	if newLen > cap(packet) {
+		return nil, ErrBadArg
+	}
+	p := packet[:newLen]
+	if code := opus.MultistreamPacketPad(p, int32(len(packet)), int32(newLen), streams); code != opus.OPUS_OK {
+		return nil, Error(code)
+	}
+	return p, nil
+}
+
+// MultistreamPacketUnpad removes all padding from a multistream packet in
+// place (libopus 1.1+); see PacketUnpad.
+func MultistreamPacketUnpad(packet []byte, streams int) ([]byte, error) {
+	n := opus.MultistreamPacketUnpad(packet, int32(len(packet)), streams)
+	if n < 0 {
+		return nil, Error(int(n))
+	}
+	return packet[:n], nil
+}
+
+// SoftClip applies soft clipping to bring float PCM into the [-1, 1] range
+// (opus_pcm_soft_clip, libopus 1.1+). mem must hold one value per channel
+// and carries state between calls; pass nil for stateless use.
+func SoftClip(pcm []float32, channels int, mem []float32) {
+	if channels <= 0 || len(pcm) < channels {
+		return
+	}
+	if len(mem) < channels {
+		mem = make([]float32, channels)
+	}
+	opus.PcmSoftClip(pcm, len(pcm)/channels, channels, mem)
+}
+
 // ---- Multistream ----------------------------------------------------------
 
 // Layout describes a multistream channel layout: how the (up to 255)
@@ -690,6 +791,16 @@ func (e *MultistreamEncoder) Stream(i int) (*Encoder, error) {
 	return &Encoder{st: st, rate: e.rate, channels: ch}, nil
 }
 
+// SetExpertFrameDuration sets the frame duration policy of every stream (libopus 1.1+).
+func (e *MultistreamEncoder) SetExpertFrameDuration(d FrameDuration) error {
+	return e.Ctl(opus.OPUS_SET_EXPERT_FRAME_DURATION_REQUEST, int32(d))
+}
+
+// SetPredictionDisabled disables inter-frame prediction in every stream (libopus 1.1+).
+func (e *MultistreamEncoder) SetPredictionDisabled(off bool) error {
+	return e.Ctl(opus.OPUS_SET_PREDICTION_DISABLED_REQUEST, b2i(off))
+}
+
 // FinalRange returns the XOR of the streams' final range states.
 func (e *MultistreamEncoder) FinalRange() uint32 {
 	var v uint32
@@ -757,6 +868,28 @@ func (d *MultistreamDecoder) Ctl(request int, args ...any) error {
 // SetGain sets the output gain (Q8 dB) of every stream.
 func (d *MultistreamDecoder) SetGain(q8dB int) error {
 	return d.Ctl(opus.OPUS_SET_GAIN_REQUEST, int32(q8dB))
+}
+
+// Gain returns the output gain (Q8 dB) (libopus 1.1+).
+func (d *MultistreamDecoder) Gain() int {
+	var v int32
+	d.st.Ctl(opus.OPUS_GET_GAIN_REQUEST, &v)
+	return int(v)
+}
+
+// LastPacketDuration returns the duration in samples of the last decoded
+// packet (libopus 1.1+).
+func (d *MultistreamDecoder) LastPacketDuration() int {
+	var v int32
+	d.st.Ctl(opus.OPUS_GET_LAST_PACKET_DURATION_REQUEST, &v)
+	return int(v)
+}
+
+// Bandwidth returns the bandwidth of the last decoded packet (libopus 1.1+).
+func (d *MultistreamDecoder) Bandwidth() Bandwidth {
+	var v int32
+	d.st.Ctl(opus.OPUS_GET_BANDWIDTH_REQUEST, &v)
+	return Bandwidth(v)
 }
 
 // Reset resets every stream decoder.

@@ -54,6 +54,13 @@ static uint32_t crc_s16(const opus_int16 *p, int n) {
    return c ^ 0xFFFFFFFFu;
 }
 
+static uint32_t crc_bytes(const unsigned char *p, int n) {
+   uint32_t c = 0xFFFFFFFFu;
+   int i;
+   for (i = 0; i < n; i++) c = crc_table[(c ^ p[i]) & 0xFF] ^ (c >> 8);
+   return c ^ 0xFFFFFFFFu;
+}
+
 static void put_be32(FILE *f, uint32_t v) {
    unsigned char b[4] = { v>>24, (v>>16)&0xFF, (v>>8)&0xFF, v&0xFF };
    if (fwrite(b, 1, 4, f) != 4) die("write");
@@ -110,6 +117,17 @@ static int parse_mode(const char *s) {
    if (!strcmp(s, "hybrid")) return MODE_HYBRID;
    if (!strcmp(s, "celt")) return MODE_CELT_ONLY;
    dief("bad mode", s); return 0;
+}
+static int parse_framedur(const char *s) {
+   if (!strcmp(s, "arg")) return OPUS_FRAMESIZE_ARG;
+   if (!strcmp(s, "2.5")) return OPUS_FRAMESIZE_2_5_MS;
+   if (!strcmp(s, "5"))   return OPUS_FRAMESIZE_5_MS;
+   if (!strcmp(s, "10"))  return OPUS_FRAMESIZE_10_MS;
+   if (!strcmp(s, "20"))  return OPUS_FRAMESIZE_20_MS;
+   if (!strcmp(s, "40"))  return OPUS_FRAMESIZE_40_MS;
+   if (!strcmp(s, "60"))  return OPUS_FRAMESIZE_60_MS;
+   if (!strcmp(s, "variable")) return OPUS_FRAMESIZE_VARIABLE;
+   dief("bad frame duration", s); return 0;
 }
 static int parse_framesize(const char *s, int rate) {
    if (!strcmp(s, "2.5")) return rate/400;
@@ -221,6 +239,7 @@ static int parse_sched_val(const char *what, const char *v, int rate) {
    if (!strcmp(what, "app")) return parse_app(v);
    if (!strcmp(what, "bitrate")) return parse_bitrate(v);
    if (!strcmp(what, "framesize")) return parse_framesize(v, rate);
+   if (!strcmp(what, "framedur")) return parse_framedur(v);
    if (!strcmp(what, "forcech")) return strcmp(v, "auto") ? atoi(v) : OPUS_AUTO;
    return atoi(v);
 }
@@ -250,7 +269,7 @@ static int parse_sched(char *s, struct sched *out, int rate) {
 #define ENC_CTL(st, ms, ...) ((ms) ? opus_multistream_encoder_ctl((OpusMSEncoder*)(st), __VA_ARGS__) : opus_encoder_ctl((OpusEncoder*)(st), __VA_ARGS__))
 #define DEC_CTL(st, ms, ...) ((ms) ? opus_multistream_decoder_ctl((OpusMSDecoder*)(st), __VA_ARGS__) : opus_decoder_ctl((OpusDecoder*)(st), __VA_ARGS__))
 
-static void apply_sched(void *enc, int ms, const struct sched *s, int *frame_size, int rate) {
+static void apply_sched(void *enc, int ms, const struct sched *s, int *frame_size, int *framedur, int rate) {
    int r = OPUS_OK;
    (void)rate;
    if (!strcmp(s->what, "bitrate")) r = ENC_CTL(enc, ms, OPUS_SET_BITRATE(s->val));
@@ -269,6 +288,8 @@ static void apply_sched(void *enc, int ms, const struct sched *s, int *frame_siz
    else if (!strcmp(s->what, "lsbdepth")) r = ENC_CTL(enc, ms, OPUS_SET_LSB_DEPTH(s->val));
    else if (!strcmp(s->what, "voiceratio")) r = ENC_CTL(enc, ms, OPUS_SET_VOICE_RATIO(s->val));
    else if (!strcmp(s->what, "reset")) r = ENC_CTL(enc, ms, OPUS_RESET_STATE);
+   else if (!strcmp(s->what, "framedur")) { r = ENC_CTL(enc, ms, OPUS_SET_EXPERT_FRAME_DURATION(s->val)); *framedur = s->val; }
+   else if (!strcmp(s->what, "pred")) r = ENC_CTL(enc, ms, OPUS_SET_PREDICTION_DISABLED(s->val));
    else if (!strcmp(s->what, "framesize")) *frame_size = s->val;
    else dief("unknown sched key", s->what);
    if (r != OPUS_OK) { fprintf(stderr, "gen: sched %s=%d failed: %s\n", s->what, s->val, opus_strerror(r)); exit(2); }
@@ -279,7 +300,7 @@ static int cmd_enc(int argc, char **argv) {
    int rate = 48000, ch = 1, app = OPUS_APPLICATION_AUDIO, bitrate = 64000, frame_size = -1;
    int vbr = 1, cvbr = 0, bw = OPUS_AUTO, maxbw = OPUS_AUTO, complexity = 10, fec = 0, lossperc = 0, dtx = 0;
    int forcech = OPUS_AUTO, sig = OPUS_AUTO, lsbdepth = 16, maxpayload = MAX_PACKET, mode = OPUS_AUTO;
-   int voiceratio = -1;
+   int voiceratio = -1, framedur = OPUS_FRAMESIZE_ARG, nopred = 0, remaining = 0;
    int sweep_bps = 0, sweep_max = 0, sweep_min = 0, random_framesize = 0, random_fec = 0;
    const int (*mode_list)[4] = NULL; int nb_modes = 0;
    struct sched sched[MAX_SCHED]; int nsched = 0;
@@ -315,6 +336,8 @@ static int cmd_enc(int argc, char **argv) {
       else if (!strcmp(a, "--lsbdepth")) lsbdepth = atoi(NEXT);
       else if (!strcmp(a, "--maxpayload")) maxpayload = atoi(NEXT);
       else if (!strcmp(a, "--voiceratio")) voiceratio = atoi(NEXT);
+      else if (!strcmp(a, "--framedur")) framedur = parse_framedur(NEXT);
+      else if (!strcmp(a, "--nopred")) nopred = 1;
       else if (!strcmp(a, "--sweep")) sweep_bps = atoi(NEXT);
       else if (!strcmp(a, "--sweep-max")) sweep_max = atoi(NEXT);
       else if (!strcmp(a, "--random-framesize")) random_framesize = 1;
@@ -389,6 +412,8 @@ static int cmd_enc(int argc, char **argv) {
    SET(OPUS_SET_LSB_DEPTH(lsbdepth));
    if (mode != OPUS_AUTO) SET(OPUS_SET_FORCE_MODE(mode));
    if (voiceratio >= 0 && !ms) SET(OPUS_SET_VOICE_RATIO(voiceratio));
+   if (framedur != OPUS_FRAMESIZE_ARG) SET(OPUS_SET_EXPERT_FRAME_DURATION(framedur));
+   if (nopred) SET(OPUS_SET_PREDICTION_DISABLED(nopred));
    SET(OPUS_GET_LOOKAHEAD(&lookahead));
    {
       int v;
@@ -402,6 +427,8 @@ static int cmd_enc(int argc, char **argv) {
       SET(OPUS_GET_SIGNAL(&v)); fprintf(ftr, " signal=%d", v);
       SET(OPUS_GET_FORCE_CHANNELS(&v)); fprintf(ftr, " forcech=%d", v);
       SET(OPUS_GET_LSB_DEPTH(&v)); fprintf(ftr, " lsb=%d", v);
+      SET(OPUS_GET_EXPERT_FRAME_DURATION(&v)); fprintf(ftr, " framedur=%d", v);
+      SET(OPUS_GET_PREDICTION_DISABLED(&v)); fprintf(ftr, " pred=%d", v);
       fprintf(ftr, "\n");
    }
    if (sweep_max) sweep_min = bitrate;
@@ -415,7 +442,7 @@ static int cmd_enc(int argc, char **argv) {
 
    while (!stop) {
       int len, read, s_i; opus_uint32 rng; int ebw;
-      for (s_i = 0; s_i < nsched; s_i++) if (sched[s_i].frame == count) apply_sched(enc, ms, &sched[s_i], &frame_size, rate);
+      for (s_i = 0; s_i < nsched; s_i++) if (sched[s_i].frame == count) apply_sched(enc, ms, &sched[s_i], &frame_size, &framedur, rate);
       if (delayed_celt) { frame_size = newsize; delayed_celt = 0; }
       else if (random_framesize && lcg()%20 == 0) {
          newsize = lcg()%6;
@@ -438,7 +465,8 @@ static int cmd_enc(int argc, char **argv) {
          SET(OPUS_SET_FORCE_CHANNELS(mode_list[curr_mode][3]));
          frame_size = mode_list[curr_mode][2] * rate / 48000;
       }
-      read = read_s16(fin, in, frame_size*ch) / ch;
+      if (remaining > frame_size) remaining = frame_size;
+      read = remaining + read_s16(fin, in + remaining*ch, (frame_size-remaining)*ch) / ch;
       if (read < frame_size) { /* like opus_demo: the last (possibly empty) frame is zero padded and still encoded */
          for (i = read*ch; i < frame_size*ch; i++) in[i] = 0;
          stop = 1;
@@ -458,6 +486,15 @@ static int cmd_enc(int argc, char **argv) {
       if (len && fwrite(data, 1, len, fpkt) != (size_t)len) die("write");
       fprintf(ftr, "E i=%d fs=%d len=%d rng=%08x bw=%d", count, frame_size, len, (unsigned)rng, ebw);
       if (len > 0) fprintf(ftr, " toc=%02x", data[0]);
+      remaining = 0;
+      if (framedur != OPUS_FRAMESIZE_ARG) {
+         /* like opus_demo: the encoder may consume fewer samples than offered; keep the rest */
+         int nb_encoded = len > 1 ? opus_packet_get_samples_per_frame(data, rate)*opus_packet_get_nb_frames(data, len) : frame_size;
+         if (nb_encoded <= 0 || nb_encoded > frame_size) nb_encoded = frame_size;
+         remaining = frame_size - nb_encoded;
+         for (i = 0; i < remaining*ch; i++) in[i] = in[nb_encoded*ch + i];
+         fprintf(ftr, " enc=%d", nb_encoded);
+      }
       fprintf(ftr, "\n");
       curr_mode_count += frame_size;
       if (mode_list && curr_mode_count > mode_switch_time && curr_mode < nb_modes-1) { curr_mode++; curr_mode_count = 0; }
@@ -478,7 +515,7 @@ static int cmd_dec(int argc, char **argv) {
    int i, err, count = 0, toggle = 0, lost = 0, lost_prev = 0, skip = 0;
    void *dec; FILE *fpkt, *ftr, *fout = NULL;
    unsigned char *data[2]; int len[2]; opus_uint32 enc_rng[2];
-   opus_int16 *out; float *outf = NULL; int last_dur = 0;
+   opus_int16 *out; float *outf = NULL;
 
    lcg_state = 1;
    for (i = 0; i < argc; i++) {
@@ -522,18 +559,14 @@ static int cmd_dec(int argc, char **argv) {
       if (err != OPUS_OK) dief("create", opus_strerror(err));
    }
 #define SET(...) do { int r_ = DEC_CTL(dec, ms, __VA_ARGS__); if (r_ != OPUS_OK) { fprintf(stderr, "gen: dec ctl failed: %s\n", opus_strerror(r_)); exit(2);} } while (0)
-#define GET_DUR(pv) do { if (ms) *(pv) = last_dur; else SET(OPUS_GET_LAST_PACKET_DURATION(pv)); } while (0)
+#define GET_DUR(pv) SET(OPUS_GET_LAST_PACKET_DURATION(pv))
    if (gain) SET(OPUS_SET_GAIN(gain));
    {
       int v;
       SET(OPUS_GET_SAMPLE_RATE(&v)); fprintf(ftr, "H fs=%d", v);
-      if (ms) v = gain; else SET(OPUS_GET_GAIN(&v));
+      SET(OPUS_GET_GAIN(&v));
       fprintf(ftr, " gain=%d\n", v);
    }
-   /* The multistream decoder of this version has no OPUS_GET_LAST_PACKET_DURATION;
-    * mirror the elementary decoder's semantics (last decoded sample count,
-    * initially 0 -> we use 20 ms so that a leading loss still decodes). */
-   last_dur = rate/50;
    data[0] = malloc(MAX_PACKET); data[1] = malloc(MAX_PACKET);
    len[0] = len[1] = 0; enc_rng[0] = enc_rng[1] = 0;
    out = malloc(sizeof(opus_int16)*MAX_FRAME*ch);
@@ -580,7 +613,6 @@ static int cmd_dec(int argc, char **argv) {
       }
       SET(OPUS_GET_FINAL_RANGE(&drng));
       SET(OPUS_GET_BANDWIDTH(&dbw));
-      if (n > 0) last_dur = n;
       GET_DUR(&dur);
       pitch = 0;
       if (!ms) SET(OPUS_GET_PITCH(&pitch));
@@ -642,14 +674,16 @@ static int cmd_info(int argc, char **argv) {
  * --split   : split every packet into single-frame packets via out_range.
  * Output packets keep rng=0 (encoder range is meaningless after repacketizing). */
 static int cmd_repack(int argc, char **argv) {
-   const char *in_path = NULL, *out_path = NULL, *trace_path = NULL; int merge = 1, split = 0, i, count = 0;
+   const char *in_path = NULL, *out_path = NULL, *trace_path = NULL; int merge = 1, split = 0, pad = 0, streams = 0, i, count = 0;
    FILE *fin, *fout, *ftr; unsigned char *bufs[48]; unsigned char outbuf[MAX_PACKET*48]; OpusRepacketizer *rp; int inrp = 0;
    for (i = 0; i < argc; i++) {
       if (!strcmp(argv[i], "--merge") && i+1 < argc) merge = atoi(argv[++i]);
       else if (!strcmp(argv[i], "--split")) split = 1;
+      else if (!strcmp(argv[i], "--pad") && i+1 < argc) pad = atoi(argv[++i]);
+      else if (!strcmp(argv[i], "--streams") && i+1 < argc) streams = atoi(argv[++i]);
       else if (!in_path) in_path = argv[i]; else if (!out_path) out_path = argv[i]; else if (!trace_path) trace_path = argv[i]; else dief("extra arg", argv[i]);
    }
-   if (!in_path || !out_path || !trace_path) die("usage: gen repack [--merge N|--split] in.pkt out.pkt out.trace");
+   if (!in_path || !out_path || !trace_path) die("usage: gen repack [--merge N|--split|--pad N [--streams S]] in.pkt out.pkt out.trace");
    if (merge < 1 || merge > 48) die("merge out of range");
    fin = fopen(in_path, "rb"); if (!fin) dief("open", in_path);
    fout = fopen(out_path, "wb"); if (!fout) dief("open", out_path);
@@ -663,6 +697,28 @@ static int cmd_repack(int argc, char **argv) {
       if (ulen > MAX_PACKET) die("too large");
       if (ulen && fread(bufs[inrp], 1, ulen, fin) != ulen) die("truncated");
       if (ulen == 0) { fprintf(ftr, "R i=%d empty\n", count++); continue; }
+      if (pad) {
+         /* opus_packet_pad / opus_multistream_packet_pad in place, then unpad a copy */
+         opus_int32 newlen = (opus_int32)ulen + pad, ul;
+         if (newlen > (opus_int32)sizeof(outbuf)) die("pad too large");
+         memcpy(outbuf, bufs[0], ulen);
+         if (streams > 0) r = opus_multistream_packet_pad(outbuf, ulen, newlen, streams);
+         else r = opus_packet_pad(outbuf, ulen, newlen);
+         fprintf(ftr, "R i=%d pad=%d", count, r);
+         if (r == OPUS_OK) {
+            unsigned char *tmp = malloc(newlen);
+            memcpy(tmp, outbuf, newlen);
+            if (streams > 0) ul = opus_multistream_packet_unpad(tmp, newlen, streams);
+            else ul = opus_packet_unpad(tmp, newlen);
+            fprintf(ftr, " unpad=%d", (int)ul);
+            if (ul > 0) fprintf(ftr, " ucrc=%08x", (unsigned)crc_bytes(tmp, ul));
+            free(tmp);
+            put_be32(fout, (uint32_t)newlen); put_be32(fout, 0); if (fwrite(outbuf, 1, newlen, fout) != (size_t)newlen) die("write");
+         }
+         fprintf(ftr, "\n");
+         count++;
+         continue;
+      }
       if (split) {
          int nf, j;
          opus_repacketizer_init(rp);
@@ -687,7 +743,9 @@ static int cmd_repack(int argc, char **argv) {
          fprintf(ftr, "O len=%d\n", (int)ol);
          if (ol > 0) { put_be32(fout, (uint32_t)ol); put_be32(fout, 0); if (fwrite(outbuf, 1, ol, fout) != (size_t)ol) die("write"); }
          opus_repacketizer_init(rp);
-         r = opus_repacketizer_cat(rp, bufs[inrp], ulen);
+         /* the packet becomes frame 0: move it to slot 0 so that later packets cannot overwrite it */
+         if (inrp != 0) memcpy(bufs[0], bufs[inrp], ulen);
+         r = opus_repacketizer_cat(rp, bufs[0], ulen);
          fprintf(ftr, "R i=%d cat=%d nf=%d\n", count, r, opus_repacketizer_get_nb_frames(rp));
          inrp = r == OPUS_OK ? 1 : 0;
       }

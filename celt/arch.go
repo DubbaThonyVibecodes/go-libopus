@@ -31,20 +31,6 @@ type integer interface {
 // C: IMUL32(a,b) ((a)*(b))
 func IMUL32[T integer](a, b T) T { return a * b }
 
-// C: ABS(x)
-func ABS[T integer](x T) T {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
-// C: ABS16(x)
-func ABS16[T integer](x T) T { return ABS(x) }
-
-// C: ABS32(x)
-func ABS32[T integer](x T) T { return ABS(x) }
-
 // C: MIN16(a,b)
 func MIN16[T integer](a, b T) T {
 	if a < b {
@@ -79,6 +65,9 @@ func UADD32(a, b uint32) uint32 { return a + b }
 // C: USUB32(a,b)
 func USUB32(a, b uint32) uint32 { return a - b }
 
+// Set this if opus_int64 is a native type of the CPU (64-bit host).
+const OPUS_FAST_INT64 = 1
+
 // Fixed-point build constants (arch.h, FIXED_POINT branch).
 const (
 	Q15ONE       = int16(32767)
@@ -86,6 +75,7 @@ const (
 	NORM_SCALING = 16384
 	DB_SHIFT     = 10
 	EPSILON      = 1
+	VERY_SMALL   = 0
 	VERY_LARGE16 = int16(32767)
 	Q15_ONE      = int16(32767)
 )
@@ -93,6 +83,42 @@ const (
 // C: SCALEIN(a) / SCALEOUT(a) are identities in the fixed-point build.
 func SCALEIN[T integer](a T) T  { return a }
 func SCALEOUT[T integer](a T) T { return a }
+
+// C: ABS16(x) ((x) < 0 ? (-(x)) : (x))
+func ABS16[T integer](x T) T {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// C: ABS32(x) ((x) < 0 ? (-(x)) : (x))
+func ABS32[T integer](x T) T {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// ABS is kept for the generic integer uses (the C code uses ABS16/ABS32 or
+// plain conditionals on ints).
+func ABS[T integer](x T) T {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// C: static OPUS_INLINE opus_int16 SAT16(opus_int32 x)
+func SAT16(x int32) int16 {
+	if x > 32767 {
+		return 32767
+	}
+	if x < -32768 {
+		return -32768
+	}
+	return int16(x)
+}
 
 // Assert is celt_assert for other packages.
 func Assert(cond bool) { celt_assert(cond) }

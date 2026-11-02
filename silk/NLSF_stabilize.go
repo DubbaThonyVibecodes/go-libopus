@@ -101,7 +101,7 @@ func NLSFStabilize(
 
 		// Keep delta_min distance between the NLSFs
 		for i = 1; i < L; i++ {
-			NLSF_Q15[i] = int16(max_int(int(NLSF_Q15[i]), int(NLSF_Q15[i-1])+int(NDeltaMin_Q15[i])))
+			NLSF_Q15[i] = int16(max_int(int(NLSF_Q15[i]), int(ADD_SAT16(NLSF_Q15[i-1], NDeltaMin_Q15[i]))))
 		}
 
 		// Last NLSF should be no higher than 1 - NDeltaMin[L]

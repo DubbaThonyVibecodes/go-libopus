@@ -13,28 +13,24 @@ func MULT16_16SU[A, B integer](a A, b B) int32 {
 	return int32(int16(a)) * int32(uint16(b))
 }
 
-// C: MULT16_32_Q16(a,b) ADD32(MULT16_16((a),SHR((b),16)), SHR(MULT16_16SU((a),((b)&0x0000ffff)),16))
+// C: MULT16_32_Q16(a,b) ((opus_val32)SHR((opus_int64)((opus_val16)(a))*(b),16))   (OPUS_FAST_INT64)
 func MULT16_32_Q16[A, B integer](a A, b B) int32 {
-	bb := int32(b)
-	return ADD32(MULT16_16(a, SHR(bb, 16)), SHR(MULT16_16SU(a, bb&0x0000ffff), 16))
+	return int32((int64(int16(a)) * int64(b)) >> 16)
 }
 
-// C: MULT16_32_P16(a,b) ADD32(MULT16_16((a),SHR((b),16)), PSHR(MULT16_16((a),((b)&0x0000ffff)),16))
+// C: MULT16_32_P16(a,b) ((opus_val32)PSHR((opus_int64)((opus_val16)(a))*(b),16))   (OPUS_FAST_INT64)
 func MULT16_32_P16[A, B integer](a A, b B) int32 {
-	bb := int32(b)
-	return ADD32(MULT16_16(a, SHR(bb, 16)), PSHR(MULT16_16(a, bb&0x0000ffff), 16))
+	return int32((int64(int16(a))*int64(b) + (int64(1) << 16 >> 1)) >> 16)
 }
 
-// C: MULT16_32_Q15(a,b) ADD32(SHL(MULT16_16((a),SHR((b),16)),1), SHR(MULT16_16SU((a),((b)&0x0000ffff)),15))
+// C: MULT16_32_Q15(a,b) ((opus_val32)SHR((opus_int64)((opus_val16)(a))*(b),15))   (OPUS_FAST_INT64)
 func MULT16_32_Q15[A, B integer](a A, b B) int32 {
-	bb := int32(b)
-	return ADD32(SHL(MULT16_16(a, SHR(bb, 16)), 1), SHR(MULT16_16SU(a, bb&0x0000ffff), 15))
+	return int32((int64(int16(a)) * int64(b)) >> 15)
 }
 
-// C: MULT32_32_Q31(a,b) ADD32(ADD32(SHL(MULT16_16(SHR((a),16),SHR((b),16)),1), SHR(MULT16_16SU(SHR((a),16),((b)&0x0000ffff)),15)), SHR(MULT16_16SU(SHR((b),16),((a)&0x0000ffff)),15))
+// C: MULT32_32_Q31(a,b) ((opus_val32)SHR((opus_int64)(a)*(opus_int64)(b),31))   (OPUS_FAST_INT64)
 func MULT32_32_Q31[A, B integer](a A, b B) int32 {
-	aa, bb := int32(a), int32(b)
-	return ADD32(ADD32(SHL(MULT16_16(SHR(aa, 16), SHR(bb, 16)), 1), SHR(MULT16_16SU(SHR(aa, 16), bb&0x0000ffff), 15)), SHR(MULT16_16SU(SHR(bb, 16), aa&0x0000ffff), 15))
+	return int32((int64(a) * int64(b)) >> 31)
 }
 
 // C: QCONST16(x,bits) ((opus_val16)(.5+(x)*(((opus_val32)1)<<(bits))))
@@ -108,6 +104,17 @@ func SATURATE[T integer](x, a T) T {
 	return x
 }
 
+// C: SATURATE16(x) (EXTRACT16((x)>32767 ? 32767 : (x)<-32768 ? -32768 : (x)))
+func SATURATE16[T integer](x T) int16 {
+	if int64(x) > 32767 {
+		return 32767
+	}
+	if int64(x) < -32768 {
+		return -32768
+	}
+	return EXTRACT16(x)
+}
+
 // C: ROUND16(x,a) (EXTRACT16(PSHR32((x),(a))))
 func ROUND16[T integer](x T, a int) int16 { return EXTRACT16(PSHR32(x, a)) }
 
@@ -138,14 +145,29 @@ func MULT16_16[A, B integer](a A, b B) int32 { return int32(int16(a)) * int32(in
 // C: MAC16_16(c,a,b) (ADD32((c),MULT16_16((a),(b))))
 func MAC16_16[C, A, B integer](c C, a A, b B) int32 { return ADD32(c, MULT16_16(a, b)) }
 
-// C: MAC16_32_Q15(c,a,b) ADD32(c,ADD32(MULT16_16((a),SHR((b),15)), SHR(MULT16_16((a),((b)&0x00007fff)),15)))
+// 16x32 multiply, followed by a 15-bit shift right and 32-bit add.
+// b must fit in 31 bits. Result fits in 32 bits.
+//
+// C: MAC16_32_Q15(c,a,b) ADD32((c),ADD32(MULT16_16((a),SHR((b),15)), SHR(MULT16_16((a),((b)&0x00007fff)),15)))
 func MAC16_32_Q15[C, A, B integer](c C, a A, b B) int32 {
 	bb := int32(b)
 	return ADD32(c, ADD32(MULT16_16(a, SHR(bb, 15)), SHR(MULT16_16(a, bb&0x00007fff), 15)))
 }
 
+// 16x32 multiplication, followed by a 16-bit shift right and 32-bit add.
+// Results fits in 32 bits.
+//
+// C: MAC16_32_Q16(c,a,b) ADD32((c),ADD32(MULT16_16((a),SHR((b),16)), SHR(MULT16_16SU((a),((b)&0x0000ffff)),16)))
+func MAC16_32_Q16[C, A, B integer](c C, a A, b B) int32 {
+	bb := int32(b)
+	return ADD32(c, ADD32(MULT16_16(a, SHR(bb, 16)), SHR(MULT16_16SU(a, bb&0x0000ffff), 16)))
+}
+
 // C: MULT16_16_Q11_32(a,b) (SHR(MULT16_16((a),(b)),11))
 func MULT16_16_Q11_32[A, B integer](a A, b B) int32 { return SHR(MULT16_16(a, b), 11) }
+
+// C: MULT16_16_Q11(a,b) (SHR(MULT16_16((a),(b)),11))
+func MULT16_16_Q11[A, B integer](a A, b B) int32 { return SHR(MULT16_16(a, b), 11) }
 
 // C: MULT16_16_Q13(a,b) (SHR(MULT16_16((a),(b)),13))
 func MULT16_16_Q13[A, B integer](a A, b B) int32 { return SHR(MULT16_16(a, b), 13) }
@@ -170,3 +192,14 @@ func DIV32_16[A, B integer](a A, b B) int16 { return int16(int32(a) / int32(int1
 
 // C: DIV32(a,b) (((opus_val32)(a))/((opus_val32)(b)))
 func DIV32[A, B integer](a A, b B) int32 { return int32(a) / int32(b) }
+
+// C: static OPUS_INLINE opus_val16 SIG2WORD16_generic(celt_sig x)
+func SIG2WORD16_generic(x int32) int16 {
+	x = PSHR32(x, SIG_SHIFT)
+	x = MAX32(x, -32768)
+	x = MIN32(x, 32767)
+	return EXTRACT16(x)
+}
+
+// C: #define SIG2WORD16(x) (SIG2WORD16_generic(x))
+func SIG2WORD16(x int32) int16 { return SIG2WORD16_generic(x) }

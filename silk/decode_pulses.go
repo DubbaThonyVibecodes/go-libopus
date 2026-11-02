@@ -8,12 +8,12 @@ import "github.com/DubbaThonyVibecodes/go-libopus/celt"
 /* Decode quantization indices of excitation */
 /*********************************************/
 //
-// C: void silk_decode_pulses(ec_dec *psRangeDec, opus_int pulses[], const opus_int signalType,
+// C: void silk_decode_pulses(ec_dec *psRangeDec, opus_int16 pulses[], const opus_int signalType,
 // const opus_int quantOffsetType, const opus_int frame_length)
-func DecodePulses(psRangeDec *celt.EcDec, pulses []int, signalType int, quantOffsetType int, frame_length int) {
+func DecodePulses(psRangeDec *celt.EcDec, pulses []int16, signalType int, quantOffsetType int, frame_length int) {
 	var i, j, k, iter, abs_q, nLS, RateLevelIndex int
 	var sum_pulses, nLshifts [MAX_NB_SHELL_BLOCKS]int
-	var pulses_ptr []int
+	var pulses_ptr []int16
 	var cdf_ptr []uint8
 
 	/*********************/
@@ -38,9 +38,9 @@ func DecodePulses(psRangeDec *celt.EcDec, pulses []int, signalType int, quantOff
 		sum_pulses[i] = psRangeDec.DecIcdf(cdf_ptr, 8)
 
 		/* LSB indication */
-		for sum_pulses[i] == MAX_PULSES+1 {
+		for sum_pulses[i] == SILK_MAX_PULSES+1 {
 			nLshifts[i]++
-			/* When we've already got 10 LSBs, we shift the table to not allow (MAX_PULSES + 1) */
+			/* When we've already got 10 LSBs, we shift the table to not allow (SILK_MAX_PULSES + 1) */
 			sum_pulses[i] = psRangeDec.DecIcdf(
 				pulses_per_block_iCDF[N_RATE_LEVELS-1][b2i(nLshifts[i] == 10):], 8)
 		}
@@ -65,12 +65,12 @@ func DecodePulses(psRangeDec *celt.EcDec, pulses []int, signalType int, quantOff
 			nLS = nLshifts[i]
 			pulses_ptr = pulses[SMULBB(i, SHELL_CODEC_FRAME_LENGTH):]
 			for k = 0; k < SHELL_CODEC_FRAME_LENGTH; k++ {
-				abs_q = pulses_ptr[k]
+				abs_q = int(pulses_ptr[k])
 				for j = 0; j < nLS; j++ {
 					abs_q = int(LSHIFT(abs_q, 1))
 					abs_q += psRangeDec.DecIcdf(lsb_iCDF[:], 8)
 				}
-				pulses_ptr[k] = abs_q
+				pulses_ptr[k] = int16(abs_q)
 			}
 			/* Mark the number of pulses non-zero for sign decoding. */
 			sum_pulses[i] |= nLS << 5

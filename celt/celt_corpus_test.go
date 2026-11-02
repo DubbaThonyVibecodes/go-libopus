@@ -89,7 +89,7 @@ func runCeltCase(t *testing.T, dir string, c testvec.Case) bool {
 		pcm := make([]int16, frame*ch)
 		var dec EcDec
 		dec.DecInit(p.Data[1:], uint32(len(p.Data)-1))
-		n := st.DecodeWithEc(p.Data[1:], len(p.Data)-1, pcm, frame, &dec)
+		n := st.DecodeWithEc(p.Data[1:], len(p.Data)-1, pcm, frame, &dec, 0)
 		if n != frame {
 			t.Fatalf("packet %d: decode returned %d, want %d", i, n, frame)
 		}

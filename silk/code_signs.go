@@ -45,12 +45,12 @@ func EncodeSigns(psRangeEnc *celt.EcEnc, pulses []int8, length int, signalType i
 
 /* Decodes signs of excitation */
 //
-// C: void silk_decode_signs(ec_dec *psRangeDec, opus_int pulses[], opus_int length,
+// C: void silk_decode_signs(ec_dec *psRangeDec, opus_int16 pulses[], opus_int length,
 // const opus_int signalType, const opus_int quantOffsetType, const opus_int sum_pulses[ MAX_NB_SHELL_BLOCKS ])
-func DecodeSigns(psRangeDec *celt.EcDec, pulses []int, length int, signalType int, quantOffsetType int, sum_pulses []int) {
+func DecodeSigns(psRangeDec *celt.EcDec, pulses []int16, length int, signalType int, quantOffsetType int, sum_pulses []int) {
 	var i, j, p int
 	var icdf [2]uint8
-	var q_ptr []int
+	var q_ptr []int16
 	var icdf_ptr []uint8
 
 	icdf[1] = 0
@@ -66,7 +66,7 @@ func DecodeSigns(psRangeDec *celt.EcDec, pulses []int, length int, signalType in
 				if q_ptr[j] > 0 {
 					/* attach sign */
 					/* implementation with shift, subtraction, multiplication */
-					q_ptr[j] *= decMap(psRangeDec.DecIcdf(icdf[:], 8))
+					q_ptr[j] *= int16(decMap(psRangeDec.DecIcdf(icdf[:], 8)))
 				}
 			}
 		}

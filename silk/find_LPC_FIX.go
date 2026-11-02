@@ -25,7 +25,6 @@ func (psEncC *EncoderState) FindLPCFIX(NLSF_Q15 []int16, x []int16, minInvGain_Q
 	var res_nrg_interp_Q, res_nrg_Q, res_tmp_nrg_Q int
 	var a_tmp_Q12 [MAX_LPC_ORDER]int16
 	var NLSF0_Q15 [MAX_LPC_ORDER]int16
-	var LPC_res [MAX_FRAME_LENGTH + MAX_NB_SUBFR*MAX_LPC_ORDER]int16
 
 	subfr_length = psEncC.subfr_length + psEncC.predictLPCOrder
 
@@ -33,11 +32,13 @@ func (psEncC *EncoderState) FindLPCFIX(NLSF_Q15 []int16, x []int16, minInvGain_Q
 	psEncC.indices.NLSFInterpCoef_Q2 = 4
 
 	/* Burg AR analysis for the full frame */
-	BurgModified(&res_nrg, &res_nrg_Q, a_Q16[:], x, minInvGain_Q30, subfr_length, psEncC.nb_subfr, psEncC.predictLPCOrder)
+	BurgModified(&res_nrg, &res_nrg_Q, a_Q16[:], x, minInvGain_Q30, subfr_length, psEncC.nb_subfr, psEncC.predictLPCOrder, psEncC.arch)
 
 	if psEncC.useInterpolatedNLSFs != 0 && psEncC.first_frame_after_reset == 0 && psEncC.nb_subfr == MAX_NB_SUBFR {
+		var LPC_res []int16
+
 		/* Optimal solution for last 10 ms */
-		BurgModified(&res_tmp_nrg, &res_tmp_nrg_Q, a_tmp_Q16[:], x[2*subfr_length:], minInvGain_Q30, subfr_length, 2, psEncC.predictLPCOrder)
+		BurgModified(&res_tmp_nrg, &res_tmp_nrg_Q, a_tmp_Q16[:], x[2*subfr_length:], minInvGain_Q30, subfr_length, 2, psEncC.predictLPCOrder, psEncC.arch)
 
 		/* subtract residual energy here, as that's easier than adding it to the    */
 		/* residual energy of the first 10 ms in each iteration of the search below */
@@ -55,6 +56,8 @@ func (psEncC *EncoderState) FindLPCFIX(NLSF_Q15 []int16, x []int16, minInvGain_Q
 		/* Convert to NLSFs */
 		A2NLSF(NLSF_Q15, a_tmp_Q16[:], psEncC.predictLPCOrder)
 
+		LPC_res = make([]int16, 2*subfr_length)
+
 		/* Search over interpolation indices to find the one with lowest residual energy */
 		for k = 3; k >= 0; k-- {
 			/* Interpolate NLSFs for first half */
@@ -64,7 +67,7 @@ func (psEncC *EncoderState) FindLPCFIX(NLSF_Q15 []int16, x []int16, minInvGain_Q
 			NLSF2A(a_tmp_Q12[:], NLSF0_Q15[:], psEncC.predictLPCOrder)
 
 			/* Calculate residual energy with NLSF interpolation */
-			LPCAnalysisFilter(LPC_res[:], x, a_tmp_Q12[:], int32(2*subfr_length), int32(psEncC.predictLPCOrder))
+			LPCAnalysisFilter(LPC_res, x, a_tmp_Q12[:], int32(2*subfr_length), int32(psEncC.predictLPCOrder), psEncC.arch)
 
 			SumSqrShift(&res_nrg0, &rshift0, LPC_res[psEncC.predictLPCOrder:], subfr_length-psEncC.predictLPCOrder)
 			SumSqrShift(&res_nrg1, &rshift1, LPC_res[psEncC.predictLPCOrder+subfr_length:], subfr_length-psEncC.predictLPCOrder)

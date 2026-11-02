@@ -33,11 +33,14 @@ func (state *StereoEncState) StereoLRToMS(x1 []int16, x2 []int16, ix *[2][3]int8
 	var sum, diff, smooth_coef_Q16, pred0_Q13, pred1_Q13 int32
 	var pred_Q13 [2]int32
 	var LP_ratio_Q14, HP_ratio_Q14, frac_Q16, frac_3_Q16, min_mid_rate_bps, width_Q14, w_Q24, deltaw_Q24 int32
-	var side [MAX_FRAME_LENGTH + 2]int16
-	var LP_mid, HP_mid [MAX_FRAME_LENGTH]int16
-	var LP_side, HP_side [MAX_FRAME_LENGTH]int16
+	var side []int16
+	var LP_mid []int16
+	var HP_mid []int16
+	var LP_side []int16
+	var HP_side []int16
 	mid := x1 /* C: opus_int16 *mid = &x1[ -2 ]; x1[ 0 ] already is 2 samples before the frame */
 
+	side = make([]int16, frame_length+2)
 	/* Convert to basic mid/side signals */
 	for n = 0; n < frame_length+2; n++ {
 		sum = int32(x1[n]) + int32(x2[n])  /* C: x1[ n - 2 ] + (opus_int32)x2[ n - 2 ] */
@@ -53,6 +56,8 @@ func (state *StereoEncState) StereoLRToMS(x1 []int16, x2 []int16, ix *[2][3]int8
 	copy(state.sSide[:], side[frame_length:frame_length+2])
 
 	/* LP and HP filter mid signal */
+	LP_mid = make([]int16, frame_length)
+	HP_mid = make([]int16, frame_length)
 	for n = 0; n < frame_length; n++ {
 		sum = RSHIFT_ROUND(ADD_LSHIFT(int32(mid[n])+int32(mid[n+2]), mid[n+1], 1), 2)
 		LP_mid[n] = int16(sum)
@@ -60,6 +65,8 @@ func (state *StereoEncState) StereoLRToMS(x1 []int16, x2 []int16, ix *[2][3]int8
 	}
 
 	/* LP and HP filter side signal */
+	LP_side = make([]int16, frame_length)
+	HP_side = make([]int16, frame_length)
 	for n = 0; n < frame_length; n++ {
 		sum = RSHIFT_ROUND(ADD_LSHIFT(int32(side[n])+int32(side[n+2]), side[n+1], 1), 2)
 		LP_side[n] = int16(sum)
@@ -75,8 +82,8 @@ func (state *StereoEncState) StereoLRToMS(x1 []int16, x2 []int16, ix *[2][3]int8
 	}
 	smooth_coef_Q16 = SMULWB(SMULBB(prev_speech_act_Q8, prev_speech_act_Q8), smooth_coef_Q16)
 
-	pred_Q13[0] = StereoFindPredictor(&LP_ratio_Q14, LP_mid[:], LP_side[:], state.mid_side_amp_Q0[0:], frame_length, int(smooth_coef_Q16))
-	pred_Q13[1] = StereoFindPredictor(&HP_ratio_Q14, HP_mid[:], HP_side[:], state.mid_side_amp_Q0[2:], frame_length, int(smooth_coef_Q16))
+	pred_Q13[0] = StereoFindPredictor(&LP_ratio_Q14, LP_mid, LP_side, state.mid_side_amp_Q0[0:], frame_length, int(smooth_coef_Q16))
+	pred_Q13[1] = StereoFindPredictor(&HP_ratio_Q14, HP_mid, HP_side, state.mid_side_amp_Q0[2:], frame_length, int(smooth_coef_Q16))
 	/* Ratio of the norms of residual and mid signals */
 	frac_Q16 = SMLABB(HP_ratio_Q14, LP_ratio_Q14, 3)
 	frac_Q16 = min(frac_Q16, SILK_FIX_CONST(1.0, 16))

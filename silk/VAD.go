@@ -46,21 +46,25 @@ var tiltWeights = [VAD_N_BANDS]int32{30000, 6000, -12000, -12000}
 /* Get the speech activity level in Q8 */
 /***************************************/
 //
-// C: opus_int silk_VAD_GetSA_Q8(                                     /* O    Return value, 0 if success                  */
+// C: opus_int silk_VAD_GetSA_Q8_c(                                   /* O    Return value, 0 if success                  */
 //
 //	silk_encoder_state          *psEncC,                        /* I/O  Encoder state                               */
 //	const opus_int16            pIn[]                           /* I    PCM input                                   */
 //
 // )
-func (psEncC *EncoderState) VADGetSAQ8(pIn []int16) int {
+// C: #define silk_VAD_GetSA_Q8(psEnC, pIn, arch) ((void)(arch),silk_VAD_GetSA_Q8_c(psEnC, pIn))
+func (psEncC *EncoderState) VADGetSAQ8(pIn []int16, arch int) int {
 	var SA_Q15, pSNR_dB_Q7, input_tilt int
-	var decimated_framelength, dec_subframe_length, dec_subframe_offset, SNR_Q7, i, b, s int
+	var decimated_framelength1, decimated_framelength2 int
+	var decimated_framelength int
+	var dec_subframe_length, dec_subframe_offset, SNR_Q7, i, b, s int
 	var sumSquared, smooth_coef_Q16 int32
 	var HPstateTmp int16
-	var X [VAD_N_BANDS][MAX_FRAME_LENGTH / 2]int16
+	var X []int16
 	var Xnrg [VAD_N_BANDS]int32
 	var NrgToNoiseRatio_Q8 [VAD_N_BANDS]int32
 	var speech_nrg, x_tmp int32
+	var X_offset [VAD_N_BANDS]int
 	var ret int = 0
 	psSilk_VAD := &psEncC.sVAD
 
@@ -73,26 +77,46 @@ func (psEncC *EncoderState) VADGetSAQ8(pIn []int16) int {
 	/***********************/
 	/* Filter and Decimate */
 	/***********************/
+	decimated_framelength1 = RSHIFT(psEncC.frame_length, 1)
+	decimated_framelength2 = RSHIFT(psEncC.frame_length, 2)
+	decimated_framelength = RSHIFT(psEncC.frame_length, 3)
+	/* Decimate into 4 bands:
+	   0       L      3L       L              3L                             5L
+	           -      --       -              --                             --
+	           8       8       2               4                              4
+
+	   [0-1 kHz| temp. |1-2 kHz|    2-4 kHz    |            4-8 kHz           |
+
+	   They're arranged to allow the minimal ( frame_length / 4 ) extra
+	   scratch space during the downsampling process */
+	X_offset[0] = 0
+	X_offset[1] = decimated_framelength + decimated_framelength2
+	X_offset[2] = X_offset[1] + decimated_framelength
+	X_offset[3] = X_offset[2] + decimated_framelength2
+	X = make([]int16, X_offset[3]+decimated_framelength1)
+
 	/* 0-8 kHz to 0-4 kHz and 4-8 kHz */
-	AnaFiltBank1(pIn, psSilk_VAD.AnaState[0:], X[0][0:], X[3][0:], int32(psEncC.frame_length))
+	AnaFiltBank1(pIn, psSilk_VAD.AnaState[0:],
+		X, X[X_offset[3]:], int32(psEncC.frame_length))
 
 	/* 0-4 kHz to 0-2 kHz and 2-4 kHz */
-	AnaFiltBank1(X[0][0:], psSilk_VAD.AnaState1[0:], X[0][0:], X[2][0:], int32(RSHIFT(psEncC.frame_length, 1)))
+	AnaFiltBank1(X, psSilk_VAD.AnaState1[0:],
+		X, X[X_offset[2]:], int32(decimated_framelength1))
 
 	/* 0-2 kHz to 0-1 kHz and 1-2 kHz */
-	AnaFiltBank1(X[0][0:], psSilk_VAD.AnaState2[0:], X[0][0:], X[1][0:], int32(RSHIFT(psEncC.frame_length, 2)))
+	AnaFiltBank1(X, psSilk_VAD.AnaState2[0:],
+		X, X[X_offset[1]:], int32(decimated_framelength2))
 
 	/*********************************************/
 	/* HP filter on lowest band (differentiator) */
 	/*********************************************/
-	decimated_framelength = RSHIFT(psEncC.frame_length, 3)
-	X[0][decimated_framelength-1] = RSHIFT(X[0][decimated_framelength-1], 1)
-	HPstateTmp = X[0][decimated_framelength-1]
+	X[decimated_framelength-1] = RSHIFT(X[decimated_framelength-1], 1)
+	HPstateTmp = X[decimated_framelength-1]
 	for i = decimated_framelength - 1; i > 0; i-- {
-		X[0][i-1] = RSHIFT(X[0][i-1], 1)
-		X[0][i] -= X[0][i-1]
+		X[i-1] = RSHIFT(X[i-1], 1)
+		X[i] -= X[i-1]
 	}
-	X[0][0] -= psSilk_VAD.HPstate
+	X[0] -= psSilk_VAD.HPstate
 	psSilk_VAD.HPstate = HPstateTmp
 
 	/*************************************/
@@ -114,7 +138,8 @@ func (psEncC *EncoderState) VADGetSAQ8(pIn []int16) int {
 			for i = 0; i < dec_subframe_length; i++ {
 				/* The energy will be less than dec_subframe_length * ( silk_int16_MIN / 8 ) ^ 2.            */
 				/* Therefore we can accumulate with no risk of overflow (unless dec_subframe_length > 128)  */
-				x_tmp = int32(RSHIFT(X[b][i+dec_subframe_offset], 3))
+				x_tmp = int32(RSHIFT(
+					X[X_offset[b]+i+dec_subframe_offset], 3))
 				sumSquared = SMLABB(sumSquared, x_tmp, x_tmp)
 
 				/* Safety check */

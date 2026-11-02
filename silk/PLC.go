@@ -17,8 +17,8 @@ func (psDec *DecoderState) PLCReset() {
 	psDec.sPLC.nb_subfr = 2
 }
 
-// C: void silk_PLC(silk_decoder_state *psDec, silk_decoder_control *psDecCtrl, opus_int16 frame[], opus_int lost)
-func (psDec *DecoderState) PLC(psDecCtrl *DecoderControl, frame []int16, lost int) {
+// C: void silk_PLC(silk_decoder_state *psDec, silk_decoder_control *psDecCtrl, opus_int16 frame[], opus_int lost, int arch)
+func (psDec *DecoderState) PLC(psDecCtrl *DecoderControl, frame []int16, lost int, arch int) {
 	/* PLC control function */
 	if psDec.fs_kHz != psDec.sPLC.fs_kHz {
 		psDec.PLCReset()
@@ -29,7 +29,7 @@ func (psDec *DecoderState) PLC(psDecCtrl *DecoderControl, frame []int16, lost in
 		/****************************/
 		/* Generate Signal          */
 		/****************************/
-		plcConceal(psDec, psDecCtrl, frame)
+		plcConceal(psDec, psDecCtrl, frame, arch)
 
 		psDec.lossCnt++
 	} else {
@@ -116,11 +116,35 @@ func plcUpdate(
 	psPLC.nb_subfr = psDec.nb_subfr
 }
 
-// C: static inline void silk_PLC_conceal(silk_decoder_state *psDec, silk_decoder_control *psDecCtrl, opus_int16 frame[])
+// C: static OPUS_INLINE void silk_PLC_energy(opus_int32 *energy1, opus_int *shift1, opus_int32 *energy2, opus_int *shift2,
+// const opus_int32 *exc_Q14, const opus_int32 *prevGain_Q10, int subfr_length, int nb_subfr)
+func plcEnergy(energy1 *int32, shift1 *int, energy2 *int32, shift2 *int,
+	exc_Q14 []int32, prevGain_Q10 []int32, subfr_length int, nb_subfr int) {
+	var i, k int
+	var exc_buf []int16
+	var exc_buf_ptr []int16
+	exc_buf = make([]int16, 2*subfr_length)
+	/* Find random noise component */
+	/* Scale previous excitation signal */
+	exc_buf_ptr = exc_buf
+	for k = 0; k < 2; k++ {
+		for i = 0; i < subfr_length; i++ {
+			exc_buf_ptr[i] = int16(SAT16(RSHIFT(
+				SMULWW(exc_Q14[i+(k+nb_subfr-2)*subfr_length], prevGain_Q10[k]), 8)))
+		}
+		exc_buf_ptr = exc_buf_ptr[subfr_length:]
+	}
+	/* Find the subframe with lowest energy of the last two and use that as random noise generator */
+	SumSqrShift(energy1, shift1, exc_buf, subfr_length)
+	SumSqrShift(energy2, shift2, exc_buf[subfr_length:], subfr_length)
+}
+
+// C: static OPUS_INLINE void silk_PLC_conceal(silk_decoder_state *psDec, silk_decoder_control *psDecCtrl, opus_int16 frame[], int arch)
 func plcConceal(
 	psDec *DecoderState, /* I/O Decoder state        */
 	psDecCtrl *DecoderControl, /* I/O Decoder control      */
 	frame []int16, /* O LPC residual signal    */
+	arch int, /* I Run-time architecture  */
 ) {
 	var i, j, k int
 	var lag, idx, sLTP_buf_idx, shift1, shift2 int
@@ -131,18 +155,16 @@ func plcConceal(
 	var pred_lag_ptr int
 	var LPC_pred_Q10, LTP_pred_Q12 int32
 	var rand_scale_Q14 int16
-	var B_Q14, exc_buf_ptr []int16
+	var B_Q14 []int16
 	var sLPC_Q14_ptr []int32
-	var exc_buf []int16
 	var A_Q12 [MAX_LPC_ORDER]int16
 	var sLTP []int16
 	var sLTP_Q14 []int32
 	psPLC := &psDec.sPLC
 	var prevGain_Q10 [2]int32
 
-	exc_buf = make([]int16, 2*psPLC.subfr_length)
-	sLTP = make([]int16, psDec.ltp_mem_length)
 	sLTP_Q14 = make([]int32, psDec.ltp_mem_length+psDec.frame_length)
+	sLTP = make([]int16, psDec.ltp_mem_length)
 
 	prevGain_Q10[0] = RSHIFT(psPLC.prevGain_Q16[0], 6)
 	prevGain_Q10[1] = RSHIFT(psPLC.prevGain_Q16[1], 6)
@@ -151,19 +173,7 @@ func plcConceal(
 		clear(psPLC.prevLPC_Q12[:])
 	}
 
-	/* Find random noise component */
-	/* Scale previous excitation signal */
-	exc_buf_ptr = exc_buf
-	for k = 0; k < 2; k++ {
-		for i = 0; i < psPLC.subfr_length; i++ {
-			exc_buf_ptr[i] = int16(SAT16(RSHIFT(
-				SMULWW(psDec.exc_Q14[i+(k+psPLC.nb_subfr-2)*psPLC.subfr_length], prevGain_Q10[k]), 8)))
-		}
-		exc_buf_ptr = exc_buf_ptr[psPLC.subfr_length:]
-	}
-	/* Find the subframe with lowest energy of the last two and use that as random noise generator */
-	SumSqrShift(&energy1, &shift1, exc_buf, psPLC.subfr_length)
-	SumSqrShift(&energy2, &shift2, exc_buf[psPLC.subfr_length:], psPLC.subfr_length)
+	plcEnergy(&energy1, &shift1, &energy2, &shift2, psDec.exc_Q14[:], prevGain_Q10[:], psDec.subfr_length, psDec.nb_subfr)
 
 	if RSHIFT(energy1, shift2) < RSHIFT(energy2, shift1) {
 		/* First sub-frame has lowest energy */
@@ -223,7 +233,7 @@ func plcConceal(
 	/* Rewhiten LTP state */
 	idx = psDec.ltp_mem_length - lag - psDec.LPC_order - LTP_ORDER/2
 	silk_assert(idx > 0)
-	LPCAnalysisFilter(sLTP[idx:], psDec.outBuf[idx:], A_Q12[:], int32(psDec.ltp_mem_length-idx), int32(psDec.LPC_order))
+	LPCAnalysisFilter(sLTP[idx:], psDec.outBuf[idx:], A_Q12[:], int32(psDec.ltp_mem_length-idx), int32(psDec.LPC_order), arch)
 	/* Scale LTP state */
 	inv_gain_Q30 = INVERSE32_varQ(psPLC.prevGain_Q16[1], 46)
 	inv_gain_Q30 = min(inv_gain_Q30, int32_MAX>>1)
@@ -296,7 +306,8 @@ func plcConceal(
 		}
 
 		/* Add prediction to LPC excitation */
-		sLPC_Q14_ptr[MAX_LPC_ORDER+i] = ADD_LSHIFT32(sLPC_Q14_ptr[MAX_LPC_ORDER+i], LPC_pred_Q10, 4)
+		sLPC_Q14_ptr[MAX_LPC_ORDER+i] = ADD_SAT32(sLPC_Q14_ptr[MAX_LPC_ORDER+i],
+			LSHIFT_SAT32(LPC_pred_Q10, 4))
 
 		/* Scale with Gain */
 		frame[i] = int16(SAT16(SAT16(RSHIFT_ROUND(SMULWW(sLPC_Q14_ptr[MAX_LPC_ORDER+i], prevGain_Q10[1]), 8))))

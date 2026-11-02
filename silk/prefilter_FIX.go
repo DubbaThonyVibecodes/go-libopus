@@ -2,7 +2,7 @@ package silk
 
 // C: silk/fixed/prefilter_FIX.c
 
-// C: void silk_warped_LPC_analysis_filter_FIX(
+// C: void silk_warped_LPC_analysis_filter_FIX_c(
 //
 //	      opus_int32            state[],                    /* I/O  State [order + 1]                   */
 //	      opus_int32            res_Q2[],                   /* O    Residual signal [length]            */
@@ -13,7 +13,8 @@ package silk
 //	const opus_int              order                       /* I    Filter order (even)                 */
 //
 // )
-func warpedLPCAnalysisFilterFIX(state []int32, res_Q2 []int32, coef_Q13 []int16, input []int16, lambda_Q16 int16, length int, order int) {
+// C: #define silk_warped_LPC_analysis_filter_FIX(state, res_Q2, coef_Q13, input, lambda_Q16, length, order, arch) ((void)(arch),silk_warped_LPC_analysis_filter_FIX_c(state, res_Q2, coef_Q13, input, lambda_Q16, length, order))
+func WarpedLPCAnalysisFilterFIX(state []int32, res_Q2 []int32, coef_Q13 []int16, input []int16, lambda_Q16 int16, length int, order int, arch int) {
 	var n, i int
 	var acc_Q11, tmp1, tmp2 int32
 
@@ -65,14 +66,16 @@ func (psEnc *EncoderStateFIX) PrefilterFIX(psEncCtrl *EncoderControlFIX, xw_Q10 
 	var pxw_Q3 []int32
 	var HarmShapeGain_Q12, Tilt_Q14 int
 	var HarmShapeFIRPacked_Q12, LF_shp_Q14 int32
-	var x_filt_Q12 [MAX_SUB_FRAME_LENGTH]int32
-	var st_res_Q2 [MAX_SUB_FRAME_LENGTH + MAX_LPC_ORDER]int32
+	var x_filt_Q12 []int32
+	var st_res_Q2 []int32
 	var B_Q10 [2]int16
 
 	/* Set up pointers */
 	px = x
 	pxw_Q3 = xw_Q10
 	lag = P.lagPrev
+	x_filt_Q12 = make([]int32, psEnc.sCmn.subfr_length)
+	st_res_Q2 = make([]int32, psEnc.sCmn.subfr_length)
 	for k = 0; k < psEnc.sCmn.nb_subfr; k++ {
 		/* Update Variables that change per sub frame */
 		if psEnc.sCmn.indices.signalType == TYPE_VOICED {
@@ -89,8 +92,8 @@ func (psEnc *EncoderStateFIX) PrefilterFIX(psEncCtrl *EncoderControlFIX, xw_Q10 
 		AR1_shp_Q13 = psEncCtrl.AR1_Q13[k*MAX_SHAPE_LPC_ORDER:]
 
 		/* Short term FIR filtering*/
-		warpedLPCAnalysisFilterFIX(P.sAR_shp[:], st_res_Q2[:], AR1_shp_Q13, px,
-			int16(psEnc.sCmn.warping_Q16), psEnc.sCmn.subfr_length, psEnc.sCmn.shapingLPCOrder)
+		WarpedLPCAnalysisFilterFIX(P.sAR_shp[:], st_res_Q2, AR1_shp_Q13, px,
+			int16(psEnc.sCmn.warping_Q16), psEnc.sCmn.subfr_length, psEnc.sCmn.shapingLPCOrder, psEnc.sCmn.arch)
 
 		/* Reduce (mainly) low frequencies during harmonic emphasis */
 		B_Q10[0] = int16(RSHIFT_ROUND(psEncCtrl.GainsPre_Q14[k], 4))
@@ -105,7 +108,7 @@ func (psEnc *EncoderStateFIX) PrefilterFIX(psEncCtrl *EncoderControlFIX, xw_Q10 
 		}
 		P.sHarmHP_Q2 = st_res_Q2[psEnc.sCmn.subfr_length-1]
 
-		prefiltFIX(P, x_filt_Q12[:], pxw_Q3, HarmShapeFIRPacked_Q12, Tilt_Q14, LF_shp_Q14, lag, psEnc.sCmn.subfr_length)
+		prefiltFIX(P, x_filt_Q12, pxw_Q3, HarmShapeFIRPacked_Q12, Tilt_Q14, LF_shp_Q14, lag, psEnc.sCmn.subfr_length)
 
 		px = px[psEnc.sCmn.subfr_length:]
 		pxw_Q3 = pxw_Q3[psEnc.sCmn.subfr_length:]
@@ -116,7 +119,7 @@ func (psEnc *EncoderStateFIX) PrefilterFIX(psEncCtrl *EncoderControlFIX, xw_Q10 
 
 /* Prefilter for finding Quantizer input signal */
 
-// C: static inline void silk_prefilt_FIX(
+// C: static OPUS_INLINE void silk_prefilt_FIX(
 //
 //	silk_prefilter_state_FIX    *P,                         /* I/O  state                               */
 //	opus_int32                  st_res_Q12[],               /* I    short term residual signal          */

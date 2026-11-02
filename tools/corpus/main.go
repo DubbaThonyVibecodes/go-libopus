@@ -292,6 +292,32 @@ func cases() []encCase {
 	add("piano_48k_sweep", p48, "--app audio --bitrate 8000 --sweep 3000 --sweep-max 256000")
 	add("piano_48k_sweep_cbr", p48, "--app audio --bitrate 8000 --sweep 3000 --sweep-max 256000 --cbr")
 
+	// ---- libopus 1.1: expert frame duration, prediction disabled, padding ----
+	for _, fd := range []string{"2.5", "5", "10", "20", "40", "60", "variable"} {
+		n := strings.ReplaceAll(fd, ".", "p")
+		c := add("mix_48k_audio_framedur"+n, m48, "--app audio --bitrate 64000 --framesize 60 --framedur "+fd, loss(10, 40))
+		c.info = true
+		add("speech_a_16k_voip_framedur"+n, sa16, "--app voip --bitrate 24000 --framesize 60 --framedur "+fd)
+		add("piano_48k_lowdelay_framedur"+n, p48, "--app lowdelay --bitrate 96000 --framesize 40 --framedur "+fd)
+	}
+	add("mix_48k_audio_framedur_variable_fs20", m48, "--app audio --bitrate 48000 --framesize 20 --framedur variable")
+	add("mix_48k_voip_framedur_variable_cplx5", m48, "--app voip --bitrate 32000 --framesize 60 --framedur variable --complexity 5")
+	add("piano_48k_audio_framedur_variable_cbr", p48, "--app audio --bitrate 64000 --cbr --framesize 60 --framedur variable")
+	sch("mix_48k_sched_framedur", m48, "--app audio --bitrate 64000 --framesize 60", "f=10:framedur=10,f=30:framedur=variable,f=60:framedur=60,f=80:framedur=2.5,f=100:framedur=arg,f=120:framedur=40,f=140:framedur=variable")
+	add("mix_48k_audio_nopred", m48, "--app audio --bitrate 64000 --nopred", loss(10, 41))
+	add("piano_48k_audio_nopred_fs10", p48, "--app audio --bitrate 96000 --framesize 10 --nopred")
+	add("speech_a_16k_voip_nopred", sa16, "--app voip --bitrate 24000 --nopred")
+	add("mix_48k_lowdelay_nopred", m48, "--app lowdelay --bitrate 64000 --nopred")
+	sch("mix_48k_sched_pred", m48, "--app audio --bitrate 48000", "f=20:pred=1,f=50:pred=0,f=80:pred=1,f=110:mode=silk,f=140:pred=0")
+	{
+		c := add("mix_48k_audio_pad", m48, "--app audio --bitrate 48000")
+		c.repack = []string{"pad1", "pad7", "pad300"}
+		c = add("speech_a_16k_voip_pad_fs40", sa16, "--app voip --bitrate 24000 --framesize 40")
+		c.repack = []string{"pad2", "pad260", "split", "merge3"}
+		c = add("mix_48k_audio_pad_fs10_cbr", m48, "--app audio --bitrate 64000 --framesize 10 --cbr")
+		c.repack = []string{"pad5", "merge2", "merge6"}
+	}
+
 	// ---- synthetic signals -------------------------------------------------
 	for _, k := range []string{"silence", "dc", "sine", "sine:50", "sine:19000", "multitone", "sweep", "noise", "pink", "impulses", "impulses:40", "square", "clip", "bursts", "lowlevel", "fade"} {
 		n := strings.ReplaceAll(k, ":", "")
@@ -330,6 +356,13 @@ func cases() []encCase {
 	ms("ms_51_voip_fs10", synth("bursts", 48000, 6), "--app voip --bitrate 160000 --framesize 10 --streams 4 --coupled 2 --mapping 0,4,1,2,3,5", "--streams 4 --coupled 2 --mapping 0,4,1,2,3,5")
 	ms("ms_51_16k", synth("bursts", 16000, 6), "--app audio --bitrate 96000 --streams 4 --coupled 2 --mapping 0,4,1,2,3,5", "--streams 4 --coupled 2 --mapping 0,4,1,2,3,5")
 	ms("ms_8ch", synth("sweep", 48000, 8), "--app audio --bitrate 256000 --streams 5 --coupled 3 --mapping 0,6,1,2,3,4,5,7", "--streams 5 --coupled 3 --mapping 0,6,1,2,3,4,5,7")
+	msPad := func(name string, pads ...string) {
+		for i := range cs {
+			if cs[i].name == name {
+				cs[i].repack = append(cs[i].repack, pads...)
+			}
+		}
+	}
 	ms("ms_51_cbr", synth("pink", 48000, 6), "--app audio --bitrate 192000 --cbr --streams 4 --coupled 2 --mapping 0,4,1,2,3,5", "--streams 4 --coupled 2 --mapping 0,4,1,2,3,5")
 	ms("ms_51_lowdelay_fs5", synth("impulses", 48000, 6), "--app lowdelay --bitrate 256000 --framesize 5 --streams 4 --coupled 2 --mapping 0,4,1,2,3,5", "--streams 4 --coupled 2 --mapping 0,4,1,2,3,5")
 	// Surround encoder (mapping family 1 picks streams/coupled/mapping itself; the
@@ -352,6 +385,9 @@ func cases() []encCase {
 	ms("surround_fam1_6ch_16k", synth("bursts", 16000, 6), "--app audio --bitrate 128000 --family 1", famMaps[6])
 	ms("surround_fam1_6ch_voip_fs40", synth("bursts", 48000, 6), "--app voip --bitrate 128000 --framesize 40 --family 1", famMaps[6])
 
+	msPad("ms_stereo_coupled", "pad3", "pad200")
+	msPad("ms_51", "pad9")
+	msPad("ms_3ch_omit", "pad40")
 	return cs
 }
 
@@ -455,16 +491,30 @@ func main() {
 		}
 		for _, r := range c.repack {
 			var args []string
-			if r == "split" {
+			switch {
+			case r == "split":
 				args = []string{"--split"}
-			} else {
+			case strings.HasPrefix(r, "pad"):
+				args = []string{"--pad", strings.TrimPrefix(r, "pad")}
+				for i, a := range c.args { // multistream: pad the last stream
+					if a == "--streams" && i+1 < len(c.args) {
+						args = append(args, "--streams", c.args[i+1])
+					}
+				}
+			default:
 				args = []string{"--merge", strings.TrimPrefix(r, "merge")}
 			}
 			n := "repack/" + c.name + "." + r
 			second = append(second, testvec.Case{Name: n, Kind: "repack", Args: args, Pkt: pkt, OutPkt: n + ".pkt", Trace: n + ".trace.gz"})
 			// and decode the repacketized stream
 			dn := "dec/" + c.name + "." + r
-			third = append(third, testvec.Case{Name: dn, Kind: "dec", Args: []string{"--rate", strconv.Itoa(c.in.rate), "--ch", strconv.Itoa(c.in.ch)}, Pkt: n + ".pkt", Trace: dn + ".trace.gz"})
+			dargs := []string{"--rate", strconv.Itoa(c.in.rate), "--ch", strconv.Itoa(c.in.ch)}
+			for _, d := range c.decs { // multistream layouts live in the plain decoder variant
+				if d.name == "plain" {
+					dargs = append(dargs, d.args...)
+				}
+			}
+			third = append(third, testvec.Case{Name: dn, Kind: "dec", Args: dargs, Pkt: n + ".pkt", Trace: dn + ".trace.gz"})
 		}
 	}
 	// RFC 6716 decoder vectors.

@@ -8,7 +8,7 @@ const (
 	MAX_PSEUDO     = 40
 	LOG_MAX_PSEUDO = 6
 
-	MAX_PULSES = 128
+	CELT_MAX_PULSES = 128
 
 	MAX_FINE_BITS = 8
 
@@ -17,7 +17,7 @@ const (
 	QTHETA_OFFSET_TWOPHASE = 16
 )
 
-// C: static inline int get_pulses(int i)
+// C: static OPUS_INLINE int get_pulses(int i)
 func get_pulses(i int) int {
 	if i < 8 {
 		return i
@@ -25,7 +25,7 @@ func get_pulses(i int) int {
 	return (8 + (i & 7)) << uint((i>>3)-1)
 }
 
-// C: static inline int bits2pulses(const CELTMode *m, int band, int LM, int bits)
+// C: static OPUS_INLINE int bits2pulses(const CELTMode *m, int band, int LM, int bits)
 func bits2pulses(m *CELTMode, band, LM, bits int) int {
 	var i, lo, hi int
 	LM++
@@ -55,7 +55,7 @@ func bits2pulses(m *CELTMode, band, LM, bits int) int {
 	return hi
 }
 
-// C: static inline int pulses2bits(const CELTMode *m, int band, int LM, int pulses)
+// C: static OPUS_INLINE int pulses2bits(const CELTMode *m, int band, int LM, int pulses)
 func pulses2bits(m *CELTMode, band, LM, pulses int) int {
 	LM++
 	cache := m.cache.bits[m.cache.index[LM*m.nbEBands+band]:]
@@ -75,7 +75,7 @@ var LOG2_FRAC_TABLE = [24]uint8{
 
 const ALLOC_STEPS = 6
 
-// C: static inline int interp_bits2pulses(const CELTMode *m, int start, int end, int skip_start,
+// C: static OPUS_INLINE int interp_bits2pulses(const CELTMode *m, int start, int end, int skip_start,
 //
 //	const int *bits1, const int *bits2, const int *thresh, const int *cap, opus_int32 total, opus_int32 *_balance,
 //	int skip_rsv, int *intensity, int intensity_rsv, int *dual_stereo, int dual_stereo_rsv, int *bits,
@@ -83,7 +83,7 @@ const ALLOC_STEPS = 6
 func interp_bits2pulses(m *CELTMode, start, end, skip_start int,
 	bits1, bits2, thresh, cap []int, total int32, _balance *int32,
 	skip_rsv int, intensity *int, intensity_rsv int, dual_stereo *int, dual_stereo_rsv int, bits []int,
-	ebits, fine_priority []int, C, LM int, ec *EcCtx, encode, prev int) int {
+	ebits, fine_priority []int, C, LM int, ec *EcCtx, encode, prev int, signalBandwidth int) int {
 	var psum int32
 	var lo, hi, i, j, logM, stereo int
 	var codedBands int = -1
@@ -128,7 +128,7 @@ func interp_bits2pulses(m *CELTMode, start, end, skip_start int,
 	done = 0
 	for j = end; j > start; {
 		j--
-		tmp := bits1[j] + (lo * bits2[j] >> ALLOC_STEPS)
+		tmp := bits1[j] + int(int32(lo)*int32(bits2[j])>>ALLOC_STEPS)
 		if tmp < thresh[j] && done == 0 {
 			if tmp >= alloc_floor {
 				tmp = alloc_floor
@@ -162,7 +162,7 @@ func interp_bits2pulses(m *CELTMode, start, end, skip_start int,
 		// Figure out how many left-over bits we would be adding to this band.
 		// This can include bits we've stolen back from higher, skipped bands.
 		left = total - psum
-		percoeff = left / int32(m.eBands[codedBands]-m.eBands[start])
+		percoeff = int32(Udiv(uint32(left), uint32(m.eBands[codedBands]-m.eBands[start])))
 		left -= int32(m.eBands[codedBands]-m.eBands[start]) * percoeff
 		rem = IMAX(int(left)-int(m.eBands[j]-m.eBands[start]), 0)
 		band_width = int(m.eBands[codedBands] - m.eBands[j])
@@ -183,7 +183,7 @@ func interp_bits2pulses(m *CELTMode, start, end, skip_start int,
 				} else {
 					thr = 9
 				}
-				if codedBands <= start+2 || band_bits > ((thr*band_width<<uint(LM)<<BITRES)>>4) {
+				if codedBands <= start+2 || (band_bits > ((thr*band_width<<uint(LM)<<BITRES)>>4) && j <= signalBandwidth) {
 					ec.EncBitLogp(1, 1)
 					break
 				}
@@ -239,7 +239,7 @@ func interp_bits2pulses(m *CELTMode, start, end, skip_start int,
 
 	// Allocate the remaining bits
 	left = total - psum
-	percoeff = left / int32(m.eBands[codedBands]-m.eBands[start])
+	percoeff = int32(Udiv(uint32(left), uint32(m.eBands[codedBands]-m.eBands[start])))
 	left -= int32(m.eBands[codedBands]-m.eBands[start]) * percoeff
 	for j = start; j < codedBands; j++ {
 		bits[j] += int(percoeff) * int(m.eBands[j+1]-m.eBands[j])
@@ -290,7 +290,8 @@ func interp_bits2pulses(m *CELTMode, start, end, skip_start int,
 			}
 
 			// Divide with rounding
-			ebits[j] = IMAX(0, (bits[j]+offset+(den<<(BITRES-1)))/(den<<BITRES))
+			ebits[j] = IMAX(0, (bits[j] + offset + (den << (BITRES - 1))))
+			ebits[j] = int(Udiv(uint32(ebits[j]), uint32(den))) >> BITRES
 
 			// Make sure not to bust
 			if C*ebits[j] > (bits[j] >> BITRES) {
@@ -362,9 +363,9 @@ func interp_bits2pulses(m *CELTMode, start, end, skip_start int,
 //
 // C: int compute_allocation(const CELTMode *m, int start, int end, const int *offsets, const int *cap, int alloc_trim, int *intensity, int *dual_stereo,
 //
-//	opus_int32 total, opus_int32 *balance, int *pulses, int *ebits, int *fine_priority, int C, int LM, ec_ctx *ec, int encode, int prev)
+//	opus_int32 total, opus_int32 *balance, int *pulses, int *ebits, int *fine_priority, int C, int LM, ec_ctx *ec, int encode, int prev, int signalBandwidth)
 func ComputeAllocation(m *CELTMode, start, end int, offsets, cap []int, alloc_trim int, intensity, dual_stereo *int,
-	total int32, balance *int32, pulses, ebits, fine_priority []int, C, LM int, ec *EcCtx, encode, prev int) int {
+	total int32, balance *int32, pulses, ebits, fine_priority []int, C, LM int, ec *EcCtx, encode, prev int, signalBandwidth int) int {
 	var lo, hi, length, j, codedBands, skip_start, skip_rsv, intensity_rsv, dual_stereo_rsv int
 
 	total = IMAX(total, 0)
@@ -472,6 +473,6 @@ func ComputeAllocation(m *CELTMode, start, end int, offsets, cap []int, alloc_tr
 	}
 	codedBands = interp_bits2pulses(m, start, end, skip_start, bits1, bits2, thresh, cap,
 		total, balance, skip_rsv, intensity, intensity_rsv, dual_stereo, dual_stereo_rsv,
-		pulses, ebits, fine_priority, C, LM, ec, encode, prev)
+		pulses, ebits, fine_priority, C, LM, ec, encode, prev, signalBandwidth)
 	return codedBands
 }

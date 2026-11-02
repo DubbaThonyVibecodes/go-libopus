@@ -13,12 +13,11 @@ package silk
 // )
 func (psEnc *EncoderStateFIX) FindPredCoefsFIX(psEncCtrl *EncoderControlFIX, res_pitch []int16, x []int16, condCoding int) {
 	var i int
-	var WLTP [MAX_NB_SUBFR * LTP_ORDER * LTP_ORDER]int32
 	var invGains_Q16, local_gains, Wght_Q15 [MAX_NB_SUBFR]int32
 	var NLSF_Q15 [MAX_LPC_ORDER]int16
 	var x_ptr []int16
 	var x_pre_ptr []int16
-	var LPC_in_pre [MAX_NB_SUBFR*MAX_LPC_ORDER + MAX_FRAME_LENGTH]int16
+	var LPC_in_pre []int16
 	var tmp, min_gain_Q16, minInvGain_Q30 int32
 	var LTP_corrs_rshift [MAX_NB_SUBFR]int
 
@@ -52,26 +51,33 @@ func (psEnc *EncoderStateFIX) FindPredCoefsFIX(psEncCtrl *EncoderControlFIX, res
 		local_gains[i] = DIV32((int32(1) << 16), invGains_Q16[i])
 	}
 
+	LPC_in_pre = make([]int16, psEnc.sCmn.nb_subfr*psEnc.sCmn.predictLPCOrder+
+		psEnc.sCmn.frame_length)
 	if psEnc.sCmn.indices.signalType == TYPE_VOICED {
+		var WLTP []int32
+
 		/**********/
 		/* VOICED */
 		/**********/
 		silk_assert(psEnc.sCmn.ltp_mem_length-psEnc.sCmn.predictLPCOrder >= psEncCtrl.pitchL[0]+LTP_ORDER/2)
 
+		WLTP = make([]int32, psEnc.sCmn.nb_subfr*LTP_ORDER*LTP_ORDER)
+
 		/* LTP analysis */
-		FindLTPFIX(psEncCtrl.LTPCoef_Q14[:], WLTP[:], &psEncCtrl.LTPredCodGain_Q7,
+		FindLTPFIX(psEncCtrl.LTPCoef_Q14[:], WLTP, &psEncCtrl.LTPredCodGain_Q7,
 			res_pitch, psEncCtrl.pitchL[:], Wght_Q15[:], psEnc.sCmn.subfr_length,
-			psEnc.sCmn.nb_subfr, psEnc.sCmn.ltp_mem_length, LTP_corrs_rshift[:])
+			psEnc.sCmn.nb_subfr, psEnc.sCmn.ltp_mem_length, LTP_corrs_rshift[:], psEnc.sCmn.arch)
 
 		/* Quantize LTP gain parameters */
 		QuantLTPGains(psEncCtrl.LTPCoef_Q14[:], psEnc.sCmn.indices.LTPIndex[:], &psEnc.sCmn.indices.PERIndex,
-			WLTP[:], psEnc.sCmn.mu_LTP_Q9, psEnc.sCmn.LTPQuantLowComplexity, psEnc.sCmn.nb_subfr)
+			&psEnc.sCmn.sum_log_gain_Q7, WLTP, psEnc.sCmn.mu_LTP_Q9, psEnc.sCmn.LTPQuantLowComplexity, psEnc.sCmn.nb_subfr,
+			psEnc.sCmn.arch)
 
 		/* Control LTP scaling */
 		psEnc.LTPScaleCtrlFIX(psEncCtrl, condCoding)
 
 		/* Create LTP residual */
-		LTPAnalysisFilterFIX(LPC_in_pre[:], psEnc.x_buf[:], x_minus_LPC, psEncCtrl.LTPCoef_Q14[:],
+		LTPAnalysisFilterFIX(LPC_in_pre, psEnc.x_buf[:], x_minus_LPC, psEncCtrl.LTPCoef_Q14[:],
 			psEncCtrl.pitchL[:], invGains_Q16[:], psEnc.sCmn.subfr_length, psEnc.sCmn.nb_subfr, psEnc.sCmn.predictLPCOrder)
 
 	} else {
@@ -80,7 +86,7 @@ func (psEnc *EncoderStateFIX) FindPredCoefsFIX(psEncCtrl *EncoderControlFIX, res
 		/************/
 		/* Create signal with prepended subframes, scaled by inverse gains */
 		x_ptr = psEnc.x_buf[x_minus_LPC:]
-		x_pre_ptr = LPC_in_pre[:]
+		x_pre_ptr = LPC_in_pre
 		for i = 0; i < psEnc.sCmn.nb_subfr; i++ {
 			ScaleCopyVector16(x_pre_ptr, x_ptr, invGains_Q16[i],
 				psEnc.sCmn.subfr_length+psEnc.sCmn.predictLPCOrder)
@@ -90,6 +96,7 @@ func (psEnc *EncoderStateFIX) FindPredCoefsFIX(psEncCtrl *EncoderControlFIX, res
 
 		clear(psEncCtrl.LTPCoef_Q14[:psEnc.sCmn.nb_subfr*LTP_ORDER])
 		psEncCtrl.LTPredCodGain_Q7 = 0
+		psEnc.sCmn.sum_log_gain_Q7 = 0
 	}
 
 	/* Limit on total predictive coding gain */
@@ -103,14 +110,14 @@ func (psEnc *EncoderStateFIX) FindPredCoefsFIX(psEncCtrl *EncoderControlFIX, res
 	}
 
 	/* LPC_in_pre contains the LTP-filtered input for voiced, and the unfiltered input for unvoiced */
-	psEnc.sCmn.FindLPCFIX(NLSF_Q15[:], LPC_in_pre[:], minInvGain_Q30)
+	psEnc.sCmn.FindLPCFIX(NLSF_Q15[:], LPC_in_pre, minInvGain_Q30)
 
 	/* Quantize LSFs */
 	psEnc.sCmn.ProcessNLSFs(&psEncCtrl.PredCoef_Q12, NLSF_Q15[:], psEnc.sCmn.prev_NLSFq_Q15[:])
 
 	/* Calculate residual energy using quantized LPC coefficients */
-	ResidualEnergyFIX(psEncCtrl.ResNrg[:], psEncCtrl.ResNrgQ[:], LPC_in_pre[:], &psEncCtrl.PredCoef_Q12, local_gains[:],
-		psEnc.sCmn.subfr_length, psEnc.sCmn.nb_subfr, psEnc.sCmn.predictLPCOrder)
+	ResidualEnergyFIX(psEncCtrl.ResNrg[:], psEncCtrl.ResNrgQ[:], LPC_in_pre, &psEncCtrl.PredCoef_Q12, local_gains[:],
+		psEnc.sCmn.subfr_length, psEnc.sCmn.nb_subfr, psEnc.sCmn.predictLPCOrder, psEnc.sCmn.arch)
 
 	/* Copy to prediction struct for use in next frame for interpolation */
 	copy(psEnc.sCmn.prev_NLSFq_Q15[:], NLSF_Q15[:])

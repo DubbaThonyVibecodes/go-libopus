@@ -43,10 +43,10 @@ func (m *CELTMode) NbEBands() int      { return m.nbEBands }
 func (m *CELTMode) ShortMdctSize() int { return m.shortMdctSize }
 func (m *CELTMode) EBands() []int16    { return m.eBands }
 
-// C: #define OVERLAP(mode) ((mode)->overlap)
-func OVERLAP(mode *CELTMode) int { return mode.overlap }
-
-// C: #define FRAMESIZE(mode) ((mode)->mdctSize)   (unused upstream)
+// Kfft returns the FFT state for the given shift (C: mode->mdct.kfft[shift]).
+func (m *CELTMode) Kfft(shift int) *kiss_fft_state { return m.mdct.kfft[shift] }
+func (m *CELTMode) MaxLM() int                     { return m.maxLM }
+func (m *CELTMode) Mdct() *mdct_lookup             { return &m.mdct }
 
 var eband5ms = [22]int16{
 	// 0  200 400 600 800  1k 1.2 1.4 1.6  2k 2.4 2.8 3.2  4k 4.8 5.6 6.8  8k 9.6 12k 15.6

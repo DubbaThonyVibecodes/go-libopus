@@ -96,3 +96,58 @@ func TestSurround(t *testing.T) {
 		t.Fatalf("decode: %d %v", m, err)
 	}
 }
+
+// TestFrameDurationAndPadding exercises the libopus 1.1 additions of the
+// wrapper: variable frame duration, prediction disabling and packet padding.
+func TestFrameDurationAndPadding(t *testing.T) {
+	enc, err := NewEncoder(48000, 1, Audio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := enc.SetExpertFrameDuration(FrameDurationVariable); err != nil {
+		t.Fatal(err)
+	}
+	if enc.ExpertFrameDuration() != FrameDurationVariable {
+		t.Fatal("frame duration not applied")
+	}
+	if err := enc.SetPredictionDisabled(true); err != nil {
+		t.Fatal(err)
+	}
+	if !enc.PredictionDisabled() {
+		t.Fatal("prediction flag not applied")
+	}
+	pcm := make([]int16, 2880)
+	for i := range pcm {
+		pcm[i] = int16(8000 * math.Sin(float64(i)*2*math.Pi*440/48000))
+	}
+	pkt := make([]byte, MaxPacket)
+	n, err := enc.Encode(pcm, pkt)
+	if err != nil || n < 1 {
+		t.Fatalf("encode: n=%d err=%v", n, err)
+	}
+	used, err := PacketSamples(pkt[:n], 48000)
+	if err != nil || used < 120 || used > 2880 {
+		t.Fatalf("packet samples %d err %v", used, err)
+	}
+	padded, err := PacketPad(pkt[:n], n+37)
+	if err != nil || len(padded) != n+37 {
+		t.Fatalf("pad: %v len %d", err, len(padded))
+	}
+	dec, _ := NewDecoder(48000, 1)
+	out := make([]int16, 5760)
+	if m, err := dec.Decode(padded, out, false); err != nil || m != used {
+		t.Fatalf("decode padded: m=%d err=%v", m, err)
+	}
+	unpadded, err := PacketUnpad(padded)
+	if err != nil || len(unpadded) != n || string(unpadded) != string(pkt[:n]) {
+		t.Fatalf("unpad: %v len %d", err, len(unpadded))
+	}
+	f := make([]float32, 480)
+	for i := range f {
+		f[i] = 1.5
+	}
+	SoftClip(f, 1, nil)
+	if f[100] > 1 || f[100] < 0.5 {
+		t.Fatalf("soft clip: %v", f[100])
+	}
+}

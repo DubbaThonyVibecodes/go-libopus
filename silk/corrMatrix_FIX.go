@@ -8,7 +8,7 @@ package silk
 
 // Calculates correlation vector X'*t
 //
-// C: void silk_corrVector_FIX(const opus_int16 *x, const opus_int16 *t, const opus_int L, const opus_int order, opus_int32 *Xt, const opus_int rshifts)
+// C: void silk_corrVector_FIX(const opus_int16 *x, const opus_int16 *t, const opus_int L, const opus_int order, opus_int32 *Xt, const opus_int rshifts, int arch)
 func CorrVectorFIX(
 	x []int16, // I    x vector [L + order - 1] used to form data matrix X
 	t []int16, // I    Target vector [L]
@@ -16,6 +16,7 @@ func CorrVectorFIX(
 	order int, // I    Max lag for correlation
 	Xt []int32, // O    Pointer to X'*t correlation vector [order]
 	rshifts int, // I    Right shifts of correlations
+	arch int, // I    Run-time architecture
 ) {
 	var lag, i int
 	var ptr1 int // C: const opus_int16 *ptr1; index into x[] (is decremented, so kept as an index)
@@ -38,15 +39,15 @@ func CorrVectorFIX(
 	} else {
 		silk_assert(rshifts == 0)
 		for lag = 0; lag < order; lag++ {
-			Xt[lag] = InnerProdAligned(x[ptr1:], ptr2, L) // X[:,lag]'*t
-			ptr1--                                        // Go to next column of X
+			Xt[lag] = InnerProdAligned(x[ptr1:], ptr2, L, arch) // X[:,lag]'*t
+			ptr1--                                              // Go to next column of X
 		}
 	}
 }
 
 // Calculates correlation matrix X'*X
 //
-// C: void silk_corrMatrix_FIX(const opus_int16 *x, const opus_int L, const opus_int order, const opus_int head_room, opus_int32 *XX, opus_int *rshifts)
+// C: void silk_corrMatrix_FIX(const opus_int16 *x, const opus_int L, const opus_int order, const opus_int head_room, opus_int32 *XX, opus_int *rshifts, int arch)
 func CorrMatrixFIX(
 	x []int16, // I    x vector [L + order - 1] used to form data matrix X
 	L int, // I    Length of vectors
@@ -54,6 +55,7 @@ func CorrMatrixFIX(
 	head_room int, // I    Desired headroom
 	XX []int32, // O    Pointer to X'*X correlation matrix [ order x order ]
 	rshifts *int, // I/O  Right shifts of correlations
+	arch int, // I    Run-time architecture
 ) {
 	var i, j, lag, rshifts_local, head_room_rshifts int
 	var energy int32
@@ -112,7 +114,7 @@ func CorrMatrixFIX(
 	} else {
 		for lag = 1; lag < order; lag++ {
 			// Inner product of column 0 and column lag: X[:,0]'*X[:,lag]
-			energy = InnerProdAligned(x[ptr1:], x[ptr2:], L)
+			energy = InnerProdAligned(x[ptr1:], x[ptr2:], L, arch)
 			*matrix_ptr(XX, lag, 0, order) = energy
 			*matrix_ptr(XX, 0, lag, order) = energy
 			// Calculate remaining off diagonal: X[:,j]'*X[:,j + lag]

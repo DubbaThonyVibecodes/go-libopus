@@ -12,7 +12,7 @@ func (psEncC *EncoderState) ProcessNLSFs(
 ) {
 	var i, doInterpolate int
 	var NLSF_mu_Q20 int
-	var i_sqr_Q15 int32
+	var i_sqr_Q15 int16
 	var pNLSF0_temp_Q15 [MAX_LPC_ORDER]int16
 	var pNLSFW_QW [MAX_LPC_ORDER]int16
 	var pNLSFW0_temp_QW [MAX_LPC_ORDER]int16
@@ -48,9 +48,10 @@ func (psEncC *EncoderState) ProcessNLSFs(
 		NLSFVQWeightsLaroia(pNLSFW0_temp_QW[:], pNLSF0_temp_Q15[:], psEncC.predictLPCOrder)
 
 		// Update NLSF weights with contribution from first half
-		i_sqr_Q15 = LSHIFT(SMULBB(psEncC.indices.NLSFInterpCoef_Q2, psEncC.indices.NLSFInterpCoef_Q2), 11)
+		i_sqr_Q15 = int16(LSHIFT(SMULBB(psEncC.indices.NLSFInterpCoef_Q2, psEncC.indices.NLSFInterpCoef_Q2), 11))
 		for i = 0; i < psEncC.predictLPCOrder; i++ {
-			pNLSFW_QW[i] = int16(SMLAWB(RSHIFT(pNLSFW_QW[i], 1), int32(pNLSFW0_temp_QW[i]), i_sqr_Q15))
+			pNLSFW_QW[i] = ADD16(RSHIFT(pNLSFW_QW[i], 1), RSHIFT(
+				SMULBB(pNLSFW0_temp_QW[i], i_sqr_Q15), 16))
 			silk_assert(pNLSFW_QW[i] >= 1)
 		}
 	}
@@ -71,6 +72,7 @@ func (psEncC *EncoderState) ProcessNLSFs(
 
 	} else {
 		// Copy LPC coefficients for first half from second half
+		silk_assert(psEncC.predictLPCOrder <= MAX_LPC_ORDER)
 		copy(PredCoef_Q12[0][:psEncC.predictLPCOrder], PredCoef_Q12[1][:psEncC.predictLPCOrder])
 	}
 }

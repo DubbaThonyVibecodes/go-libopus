@@ -15,7 +15,7 @@ const MAX_ITERATIONS_A2NLSF_FIX = 30
 // Helper function for A2NLSF(..)
 // Transforms polynomials from cos(n*f) to cos(f)^n
 //
-// C: static inline void silk_A2NLSF_trans_poly(opus_int32 *p, const opus_int dd)
+// C: static OPUS_INLINE void silk_A2NLSF_trans_poly(opus_int32 *p, const opus_int dd)
 func a2NLSFTransPoly(
 	p []int32, // I/O    Polynomial
 	dd int, // I      Polynomial order (= filter order / 2 )
@@ -33,7 +33,7 @@ func a2NLSFTransPoly(
 // Helper function for A2NLSF(..)
 // Polynomial evaluation
 //
-// C: static inline opus_int32 silk_A2NLSF_eval_poly(opus_int32 *p, const opus_int32 x, const opus_int dd)
+// C: static OPUS_INLINE opus_int32 silk_A2NLSF_eval_poly(opus_int32 *p, const opus_int32 x, const opus_int dd)
 func a2NLSFEvalPoly( // return the polynomial evaluation, in Q16
 	p []int32, // I    Polynomial, Q16
 	x int32, // I    Evaluation point, Q12
@@ -44,13 +44,25 @@ func a2NLSFEvalPoly( // return the polynomial evaluation, in Q16
 
 	y32 = p[dd] // Q16
 	x_Q16 = LSHIFT(x, 4)
-	for n = dd - 1; n >= 0; n-- {
-		y32 = SMLAWW(p[n], y32, x_Q16) // Q16
+
+	if 8 == dd { // opus_likely
+		y32 = SMLAWW(p[7], y32, x_Q16)
+		y32 = SMLAWW(p[6], y32, x_Q16)
+		y32 = SMLAWW(p[5], y32, x_Q16)
+		y32 = SMLAWW(p[4], y32, x_Q16)
+		y32 = SMLAWW(p[3], y32, x_Q16)
+		y32 = SMLAWW(p[2], y32, x_Q16)
+		y32 = SMLAWW(p[1], y32, x_Q16)
+		y32 = SMLAWW(p[0], y32, x_Q16)
+	} else {
+		for n = dd - 1; n >= 0; n-- {
+			y32 = SMLAWW(p[n], y32, x_Q16) // Q16
+		}
 	}
 	return y32
 }
 
-// C: static inline void silk_A2NLSF_init(const opus_int32 *a_Q16, opus_int32 *P, opus_int32 *Q, const opus_int dd)
+// C: static OPUS_INLINE void silk_A2NLSF_init(const opus_int32 *a_Q16, opus_int32 *P, opus_int32 *Q, const opus_int dd)
 func a2NLSFInit(
 	a_Q16 []int32,
 	P []int32,

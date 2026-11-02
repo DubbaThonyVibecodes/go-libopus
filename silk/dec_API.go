@@ -47,14 +47,15 @@ func (decState *Decoder) InitDecoder() int {
 /* Decode a frame */
 //
 // C: opus_int silk_Decode(void *decState, silk_DecControlStruct *decControl, opus_int lostFlag,
-// opus_int newPacketFlag, ec_dec *psRangeDec, opus_int16 *samplesOut, opus_int32 *nSamplesOut)
-func (decState *Decoder) Decode(decControl *DecControlStruct, lostFlag int, newPacketFlag int, psRangeDec *celt.EcDec, samplesOut []int16, nSamplesOut *int32) int {
+// opus_int newPacketFlag, ec_dec *psRangeDec, opus_int16 *samplesOut, opus_int32 *nSamplesOut, int arch)
+func (decState *Decoder) Decode(decControl *DecControlStruct, lostFlag int, newPacketFlag int, psRangeDec *celt.EcDec, samplesOut []int16, nSamplesOut *int32, arch int) int {
 	var i, n int
 	decode_only_middle := 0
 	ret := SILK_NO_ERROR
 	var nSamplesOutDec, LBRR_symbol int32
 	var samplesOut1_tmp [2][]int16
-	var samplesOut1_tmp_storage []int16
+	var samplesOut1_tmp_storage1 []int16
+	var samplesOut1_tmp_storage2 []int16
 	var samplesOut2_tmp []int16
 	MS_pred_Q13 := [2]int32{0}
 	var resample_out_ptr []int16
@@ -62,6 +63,9 @@ func (decState *Decoder) Decode(decControl *DecControlStruct, lostFlag int, newP
 	channel_state := psDec.channel_state[:]
 	var has_side int
 	var stereo_to_mono int
+	var delay_stack_alloc int
+
+	silk_assert(decControl.NChannelsInternal == 1 || decControl.NChannelsInternal == 2)
 
 	/**********************************/
 	/* Test if first frame in payload */
@@ -154,7 +158,7 @@ func (decState *Decoder) Decode(decControl *DecControlStruct, lostFlag int, newP
 			for i = 0; i < channel_state[0].nFramesPerPacket; i++ {
 				for n = 0; n < int(decControl.NChannelsInternal); n++ {
 					if channel_state[n].LBRR_flags[i] != 0 {
-						var pulses [MAX_FRAME_LENGTH]int
+						var pulses [MAX_FRAME_LENGTH]int16
 						var condCoding int
 
 						if decControl.NChannelsInternal == 2 && n == 0 {
@@ -207,10 +211,22 @@ func (decState *Decoder) Decode(decControl *DecControlStruct, lostFlag int, newP
 		psDec.channel_state[1].first_frame_after_reset = 1
 	}
 
-	samplesOut1_tmp_storage = make([]int16,
-		int(decControl.NChannelsInternal)*(channel_state[0].frame_length+2))
-	samplesOut1_tmp[0] = samplesOut1_tmp_storage
-	samplesOut1_tmp[1] = samplesOut1_tmp_storage[channel_state[0].frame_length+2:]
+	/* Check if the temp buffer fits into the output PCM buffer. If it fits,
+	   we can delay allocating the temp buffer until after the SILK peak stack
+	   usage. We need to use a < and not a <= because of the two extra samples. */
+	delay_stack_alloc = b2i(decControl.InternalSampleRate*decControl.NChannelsInternal <
+		decControl.API_sampleRate*decControl.NChannelsAPI)
+	if delay_stack_alloc == 0 {
+		samplesOut1_tmp_storage1 = make([]int16,
+			int(decControl.NChannelsInternal)*(channel_state[0].frame_length+2))
+	}
+	if delay_stack_alloc != 0 {
+		samplesOut1_tmp[0] = samplesOut
+		samplesOut1_tmp[1] = samplesOut[channel_state[0].frame_length+2:]
+	} else {
+		samplesOut1_tmp[0] = samplesOut1_tmp_storage1
+		samplesOut1_tmp[1] = samplesOut1_tmp_storage1[channel_state[0].frame_length+2:]
+	}
 
 	if lostFlag == FLAG_DECODE_NORMAL {
 		has_side = b2i(decode_only_middle == 0)
@@ -241,7 +257,7 @@ func (decState *Decoder) Decode(decControl *DecControlStruct, lostFlag int, newP
 			} else {
 				condCoding = CODE_CONDITIONALLY
 			}
-			ret += channel_state[n].DecodeFrame(psRangeDec, samplesOut1_tmp[n][2:], &nSamplesOutDec, lostFlag, condCoding)
+			ret += channel_state[n].DecodeFrame(psRangeDec, samplesOut1_tmp[n][2:], &nSamplesOutDec, lostFlag, condCoding, arch)
 		} else {
 			clear(samplesOut1_tmp[n][2 : 2+int(nSamplesOutDec)])
 		}
@@ -270,6 +286,15 @@ func (decState *Decoder) Decode(decControl *DecControlStruct, lostFlag int, newP
 		resample_out_ptr = samplesOut
 	}
 
+	if delay_stack_alloc != 0 {
+		samplesOut1_tmp_storage2 = make([]int16,
+			int(decControl.NChannelsInternal)*(channel_state[0].frame_length+2))
+	}
+	if delay_stack_alloc != 0 {
+		copy(samplesOut1_tmp_storage2, samplesOut[:int(decControl.NChannelsInternal)*(channel_state[0].frame_length+2)])
+		samplesOut1_tmp[0] = samplesOut1_tmp_storage2
+		samplesOut1_tmp[1] = samplesOut1_tmp_storage2[channel_state[0].frame_length+2:]
+	}
 	for n = 0; n < int(min(decControl.NChannelsAPI, decControl.NChannelsInternal)); n++ {
 
 		/* Resample decoded signal to API_sampleRate */

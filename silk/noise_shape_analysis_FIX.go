@@ -7,7 +7,7 @@ package silk
 /* Note: A monic filter is one with the first coefficient equal to 1.0. In Silk we omit the first */
 /* coefficient in an array of coefficients, for monic filters.                                    */
 
-// C: static inline opus_int32 warped_gain( /* gain in Q16*/
+// C: static OPUS_INLINE opus_int32 warped_gain( /* gain in Q16*/
 //
 //	const opus_int32     *coefs_Q24,
 //	opus_int             lambda_Q16,
@@ -30,7 +30,7 @@ func warpedGain(coefs_Q24 []int32, lambda_Q16 int, order int) int32 {
 /* Convert warped filter coefficients to monic pseudo-warped coefficients and limit maximum     */
 /* amplitude of monic warped coefficients by using bandwidth expansion on the true coefficients */
 
-// C: static inline void limit_warped_coefs(
+// C: static OPUS_INLINE void limit_warped_coefs(
 //
 //	opus_int32           *coefs_syn_Q24,
 //	opus_int32           *coefs_ana_Q24,
@@ -125,10 +125,11 @@ func limitWarpedCoefs(coefs_syn_Q24 []int32, coefs_ana_Q24 []int32, lambda_Q16 i
 //	silk_encoder_state_FIX          *psEnc,                                 /* I/O  Encoder state FIX                                                           */
 //	silk_encoder_control_FIX        *psEncCtrl,                             /* I/O  Encoder control FIX                                                         */
 //	const opus_int16                *pitch_res,                             /* I    LPC residual from pitch analysis                                            */
-//	const opus_int16                *x                                      /* I    Input signal [ frame_length + la_shape ]                                    */
+//	const opus_int16                *x,                                     /* I    Input signal [ frame_length + la_shape ]                                    */
+//	int                              arch                                   /* I    Run-time architecture                                                       */
 //
 // )
-func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX, pitch_res []int16, x []int16) {
+func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX, pitch_res []int16, x []int16, arch int) {
 	psShapeSt := &psEnc.sShape
 	var k, i, nSamples, Qnrg, b_Q14, warping_Q16 int
 	scale := 0
@@ -139,7 +140,7 @@ func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX
 	var refl_coef_Q16 [MAX_SHAPE_LPC_ORDER]int32
 	var AR1_Q24 [MAX_SHAPE_LPC_ORDER]int32
 	var AR2_Q24 [MAX_SHAPE_LPC_ORDER]int32
-	var x_windowed [SHAPE_LPC_WIN_MAX]int16
+	var x_windowed []int16
 	var x_ptr, pitch_res_ptr []int16
 
 	/* Point to start of first LPC analysis block */
@@ -245,13 +246,14 @@ func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX
 	/********************************************/
 	/* Compute noise shaping AR coefs and gains */
 	/********************************************/
+	x_windowed = make([]int16, psEnc.sCmn.shapeWinLength)
 	for k = 0; k < psEnc.sCmn.nb_subfr; k++ {
 		/* Apply window: sine slope followed by flat part followed by cosine slope */
 		var shift, slope_part, flat_part int
 		flat_part = psEnc.sCmn.fs_kHz * 3
 		slope_part = RSHIFT(psEnc.sCmn.shapeWinLength-flat_part, 1)
 
-		ApplySineWindow(x_windowed[:], x_ptr, 1, slope_part)
+		ApplySineWindow(x_windowed, x_ptr, 1, slope_part)
 		shift = slope_part
 		copy(x_windowed[shift:shift+flat_part], x_ptr[shift:shift+flat_part])
 		shift += flat_part
@@ -262,10 +264,10 @@ func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX
 
 		if psEnc.sCmn.warping_Q16 > 0 {
 			/* Calculate warped auto correlation */
-			WarpedAutocorrelationFIX(auto_corr[:], &scale, x_windowed[:], warping_Q16, psEnc.sCmn.shapeWinLength, psEnc.sCmn.shapingLPCOrder)
+			WarpedAutocorrelationFIX(auto_corr[:], &scale, x_windowed, warping_Q16, psEnc.sCmn.shapeWinLength, psEnc.sCmn.shapingLPCOrder)
 		} else {
 			/* Calculate regular auto correlation */
-			Autocorr(auto_corr[:], &scale, x_windowed[:], psEnc.sCmn.shapeWinLength, psEnc.sCmn.shapingLPCOrder+1)
+			Autocorr(auto_corr[:], &scale, x_windowed, psEnc.sCmn.shapeWinLength, psEnc.sCmn.shapingLPCOrder+1, arch)
 		}
 
 		/* Add white noise, as a fraction of energy */

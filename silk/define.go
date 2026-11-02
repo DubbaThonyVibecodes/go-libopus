@@ -136,7 +136,7 @@ const (
 	N_RATE_LEVELS = 10
 
 	// Maximum sum of pulses per shell coding frame
-	MAX_PULSES = 16
+	SILK_MAX_PULSES = 16
 
 	MAX_MATRIX_SIZE = MAX_LPC_ORDER // Max of LPC Order and LTP order
 

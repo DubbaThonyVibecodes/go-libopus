@@ -7,8 +7,8 @@ package silk
 /**********************************************************/
 //
 // C: void silk_decode_core(silk_decoder_state *psDec, silk_decoder_control *psDecCtrl,
-// opus_int16 xq[], const opus_int pulses[ MAX_FRAME_LENGTH ])
-func (psDec *DecoderState) DecodeCore(psDecCtrl *DecoderControl, xq []int16, pulses []int) {
+// opus_int16 xq[], const opus_int16 pulses[ MAX_FRAME_LENGTH ], int arch)
+func (psDec *DecoderState) DecodeCore(psDecCtrl *DecoderControl, xq []int16, pulses []int16, arch int) {
 	var i, k, start_idx, sLTP_buf_idx, NLSF_interpolation_flag, signalType int
 	lag := 0
 	var A_Q12, B_Q14, pxq []int16
@@ -116,7 +116,7 @@ func (psDec *DecoderState) DecodeCore(psDecCtrl *DecoderControl, xq []int16, pul
 				}
 
 				LPCAnalysisFilter(sLTP[start_idx:], psDec.outBuf[start_idx+k*psDec.subfr_length:],
-					A_Q12, int32(psDec.ltp_mem_length-start_idx), int32(psDec.LPC_order))
+					A_Q12, int32(psDec.ltp_mem_length-start_idx), int32(psDec.LPC_order), arch)
 
 				/* After rewhitening the LTP state is unscaled */
 				if k == 0 {
@@ -187,7 +187,7 @@ func (psDec *DecoderState) DecodeCore(psDecCtrl *DecoderControl, xq []int16, pul
 			}
 
 			/* Add prediction to LPC excitation */
-			sLPC_Q14[MAX_LPC_ORDER+i] = ADD_LSHIFT32(pres_Q14[i], LPC_pred_Q10, 4)
+			sLPC_Q14[MAX_LPC_ORDER+i] = ADD_SAT32(pres_Q14[i], LSHIFT_SAT32(LPC_pred_Q10, 4))
 
 			/* Scale with gain */
 			pxq[i] = int16(SAT16(RSHIFT_ROUND(SMULWW(sLPC_Q14[MAX_LPC_ORDER+i], Gain_Q10), 8)))

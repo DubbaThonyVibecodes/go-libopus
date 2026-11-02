@@ -71,6 +71,7 @@ type EncoderControlFIX struct {
 type Encoder struct {
 	state_Fxx                 [ENCODER_NUM_CHANNELS]EncoderStateFIX
 	sStereo                   StereoEncState
+	nBitsUsedLBRR             int32
 	nBitsExceeded             int32
 	nChannelsAPI              int
 	nChannelsInternal         int

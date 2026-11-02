@@ -21,23 +21,24 @@ func SolveLDLFIX(
 	b []int32, // I    Pointer to b vector
 	x_Q16 []int32, // O    Pointer to x solution vector
 ) {
-	var L_Q16 [MAX_MATRIX_SIZE * MAX_MATRIX_SIZE]int32
+	var L_Q16 []int32
 	var Y [MAX_MATRIX_SIZE]int32
 	var inv_D [MAX_MATRIX_SIZE]inv_D_t
 
 	silk_assert(M <= MAX_MATRIX_SIZE)
+	L_Q16 = make([]int32, M*M)
 
 	// **************************************************
 	// Factorize A by LDL such that A = L*D*L',
 	// where L is lower triangular with ones on diagonal
 	// ***************************************************
-	ldlFactorizeFIX(A, M, L_Q16[:], inv_D[:])
+	ldlFactorizeFIX(A, M, L_Q16, inv_D[:])
 
 	// ***************************************************
 	// * substitute D*L'*x = Y. ie:
 	// L*D*L'*x = b => L*Y = b <=> Y = inv(L)*b
 	// *****************************************************
-	lsSolveFirstFIX(L_Q16[:], M, b, Y[:])
+	lsSolveFirstFIX(L_Q16, M, b, Y[:])
 
 	// ***************************************************
 	// D*L'*x = Y <=> L'*x = inv(D)*Y, because D is
@@ -48,12 +49,12 @@ func SolveLDLFIX(
 	// ***************************************************
 	// x = inv(L') * inv(D) * Y
 	// ****************************************************
-	lsSolveLastFIX(L_Q16[:], M, Y[:], x_Q16)
+	lsSolveLastFIX(L_Q16, M, Y[:], x_Q16)
 }
 
 // Factorize square matrix A into LDL form
 //
-// C: static inline void silk_LDL_factorize_FIX(opus_int32 *A, opus_int M, opus_int32 *L_Q16, inv_D_t *inv_D)
+// C: static OPUS_INLINE void silk_LDL_factorize_FIX(opus_int32 *A, opus_int M, opus_int32 *L_Q16, inv_D_t *inv_D)
 func ldlFactorizeFIX(
 	A []int32, // I/O Pointer to Symetric Square Matrix
 	M int, // I   Size of Matrix

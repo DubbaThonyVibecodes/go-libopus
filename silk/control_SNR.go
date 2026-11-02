@@ -38,11 +38,6 @@ func (psEncC *EncoderState) ControlSNR(TargetRate_bps int32) int {
 				break
 			}
 		}
-
-		/* Reduce coding quality whenever LBRR is enabled, to free up some bits */
-		if psEncC.LBRR_enabled != 0 {
-			psEncC.SNR_dB_Q7 = int(SMLABB(psEncC.SNR_dB_Q7, 12-psEncC.LBRR_GainIncreases, SILK_FIX_CONST(-0.25, 7)))
-		}
 	}
 
 	return ret

@@ -17,12 +17,12 @@ $(UPSTREAM)/configure:
 
 $(REF)/.libs/libopus.a: $(UPSTREAM)/configure
 	mkdir -p $(REF)
-	cd $(REF) && $(UPSTREAM)/configure --enable-fixed-point --disable-shared --enable-static --disable-doc --disable-extra-programs CFLAGS="$(CFLAGS_REF)" >configure.out 2>&1
+	cd $(REF) && $(UPSTREAM)/configure --enable-fixed-point --disable-intrinsics --disable-asm --disable-rtcd --disable-shared --enable-static --disable-doc --disable-extra-programs CFLAGS="$(CFLAGS_REF)" >configure.out 2>&1
 	$(MAKE) -C $(REF) >$(REF)/make.out 2>&1
 
 $(REF_FLOAT)/.libs/libopus.a: $(UPSTREAM)/configure
 	mkdir -p $(REF_FLOAT)
-	cd $(REF_FLOAT) && $(UPSTREAM)/configure --disable-shared --enable-static --disable-doc --disable-extra-programs CFLAGS="$(CFLAGS_REF)" >configure.out 2>&1
+	cd $(REF_FLOAT) && $(UPSTREAM)/configure --disable-intrinsics --disable-asm --disable-rtcd --disable-shared --enable-static --disable-doc --disable-extra-programs CFLAGS="$(CFLAGS_REF)" >configure.out 2>&1
 	$(MAKE) -C $(REF_FLOAT) >$(REF_FLOAT)/make.out 2>&1
 
 ref: $(REF)/.libs/libopus.a

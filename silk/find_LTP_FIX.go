@@ -16,10 +16,11 @@ const LTP_CORRS_HEAD_ROOM = 2
 //	const opus_int                  subfr_length,                           /* I    subframe length                                                             */
 //	const opus_int                  nb_subfr,                               /* I    number of subframes                                                         */
 //	const opus_int                  mem_offset,                             /* I    number of samples in LTP memory                                             */
-//	opus_int                        corr_rshifts[ MAX_NB_SUBFR ]            /* O    right shifts applied to correlations                                        */
+//	opus_int                        corr_rshifts[ MAX_NB_SUBFR ],           /* O    right shifts applied to correlations                                        */
+//	int                             arch                                    /* I    Run-time architecture                                                       */
 //
 // )
-func FindLTPFIX(b_Q14 []int16, WLTP []int32, LTPredCodGain_Q7 *int, r_lpc []int16, lag []int, Wght_Q15 []int32, subfr_length int, nb_subfr int, mem_offset int, corr_rshifts []int) {
+func FindLTPFIX(b_Q14 []int16, WLTP []int32, LTPredCodGain_Q7 *int, r_lpc []int16, lag []int, Wght_Q15 []int32, subfr_length int, nb_subfr int, mem_offset int, corr_rshifts []int, arch int) {
 	var i, k, lshift int
 	/* C: r_ptr = &r_lpc[ mem_offset ] is read behind ( lag_ptr = r_ptr - ... ), so it is an index into r_lpc */
 	var r_ptr int
@@ -57,10 +58,10 @@ func FindLTPFIX(b_Q14 []int16, WLTP []int32, LTPredCodGain_Q7 *int, r_lpc []int1
 			rr_shifts += (LTP_CORRS_HEAD_ROOM - LZs)
 		}
 		corr_rshifts[k] = rr_shifts
-		CorrMatrixFIX(lag_ptr, subfr_length, LTP_ORDER, LTP_CORRS_HEAD_ROOM, WLTP_ptr, &corr_rshifts[k]) /* WLTP_fix_ptr in Q( -corr_rshifts[ k ] ) */
+		CorrMatrixFIX(lag_ptr, subfr_length, LTP_ORDER, LTP_CORRS_HEAD_ROOM, WLTP_ptr, &corr_rshifts[k], arch) /* WLTP_fix_ptr in Q( -corr_rshifts[ k ] ) */
 
 		/* The correlation vector always has lower max abs value than rr and/or RR so head room is assured */
-		CorrVectorFIX(lag_ptr, r_lpc[r_ptr:], subfr_length, LTP_ORDER, Rr[:], corr_rshifts[k]) /* Rr_fix_ptr   in Q( -corr_rshifts[ k ] ) */
+		CorrVectorFIX(lag_ptr, r_lpc[r_ptr:], subfr_length, LTP_ORDER, Rr[:], corr_rshifts[k], arch) /* Rr_fix_ptr   in Q( -corr_rshifts[ k ] ) */
 		if corr_rshifts[k] > rr_shifts {
 			rr[k] = RSHIFT(rr[k], corr_rshifts[k]-rr_shifts) /* rr[ k ] in Q( -corr_rshifts[ k ] ) */
 		}

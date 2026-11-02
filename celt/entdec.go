@@ -73,7 +73,7 @@ func (d *EcDec) DecInit(buf []byte, storage uint32) {
 // C: unsigned ec_decode(ec_dec *_this,unsigned _ft)
 func (d *EcDec) Decode(ft uint32) uint32 {
 	var s uint32
-	d.ext = d.rng / ft
+	d.ext = Udiv(d.rng, ft)
 	s = d.val / d.ext
 	return ft - EC_MINI(s+1, ft)
 }

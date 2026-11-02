@@ -8,7 +8,7 @@ import "github.com/DubbaThonyVibecodes/go-libopus/celt"
 /* Encode quantization indices of excitation */
 /*********************************************/
 
-// C: static inline opus_int combine_and_check(opus_int *pulses_comb, const opus_int *pulses_in, opus_int max_pulses, opus_int len)
+// C: static OPUS_INLINE opus_int combine_and_check(opus_int *pulses_comb, const opus_int *pulses_in, opus_int max_pulses, opus_int len)
 //
 // return ok
 func combineAndCheck(
@@ -37,9 +37,9 @@ func EncodePulses(psRangeEnc *celt.EcEnc, signalType int, quantOffsetType int, p
 	var i, k, j, iter, bit, nLS, scale_down int
 	var RateLevelIndex int = 0
 	var abs_q, minSumBits_Q5, sumBits_Q5 int32
-	var abs_pulses [MAX_FRAME_LENGTH]int
-	var sum_pulses [MAX_NB_SHELL_BLOCKS]int
-	var nRshifts [MAX_NB_SHELL_BLOCKS]int
+	var abs_pulses []int
+	var sum_pulses []int
+	var nRshifts []int
 	var pulses_comb [8]int
 	var abs_pulses_ptr []int
 	var pulses_ptr []int8
@@ -61,6 +61,8 @@ func EncodePulses(psRangeEnc *celt.EcEnc, signalType int, quantOffsetType int, p
 	}
 
 	/* Take the absolute value of the pulses */
+	abs_pulses = make([]int, iter*SHELL_CODEC_FRAME_LENGTH)
+	silk_assert((SHELL_CODEC_FRAME_LENGTH & 3) == 0)
 	for i = 0; i < iter*SHELL_CODEC_FRAME_LENGTH; i += 4 {
 		abs_pulses[i+0] = abs(int(pulses[i+0]))
 		abs_pulses[i+1] = abs(int(pulses[i+1]))
@@ -69,7 +71,9 @@ func EncodePulses(psRangeEnc *celt.EcEnc, signalType int, quantOffsetType int, p
 	}
 
 	/* Calc sum pulses per shell code frame */
-	abs_pulses_ptr = abs_pulses[:]
+	sum_pulses = make([]int, iter)
+	nRshifts = make([]int, iter)
+	abs_pulses_ptr = abs_pulses
 	for i = 0; i < iter; i++ {
 		nRshifts[i] = 0
 
@@ -107,7 +111,7 @@ func EncodePulses(psRangeEnc *celt.EcEnc, signalType int, quantOffsetType int, p
 		sumBits_Q5 = int32(rate_levels_BITS_Q5[signalType>>1][k])
 		for i = 0; i < iter; i++ {
 			if nRshifts[i] > 0 {
-				sumBits_Q5 += int32(nBits_ptr[MAX_PULSES+1])
+				sumBits_Q5 += int32(nBits_ptr[SILK_MAX_PULSES+1])
 			} else {
 				sumBits_Q5 += int32(nBits_ptr[sum_pulses[i]])
 			}
@@ -127,9 +131,9 @@ func EncodePulses(psRangeEnc *celt.EcEnc, signalType int, quantOffsetType int, p
 		if nRshifts[i] == 0 {
 			psRangeEnc.EncIcdf(sum_pulses[i], cdf_ptr, 8)
 		} else {
-			psRangeEnc.EncIcdf(MAX_PULSES+1, cdf_ptr, 8)
+			psRangeEnc.EncIcdf(SILK_MAX_PULSES+1, cdf_ptr, 8)
 			for k = 0; k < nRshifts[i]-1; k++ {
-				psRangeEnc.EncIcdf(MAX_PULSES+1, pulses_per_block_iCDF[N_RATE_LEVELS-1][:], 8)
+				psRangeEnc.EncIcdf(SILK_MAX_PULSES+1, pulses_per_block_iCDF[N_RATE_LEVELS-1][:], 8)
 			}
 			psRangeEnc.EncIcdf(sum_pulses[i], pulses_per_block_iCDF[N_RATE_LEVELS-1][:], 8)
 		}
@@ -166,5 +170,5 @@ func EncodePulses(psRangeEnc *celt.EcEnc, signalType int, quantOffsetType int, p
 	/****************/
 	/* Encode signs */
 	/****************/
-	EncodeSigns(psRangeEnc, pulses, frame_length, signalType, quantOffsetType, sum_pulses[:])
+	EncodeSigns(psRangeEnc, pulses, frame_length, signalType, quantOffsetType, sum_pulses)
 }

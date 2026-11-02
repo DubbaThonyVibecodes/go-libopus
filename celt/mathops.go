@@ -38,13 +38,13 @@ func Isqrt32(val uint32) uint32 {
 	return g
 }
 
-// C: static inline opus_int16 celt_ilog2(opus_int32 x)
+// C: static OPUS_INLINE opus_int16 celt_ilog2(opus_int32 x)
 func Ilog2(x int32) int16 {
 	celt_assert2(x > 0, "celt_ilog2() only defined for strictly positive numbers")
 	return int16(EC_ILOG(uint32(x)) - 1)
 }
 
-// C: static inline opus_val32 celt_maxabs16(const opus_val16 *x, int len)
+// C: static OPUS_INLINE opus_val32 celt_maxabs16(const opus_val16 *x, int len)
 func Maxabs16(x []int16, n int) int32 {
 	var i int
 	var maxval int16 = 0
@@ -56,19 +56,21 @@ func Maxabs16(x []int16, n int) int32 {
 	return MAX32(EXTEND32(maxval), -EXTEND32(minval))
 }
 
-// C: static inline opus_val32 celt_maxabs32(opus_val32 *x, int len)
+// C: static OPUS_INLINE opus_val32 celt_maxabs32(const opus_val32 *x, int len)
 func Maxabs32(x []int32, n int) int32 {
 	var i int
 	var maxval int32 = 0
+	var minval int32 = 0
 	for i = 0; i < n; i++ {
-		maxval = MAX32(maxval, ABS32(x[i]))
+		maxval = MAX32(maxval, x[i])
+		minval = MIN32(minval, x[i])
 	}
-	return maxval
+	return MAX32(maxval, -minval)
 }
 
 // Integer log in base2. Defined for zero, but not for negative numbers.
 //
-// C: static inline opus_int16 celt_zlog2(opus_val32 x)
+// C: static OPUS_INLINE opus_int16 celt_zlog2(opus_val32 x)
 func Zlog2(x int32) int16 {
 	if x <= 0 {
 		return 0
@@ -78,7 +80,7 @@ func Zlog2(x int32) int16 {
 
 // Base-2 log approximation (log2(x)). Output is in Q10 (DB_SHIFT).
 //
-// C: static inline opus_val16 celt_log2(opus_val32 x)
+// C: static OPUS_INLINE opus_val16 celt_log2(opus_val32 x)
 func Log2(x int32) int16 {
 	var i int
 	var n, frac int16
@@ -102,9 +104,16 @@ const (
 	D3 = 10204
 )
 
-// Exp2 computes 2^x for x in Q10 (DB_SHIFT); the result is Q16 scaled by 2^integer.
+// C: static OPUS_INLINE opus_val32 celt_exp2_frac(opus_val16 x)
+func Exp2Frac(x int16) int32 {
+	var frac int16
+	frac = SHL16(x, 4)
+	return int32(ADD16(D0, MULT16_16_Q15(frac, ADD16(D1, MULT16_16_Q15(frac, ADD16(D2, MULT16_16_Q15(D3, frac)))))))
+}
+
+// Base-2 exponential approximation (2^x). (Q10 input, Q16 output)
 //
-// C: static inline opus_val32 celt_exp2(opus_val16 x)
+// C: static OPUS_INLINE opus_val32 celt_exp2(opus_val16 x)
 func Exp2(x int16) int32 {
 	var integer int
 	var frac int16
@@ -114,8 +123,7 @@ func Exp2(x int16) int32 {
 	} else if integer < -15 {
 		return 0
 	}
-	frac = SHL16(int32(x)-int32(SHL16(integer, 10)), 4)
-	frac = ADD16(D0, MULT16_16_Q15(frac, ADD16(D1, MULT16_16_Q15(frac, ADD16(D2, MULT16_16_Q15(D3, frac))))))
+	frac = int16(Exp2Frac(int16(int32(x) - int32(SHL16(integer, 10)))))
 	return VSHR32(EXTEND32(frac), -integer-2)
 }
 
@@ -177,6 +185,8 @@ func Sqrt(x int32) int32 {
 	var C = [5]int16{23175, 11561, -3011, 1699, -664}
 	if x == 0 {
 		return 0
+	} else if x >= 1073741824 {
+		return 32767
 	}
 	k = (int(Ilog2(x)) >> 1) - 7
 	x = VSHR32(x, 2*k)
@@ -193,7 +203,7 @@ const (
 	l4 = -626
 )
 
-// C: static inline opus_val16 _celt_cos_pi_2(opus_val16 x)
+// C: static OPUS_INLINE opus_val16 _celt_cos_pi_2(opus_val16 x)
 func cosPi2(x int16) int16 {
 	var x2 int16
 	x2 = int16(MULT16_16_P15(x, x))
@@ -210,7 +220,7 @@ func CosNorm(x int32) int16 {
 		if x < SHL32(EXTEND32(1), 15) {
 			return cosPi2(EXTRACT16(x))
 		}
-		return int16(NEG32(int32(cosPi2(EXTRACT16(65536 - x)))))
+		return NEG16(cosPi2(EXTRACT16(65536 - x)))
 	}
 	if x&0x0000ffff != 0 {
 		return 0
@@ -256,14 +266,14 @@ const (
 
 // Atan approximation, for inputs in [0,1] normalized by pi/4. Output is in Q15 format.
 //
-// C: static inline opus_val16 celt_atan01(opus_val16 x)
+// C: static OPUS_INLINE opus_val16 celt_atan01(opus_val16 x)
 func atan01(x int16) int16 {
 	return int16(MULT16_16_P15(x, ADD32(m1, MULT16_16_P15(x, ADD32(m2, MULT16_16_P15(x, ADD32(m3, MULT16_16_P15(m4, x))))))))
 }
 
 // atan2() approximation valid for positive input values.
 //
-// C: static inline opus_val16 celt_atan2p(opus_val16 y, opus_val16 x)
+// C: static OPUS_INLINE opus_val16 celt_atan2p(opus_val16 y, opus_val16 x)
 func Atan2p(y, x int16) int16 {
 	if y < x {
 		var arg int32

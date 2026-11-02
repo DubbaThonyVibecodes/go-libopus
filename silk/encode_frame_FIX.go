@@ -13,7 +13,7 @@ func (psEnc *EncoderStateFIX) EncodeDoVADFIX() {
 	/****************************/
 	/* Voice Activity Detection */
 	/****************************/
-	psEnc.sCmn.VADGetSAQ8(psEnc.sCmn.inputBuf[1:])
+	psEnc.sCmn.VADGetSAQ8(psEnc.sCmn.inputBuf[1:], psEnc.sCmn.arch)
 
 	/**************************************************/
 	/* Convert speech activity into VAD and DTX flags */
@@ -45,9 +45,7 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 	var sEncCtrl EncoderControlFIX
 	var i, iter, maxIter, found_upper, found_lower int
 	var ret int = 0
-	var x_frame, res_pitch_frame []int16
-	var xfw_Q3 [MAX_FRAME_LENGTH]int32
-	var res_pitch [2*MAX_FRAME_LENGTH + LA_PITCH_MAX]int16
+	var x_frame []int16
 	var sRangeEnc_copy, sRangeEnc_copy2 celt.EcEnc
 	var sNSQ_copy, sNSQ_copy2 NsqState
 	var seed_copy, nBits, nBits_lower, nBits_upper, gainMult_lower, gainMult_upper int32
@@ -56,7 +54,6 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 	var ec_prevLagIndex_copy int16
 	var ec_prevSignalType_copy int
 	var LastGainIndex_copy2 int8
-	var ec_buf_copy [1275]uint8
 
 	/* This is totally unnecessary but many compilers (including gcc) are too dumb to realise it */
 	LastGainIndex_copy2, nBits_lower, nBits_upper, gainMult_lower, gainMult_upper = 0, 0, 0, 0, 0
@@ -67,9 +64,8 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 	/**************************************************************/
 	/* Set up Input Pointers, and insert frame in input buffer   */
 	/*************************************************************/
-	/* pointers aligned with start of frame to encode */
-	x_frame = psEnc.x_buf[psEnc.sCmn.ltp_mem_length:]       /* start of frame to encode */
-	res_pitch_frame = res_pitch[psEnc.sCmn.ltp_mem_length:] /* start of pitch LPC residual frame */
+	/* start of frame to encode */
+	x_frame = psEnc.x_buf[psEnc.sCmn.ltp_mem_length:]
 
 	/***************************************/
 	/* Ensure smooth bandwidth transitions */
@@ -82,20 +78,30 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 	copy(x_frame[LA_SHAPE_MS*psEnc.sCmn.fs_kHz:LA_SHAPE_MS*psEnc.sCmn.fs_kHz+psEnc.sCmn.frame_length], psEnc.sCmn.inputBuf[1:1+psEnc.sCmn.frame_length])
 
 	if psEnc.sCmn.prefillFlag == 0 {
+		var xfw_Q3 []int32
+		var res_pitch []int16
+		var ec_buf_copy []uint8
+		var res_pitch_frame []int16
+
+		res_pitch = make([]int16, psEnc.sCmn.la_pitch+psEnc.sCmn.frame_length+
+			psEnc.sCmn.ltp_mem_length)
+		/* start of pitch LPC residual frame */
+		res_pitch_frame = res_pitch[psEnc.sCmn.ltp_mem_length:]
+
 		/*****************************************/
 		/* Find pitch lags, initial LPC analysis */
 		/*****************************************/
-		psEnc.FindPitchLagsFIX(&sEncCtrl, res_pitch[:], x_frame)
+		psEnc.FindPitchLagsFIX(&sEncCtrl, res_pitch, x_frame, psEnc.sCmn.arch)
 
 		/************************/
 		/* Noise shape analysis */
 		/************************/
-		psEnc.NoiseShapeAnalysisFIX(&sEncCtrl, res_pitch_frame, x_frame)
+		psEnc.NoiseShapeAnalysisFIX(&sEncCtrl, res_pitch_frame, x_frame, psEnc.sCmn.arch)
 
 		/***************************************************/
 		/* Find linear prediction coefficients (LPC + LTP) */
 		/***************************************************/
-		psEnc.FindPredCoefsFIX(&sEncCtrl, res_pitch[:], x_frame, condCoding)
+		psEnc.FindPredCoefsFIX(&sEncCtrl, res_pitch, x_frame, condCoding)
 
 		/****************************************/
 		/* Process gains                        */
@@ -105,12 +111,13 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 		/*****************************************/
 		/* Prefiltering for noise shaper         */
 		/*****************************************/
-		psEnc.PrefilterFIX(&sEncCtrl, xfw_Q3[:], x_frame)
+		xfw_Q3 = make([]int32, psEnc.sCmn.frame_length)
+		psEnc.PrefilterFIX(&sEncCtrl, xfw_Q3, x_frame)
 
 		/****************************************/
 		/* Low Bitrate Redundant Encoding       */
 		/****************************************/
-		lBRREncodeFIX(psEnc, &sEncCtrl, xfw_Q3[:], condCoding)
+		lBRREncodeFIX(psEnc, &sEncCtrl, xfw_Q3, condCoding)
 
 		/* Loop over quantizer and entropy coding to control bitrate */
 		maxIter = 6
@@ -127,6 +134,7 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 		seed_copy = int32(psEnc.sCmn.indices.Seed)
 		ec_prevLagIndex_copy = psEnc.sCmn.ec_prevLagIndex
 		ec_prevSignalType_copy = psEnc.sCmn.ec_prevSignalType
+		ec_buf_copy = make([]uint8, 1275)
 		for iter = 0; ; iter++ {
 			if gainsID == gainsID_lower {
 				nBits = nBits_lower
@@ -146,13 +154,15 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 				/* Noise shaping quantization            */
 				/*****************************************/
 				if psEnc.sCmn.nStatesDelayedDecision > 1 || psEnc.sCmn.warping_Q16 > 0 {
-					psEnc.sCmn.NSQDelDec(&psEnc.sCmn.sNSQ, &psEnc.sCmn.indices, xfw_Q3[:], psEnc.sCmn.pulses[:],
+					psEnc.sCmn.NSQDelDec(&psEnc.sCmn.sNSQ, &psEnc.sCmn.indices, xfw_Q3, psEnc.sCmn.pulses[:],
 						predCoefFlat(&sEncCtrl.PredCoef_Q12), sEncCtrl.LTPCoef_Q14[:], sEncCtrl.AR2_Q13[:], sEncCtrl.HarmShapeGain_Q14[:],
-						sEncCtrl.Tilt_Q14[:], sEncCtrl.LF_shp_Q14[:], sEncCtrl.Gains_Q16[:], sEncCtrl.pitchL[:], sEncCtrl.Lambda_Q10, sEncCtrl.LTP_scale_Q14)
+						sEncCtrl.Tilt_Q14[:], sEncCtrl.LF_shp_Q14[:], sEncCtrl.Gains_Q16[:], sEncCtrl.pitchL[:], sEncCtrl.Lambda_Q10, sEncCtrl.LTP_scale_Q14,
+						psEnc.sCmn.arch)
 				} else {
-					psEnc.sCmn.NSQ(&psEnc.sCmn.sNSQ, &psEnc.sCmn.indices, xfw_Q3[:], psEnc.sCmn.pulses[:],
+					psEnc.sCmn.NSQ(&psEnc.sCmn.sNSQ, &psEnc.sCmn.indices, xfw_Q3, psEnc.sCmn.pulses[:],
 						predCoefFlat(&sEncCtrl.PredCoef_Q12), sEncCtrl.LTPCoef_Q14[:], sEncCtrl.AR2_Q13[:], sEncCtrl.HarmShapeGain_Q14[:],
-						sEncCtrl.Tilt_Q14[:], sEncCtrl.LF_shp_Q14[:], sEncCtrl.Gains_Q16[:], sEncCtrl.pitchL[:], sEncCtrl.Lambda_Q10, sEncCtrl.LTP_scale_Q14)
+						sEncCtrl.Tilt_Q14[:], sEncCtrl.LF_shp_Q14[:], sEncCtrl.Gains_Q16[:], sEncCtrl.pitchL[:], sEncCtrl.Lambda_Q10, sEncCtrl.LTP_scale_Q14,
+						psEnc.sCmn.arch)
 				}
 
 				/****************************************/
@@ -253,16 +263,16 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 	copy(psEnc.x_buf[:psEnc.sCmn.ltp_mem_length+LA_SHAPE_MS*psEnc.sCmn.fs_kHz],
 		psEnc.x_buf[psEnc.sCmn.frame_length:psEnc.sCmn.frame_length+psEnc.sCmn.ltp_mem_length+LA_SHAPE_MS*psEnc.sCmn.fs_kHz])
 
-	/* Parameters needed for next frame */
-	psEnc.sCmn.prevLag = sEncCtrl.pitchL[psEnc.sCmn.nb_subfr-1]
-	psEnc.sCmn.prevSignalType = psEnc.sCmn.indices.signalType
-
 	/* Exit without entropy coding */
 	if psEnc.sCmn.prefillFlag != 0 {
 		/* No payload */
 		*pnBytesOut = 0
 		return ret
 	}
+
+	/* Parameters needed for next frame */
+	psEnc.sCmn.prevLag = sEncCtrl.pitchL[psEnc.sCmn.nb_subfr-1]
+	psEnc.sCmn.prevSignalType = psEnc.sCmn.indices.signalType
 
 	/****************************************/
 	/* Finalize payload                     */
@@ -276,7 +286,7 @@ func (psEnc *EncoderStateFIX) EncodeFrameFIX(pnBytesOut *int32, psRangeEnc *celt
 
 // Low-Bitrate Redundancy (LBRR) encoding. Reuse all parameters but encode excitation at lower bitrate
 //
-// C: static inline void silk_LBRR_encode_FIX(silk_encoder_state_FIX *psEnc, silk_encoder_control_FIX *psEncCtrl, const opus_int32 xfw_Q3[], opus_int condCoding)
+// C: static OPUS_INLINE void silk_LBRR_encode_FIX(silk_encoder_state_FIX *psEnc, silk_encoder_control_FIX *psEncCtrl, const opus_int32 xfw_Q3[], opus_int condCoding)
 func lBRREncodeFIX(psEnc *EncoderStateFIX, psEncCtrl *EncoderControlFIX, xfw_Q3 []int32, condCoding int) {
 	var TempGains_Q16 [MAX_NB_SUBFR]int32
 	psIndices_LBRR := &psEnc.sCmn.indices_LBRR[psEnc.sCmn.nFramesEncoded]
@@ -316,12 +326,12 @@ func lBRREncodeFIX(psEnc *EncoderStateFIX, psEncCtrl *EncoderControlFIX, xfw_Q3 
 			psEnc.sCmn.NSQDelDec(&sNSQ_LBRR, psIndices_LBRR, xfw_Q3,
 				psEnc.sCmn.pulses_LBRR[psEnc.sCmn.nFramesEncoded][:], predCoefFlat(&psEncCtrl.PredCoef_Q12), psEncCtrl.LTPCoef_Q14[:],
 				psEncCtrl.AR2_Q13[:], psEncCtrl.HarmShapeGain_Q14[:], psEncCtrl.Tilt_Q14[:], psEncCtrl.LF_shp_Q14[:],
-				psEncCtrl.Gains_Q16[:], psEncCtrl.pitchL[:], psEncCtrl.Lambda_Q10, psEncCtrl.LTP_scale_Q14)
+				psEncCtrl.Gains_Q16[:], psEncCtrl.pitchL[:], psEncCtrl.Lambda_Q10, psEncCtrl.LTP_scale_Q14, psEnc.sCmn.arch)
 		} else {
 			psEnc.sCmn.NSQ(&sNSQ_LBRR, psIndices_LBRR, xfw_Q3,
 				psEnc.sCmn.pulses_LBRR[psEnc.sCmn.nFramesEncoded][:], predCoefFlat(&psEncCtrl.PredCoef_Q12), psEncCtrl.LTPCoef_Q14[:],
 				psEncCtrl.AR2_Q13[:], psEncCtrl.HarmShapeGain_Q14[:], psEncCtrl.Tilt_Q14[:], psEncCtrl.LF_shp_Q14[:],
-				psEncCtrl.Gains_Q16[:], psEncCtrl.pitchL[:], psEncCtrl.Lambda_Q10, psEncCtrl.LTP_scale_Q14)
+				psEncCtrl.Gains_Q16[:], psEncCtrl.pitchL[:], psEncCtrl.Lambda_Q10, psEncCtrl.LTP_scale_Q14, psEnc.sCmn.arch)
 		}
 
 		/* Restore original gains */

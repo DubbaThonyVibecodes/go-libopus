@@ -9,14 +9,15 @@ package silk
 //	silk_encoder_state_FIX          *psEnc,                                 /* I/O  encoder state                                                               */
 //	silk_encoder_control_FIX        *psEncCtrl,                             /* I/O  encoder control                                                             */
 //	opus_int16                      res[],                                  /* O    residual                                                                    */
-//	const opus_int16                x[]                                     /* I    Speech signal                                                               */
+//	const opus_int16                x[],                                    /* I    Speech signal                                                               */
+//	int                             arch                                    /* I    Run-time architecture                                                       */
 //
 // )
-func (psEnc *EncoderStateFIX) FindPitchLagsFIX(psEncCtrl *EncoderControlFIX, res []int16, x []int16) {
+func (psEnc *EncoderStateFIX) FindPitchLagsFIX(psEncCtrl *EncoderControlFIX, res []int16, x []int16, arch int) {
 	var buf_len, i, scale int
-	var thrhld_Q15, res_nrg int32
+	var thrhld_Q13, res_nrg int32
 	var x_buf, x_buf_ptr []int16
-	var Wsig [FIND_PITCH_LPC_WIN_MAX]int16
+	var Wsig []int16
 	var Wsig_ptr []int16
 	var auto_corr [MAX_FIND_PITCH_LPC_ORDER + 1]int32
 	var rc_Q15 [MAX_FIND_PITCH_LPC_ORDER]int16
@@ -42,9 +43,11 @@ func (psEnc *EncoderStateFIX) FindPitchLagsFIX(psEncCtrl *EncoderControlFIX, res
 
 	/* Calculate windowed signal */
 
+	Wsig = make([]int16, psEnc.sCmn.pitch_LPC_win_length)
+
 	/* First LA_LTP samples */
 	x_buf_ptr = x_buf[buf_len-psEnc.sCmn.pitch_LPC_win_length:]
-	Wsig_ptr = Wsig[:]
+	Wsig_ptr = Wsig
 	ApplySineWindow(Wsig_ptr, x_buf_ptr, 1, psEnc.sCmn.la_pitch)
 
 	/* Middle un - windowed samples */
@@ -59,7 +62,7 @@ func (psEnc *EncoderStateFIX) FindPitchLagsFIX(psEncCtrl *EncoderControlFIX, res
 	ApplySineWindow(Wsig_ptr, x_buf_ptr, 2, psEnc.sCmn.la_pitch)
 
 	/* Calculate autocorrelation sequence */
-	Autocorr(auto_corr[:], &scale, Wsig[:], psEnc.sCmn.pitch_LPC_win_length, psEnc.sCmn.pitchEstimationLPCOrder+1)
+	Autocorr(auto_corr[:], &scale, Wsig, psEnc.sCmn.pitch_LPC_win_length, psEnc.sCmn.pitchEstimationLPCOrder+1, arch)
 
 	/* Add white noise, as fraction of energy */
 	auto_corr[0] = SMLAWB(auto_corr[0], auto_corr[0], SILK_FIX_CONST(FIND_PITCH_WHITE_NOISE_FRACTION, 16)) + 1
@@ -84,23 +87,24 @@ func (psEnc *EncoderStateFIX) FindPitchLagsFIX(psEncCtrl *EncoderControlFIX, res
 	/*****************************************/
 	/* LPC analysis filtering                */
 	/*****************************************/
-	LPCAnalysisFilter(res, x_buf, A_Q12[:], int32(buf_len), int32(psEnc.sCmn.pitchEstimationLPCOrder))
+	LPCAnalysisFilter(res, x_buf, A_Q12[:], int32(buf_len), int32(psEnc.sCmn.pitchEstimationLPCOrder), psEnc.sCmn.arch)
 
 	if psEnc.sCmn.indices.signalType != TYPE_NO_VOICE_ACTIVITY && psEnc.sCmn.first_frame_after_reset == 0 {
 		/* Threshold for pitch estimator */
-		thrhld_Q15 = SILK_FIX_CONST(0.6, 15)
-		thrhld_Q15 = SMLABB(thrhld_Q15, SILK_FIX_CONST(-0.004, 15), psEnc.sCmn.pitchEstimationLPCOrder)
-		thrhld_Q15 = SMLABB(thrhld_Q15, SILK_FIX_CONST(-0.1, 7), psEnc.sCmn.speech_activity_Q8)
-		thrhld_Q15 = SMLABB(thrhld_Q15, SILK_FIX_CONST(-0.15, 15), RSHIFT(psEnc.sCmn.prevSignalType, 1))
-		thrhld_Q15 = SMLAWB(thrhld_Q15, SILK_FIX_CONST(-0.1, 16), psEnc.sCmn.input_tilt_Q15)
-		thrhld_Q15 = SAT16(thrhld_Q15)
+		thrhld_Q13 = SILK_FIX_CONST(0.6, 13)
+		thrhld_Q13 = SMLABB(thrhld_Q13, SILK_FIX_CONST(-0.004, 13), psEnc.sCmn.pitchEstimationLPCOrder)
+		thrhld_Q13 = SMLAWB(thrhld_Q13, SILK_FIX_CONST(-0.1, 21), psEnc.sCmn.speech_activity_Q8)
+		thrhld_Q13 = SMLABB(thrhld_Q13, SILK_FIX_CONST(-0.15, 13), RSHIFT(psEnc.sCmn.prevSignalType, 1))
+		thrhld_Q13 = SMLAWB(thrhld_Q13, SILK_FIX_CONST(-0.1, 14), psEnc.sCmn.input_tilt_Q15)
+		thrhld_Q13 = SAT16(thrhld_Q13)
 
 		/*****************************************/
 		/* Call pitch estimator                  */
 		/*****************************************/
 		if PitchAnalysisCore(res, psEncCtrl.pitchL[:], &psEnc.sCmn.indices.lagIndex, &psEnc.sCmn.indices.contourIndex,
 			&psEnc.LTPCorr_Q15, psEnc.sCmn.prevLag, psEnc.sCmn.pitchEstimationThreshold_Q16,
-			int(int16(thrhld_Q15)), psEnc.sCmn.fs_kHz, psEnc.sCmn.pitchEstimationComplexity, psEnc.sCmn.nb_subfr) == 0 {
+			int(thrhld_Q13), psEnc.sCmn.fs_kHz, psEnc.sCmn.pitchEstimationComplexity, psEnc.sCmn.nb_subfr,
+			psEnc.sCmn.arch) == 0 {
 			psEnc.sCmn.indices.signalType = TYPE_VOICED
 		} else {
 			psEnc.sCmn.indices.signalType = TYPE_UNVOICED

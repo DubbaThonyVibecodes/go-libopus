@@ -59,6 +59,27 @@ is done on explicitly sized unsigned types in both. Assignments that
 truncate in C (`opus_int16 x = expr32;`) become explicit `int16(expr)`
 conversions in Go, which have identical semantics.
 
+## Build configuration
+
+The port follows upstream built with `--enable-fixed-point
+--disable-intrinsics --disable-asm --disable-rtcd` on a 64-bit host, i.e.
+`FIXED_POINT`, `OPUS_FAST_INT64`, no `CUSTOM_MODES`, no SIMD/asm
+(`opus_select_arch()` is 0, and every `int arch` parameter upstream added in
+1.1 is kept as `arch int` so that later diffs still apply) and **with** the
+float API, so the float code that the fixed-point build compiles
+(`src/analysis.c`, `mlp.c`, the `AnalysisInfo` consumers in
+`celt_encoder.c`, `opus_pcm_soft_clip`, …) is ported too.
+
+* `foo_c()` plus a `foo(..., arch)` dispatch macro become one Go function
+  named after `foo` with the macro's parameter list.
+* Float code uses `float32`/`float64` exactly as C uses `float`/`double`
+  (an unsuffixed C literal promotes to double), every product that feeds an
+  addition is wrapped in an explicit conversion (`float32(a*b) + c`) so that
+  Go cannot fuse it into an FMA on arm64/ppc64/s390x, and libm calls go
+  through `math` on float64. `log`/`pow`/`exp` are not correctly rounded in
+  either libm or Go's `math`, so a last-ulp difference is possible in
+  theory; the conformance corpus has not shown one.
+
 ## What is *not* mechanical
 
 * Memory: no `get_size`/`init` split is needed in Go; `opus_encoder_create`
@@ -76,9 +97,9 @@ conversions in Go, which have identical semantics.
   comments.
 * `silk.LTPAnalysisFilterFIX` takes an explicit `x_idx` because the C reads
   up to `max(pitchL)+2` samples behind `x`.
-* `celt.CELTDecoder` allocates two extra samples of decode memory because
-  `celt_decode_lost` runs the comb filter with a zero period before the first
-  packet and the C reads (harmlessly) past the buffer.
+* `celt.comb_filter` / `celt.comb_filter_const` take explicit `(slice, offset)`
+  pairs for `x` and `y` because the C reads up to `T+2` samples *behind* the
+  input pointer.
 * The oracle twin (`internal/oracle`) mirrors two quirks of the C driver:
   the `__opus_check_int` macro evaluates its argument twice (an extra LCG
   draw in `--random-fec`), and `gen info` prints the previous packet's TOC

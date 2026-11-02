@@ -4,9 +4,10 @@ package silk
 
 // Entropy constrained matrix-weighted VQ, hard-coded to 5-element vectors, for a single input data vector
 //
-// C: void silk_VQ_WMat_EC(opus_int8 *ind, opus_int32 *rate_dist_Q14, const opus_int16 *in_Q14, const opus_int32 *W_Q18, const opus_int8 *cb_Q7, const opus_uint8 *cl_Q5, const opus_int mu_Q9, opus_int L)
-func VQWMatEC(ind *int8, rate_dist_Q14 *int32, in_Q14 []int16, W_Q18 []int32, cb_Q7 []int8, cl_Q5 []uint8, mu_Q9 int, L int) {
-	var k int
+// C: void silk_VQ_WMat_EC_c(opus_int8 *ind, opus_int32 *rate_dist_Q14, opus_int *gain_Q7, const opus_int16 *in_Q14, const opus_int32 *W_Q18, const opus_int8 *cb_Q7, const opus_uint8 *cb_gain_Q7, const opus_uint8 *cl_Q5, const opus_int mu_Q9, const opus_int32 max_gain_Q7, opus_int L)
+// C: #define silk_VQ_WMat_EC(ind, rate_dist_Q14, gain_Q7, in_Q14, W_Q18, cb_Q7, cb_gain_Q7, cl_Q5, mu_Q9, max_gain_Q7, L, arch) ((void)(arch),silk_VQ_WMat_EC_c(...))
+func VQWMatEC(ind *int8, rate_dist_Q14 *int32, gain_Q7 *int32, in_Q14 []int16, W_Q18 []int32, cb_Q7 []int8, cb_gain_Q7 []uint8, cl_Q5 []uint8, mu_Q9 int, max_gain_Q7 int32, L int, arch int) {
+	var k, gain_tmp_Q7 int
 	var cb_row_Q7 []int8
 	var diff_Q14 [5]int16
 	var sum1_Q14, sum2_Q16 int32
@@ -15,6 +16,8 @@ func VQWMatEC(ind *int8, rate_dist_Q14 *int32, in_Q14 []int16, W_Q18 []int32, cb
 	*rate_dist_Q14 = int32_MAX
 	cb_row_Q7 = cb_Q7
 	for k = 0; k < L; k++ {
+		gain_tmp_Q7 = int(cb_gain_Q7[k])
+
 		diff_Q14[0] = int16(int32(in_Q14[0]) - LSHIFT(cb_row_Q7[0], 7))
 		diff_Q14[1] = int16(int32(in_Q14[1]) - LSHIFT(cb_row_Q7[1], 7))
 		diff_Q14[2] = int16(int32(in_Q14[2]) - LSHIFT(cb_row_Q7[2], 7))
@@ -23,6 +26,9 @@ func VQWMatEC(ind *int8, rate_dist_Q14 *int32, in_Q14 []int16, W_Q18 []int32, cb
 
 		/* Weighted rate */
 		sum1_Q14 = SMULBB(mu_Q9, cl_Q5[k])
+
+		/* Penalty for too large gain */
+		sum1_Q14 = ADD_LSHIFT32(sum1_Q14, max(SUB32(gain_tmp_Q7, max_gain_Q7), 0), 10)
 
 		silk_assert(sum1_Q14 >= 0)
 
@@ -66,6 +72,7 @@ func VQWMatEC(ind *int8, rate_dist_Q14 *int32, in_Q14 []int16, W_Q18 []int32, cb
 		if sum1_Q14 < *rate_dist_Q14 {
 			*rate_dist_Q14 = sum1_Q14
 			*ind = int8(k)
+			*gain_Q7 = int32(gain_tmp_Q7)
 		}
 
 		/* Go to next cbk vector */

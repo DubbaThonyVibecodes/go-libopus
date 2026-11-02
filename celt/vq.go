@@ -5,13 +5,15 @@ package celt
 // C: static void exp_rotation1(celt_norm *X, int len, int stride, opus_val16 c, opus_val16 s)
 func exp_rotation1(X []int16, length, stride int, c, s int16) {
 	var i int
+	var ms int16
 	Xptr := X
+	ms = NEG16(s)
 	for i = 0; i < length-stride; i++ {
 		var x1, x2 int16
 		x1 = Xptr[0]
 		x2 = Xptr[stride]
-		Xptr[stride] = EXTRACT16(SHR32(MULT16_16(c, x2)+MULT16_16(s, x1), 15))
-		Xptr[0] = EXTRACT16(SHR32(MULT16_16(c, x1)-MULT16_16(s, x2), 15))
+		Xptr[stride] = EXTRACT16(PSHR32(MAC16_16(MULT16_16(c, x2), s, x1), 15))
+		Xptr[0] = EXTRACT16(PSHR32(MAC16_16(MULT16_16(c, x1), ms, x2), 15))
 		Xptr = Xptr[1:]
 	}
 	p := length - 2*stride - 1
@@ -19,8 +21,8 @@ func exp_rotation1(X []int16, length, stride int, c, s int16) {
 		var x1, x2 int16
 		x1 = X[p]
 		x2 = X[p+stride]
-		X[p+stride] = EXTRACT16(SHR32(MULT16_16(c, x2)+MULT16_16(s, x1), 15))
-		X[p] = EXTRACT16(SHR32(MULT16_16(c, x1)-MULT16_16(s, x2), 15))
+		X[p+stride] = EXTRACT16(PSHR32(MAC16_16(MULT16_16(c, x2), s, x1), 15))
+		X[p] = EXTRACT16(PSHR32(MAC16_16(MULT16_16(c, x1), ms, x2), 15))
 		p--
 	}
 }
@@ -55,7 +57,7 @@ func exp_rotation(X []int16, length, dir, stride, K, spread int) {
 	}
 	// NOTE: As a minor optimization, we could be passing around log2(B), not B, for both this and for
 	// extract_collapse_mask().
-	length /= stride
+	length = int(Udiv(uint32(length), uint32(stride)))
 	for i = 0; i < stride; i++ {
 		if dir < 0 {
 			if stride2 != 0 {
@@ -103,20 +105,22 @@ func extract_collapse_mask(iy []int, N, B int) uint32 {
 	}
 	// NOTE: As a minor optimization, we could be passing around log2(B), not B, for both this and for
 	// exp_rotation().
-	N0 = N / B
+	N0 = int(Udiv(uint32(N), uint32(B)))
 	collapse_mask = 0
 	i = 0
 	for {
 		var j int
+		var tmp uint32 = 0
 		j = 0
 		for {
-			if iy[i*N0+j] != 0 {
-				collapse_mask |= 1 << uint(i)
-			}
+			tmp |= uint32(iy[i*N0+j])
 			j++
 			if j >= N0 {
 				break
 			}
+		}
+		if tmp != 0 {
+			collapse_mask |= 1 << uint(i)
 		}
 		i++
 		if i >= B {
@@ -234,7 +238,7 @@ func AlgQuant(X []int16, N, K, spread, B int, enc *EcEnc) uint32 {
 		best_id = 0
 		// The squared magnitude term gets added anyway, so we might as well
 		// add it outside the loop
-		yy = int16(ADD32(yy, 1))
+		yy = ADD16(yy, 1)
 		j = 0
 		for {
 			var Rxy, Ryy int16
@@ -294,37 +298,25 @@ func AlgQuant(X []int16, N, K, spread, B int, enc *EcEnc) uint32 {
 //
 // C: unsigned alg_unquant(celt_norm *X, int N, int K, int spread, int B, ec_dec *dec, opus_val16 gain)
 func AlgUnquant(X []int16, N, K, spread, B int, dec *EcDec, gain int16) uint32 {
-	var i int
 	var Ryy int32
 	var collapse_mask uint32
 	celt_assert2(K > 0, "alg_unquant() needs at least one pulse")
 	celt_assert2(N > 1, "alg_unquant() needs at least two dimensions")
 	iy := make([]int, N)
-	DecodePulses(iy, N, K, dec)
-	Ryy = 0
-	i = 0
-	for {
-		Ryy = MAC16_16(Ryy, iy[i], iy[i])
-		i++
-		if i >= N {
-			break
-		}
-	}
+	Ryy = DecodePulses(iy, N, K, dec)
 	normalise_residual(iy, X, N, Ryy, gain)
 	exp_rotation(X, N, -1, B, K, spread)
 	collapse_mask = extract_collapse_mask(iy, N, B)
 	return collapse_mask
 }
 
-// C: void renormalise_vector(celt_norm *X, int N, opus_val16 gain)
-func RenormaliseVector(X []int16, N int, gain int16) {
+// C: void renormalise_vector(celt_norm *X, int N, opus_val16 gain, int arch)
+func RenormaliseVector(X []int16, N int, gain int16, arch int) {
 	var i, k int
-	var E int32 = EPSILON
+	var E int32
 	var g int16
 	var t int32
-	for i = 0; i < N; i++ {
-		E = MAC16_16(E, X[i], X[i])
-	}
+	E = EPSILON + InnerProd(X, X, N, arch)
 	k = int(Ilog2(E)) >> 1
 	t = VSHR32(E, 2*(k-7))
 	g = int16(MULT16_16_P15(RsqrtNorm(t), gain))
@@ -335,8 +327,8 @@ func RenormaliseVector(X []int16, N int, gain int16) {
 	// return celt_sqrt(E);
 }
 
-// C: int stereo_itheta(celt_norm *X, celt_norm *Y, int stereo, int N)
-func StereoItheta(X, Y []int16, stereo, N int) int {
+// C: int stereo_itheta(const celt_norm *X, const celt_norm *Y, int stereo, int N, int arch)
+func StereoItheta(X, Y []int16, stereo, N int, arch int) int {
 	var i, itheta int
 	var mid, side int16
 	var Emid, Eside int32
@@ -352,13 +344,8 @@ func StereoItheta(X, Y []int16, stereo, N int) int {
 			Eside = MAC16_16(Eside, s, s)
 		}
 	} else {
-		for i = 0; i < N; i++ {
-			var m, s int16
-			m = X[i]
-			s = Y[i]
-			Emid = MAC16_16(Emid, m, m)
-			Eside = MAC16_16(Eside, s, s)
-		}
+		Emid += InnerProd(X, X, N, arch)
+		Eside += InnerProd(Y, Y, N, arch)
 	}
 	mid = int16(Sqrt(Emid))
 	side = int16(Sqrt(Eside))

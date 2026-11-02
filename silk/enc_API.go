@@ -27,10 +27,10 @@ func GetEncoderSize(encSizeBytes *int) int {
 /* Init or Reset encoder */
 /*************************/
 //
-// C: opus_int silk_InitEncoder(void *encState, silk_EncControlStruct *encStatus)
+// C: opus_int silk_InitEncoder(void *encState, int arch, silk_EncControlStruct *encStatus)
 //
 // O    Returns error code
-func (encState *Encoder) InitEncoder(encStatus *EncControlStruct) int {
+func (encState *Encoder) InitEncoder(arch int, encStatus *EncControlStruct) int {
 	var psEnc *Encoder
 	var n int
 	var ret int = SILK_NO_ERROR
@@ -40,7 +40,7 @@ func (encState *Encoder) InitEncoder(encStatus *EncControlStruct) int {
 	/* Reset encoder */
 	*psEnc = Encoder{}
 	for n = 0; n < ENCODER_NUM_CHANNELS; n++ {
-		ret += psEnc.state_Fxx[n].InitEncoder()
+		ret += psEnc.state_Fxx[n].InitEncoder(arch)
 		if ret != 0 {
 			silk_assert(false)
 		}
@@ -104,22 +104,24 @@ func queryEncoder(encState *Encoder, encStatus *EncControlStruct) int {
 func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16, nSamplesIn int, psRangeEnc *celt.EcEnc, nBytesOut *int32, prefillFlag int) int {
 	var n, i, nBits, flags int
 	var tmp_payloadSize_ms, tmp_complexity, ret int = 0, 0, 0
-	var nSamplesToBuffer, nBlocksOf10ms int
-	var nSamplesFromInput int = 0
+	var nSamplesToBuffer, nSamplesToBufferMax, nBlocksOf10ms int
+	var nSamplesFromInput, nSamplesFromInputMax int = 0, 0
 	var speech_act_thr_for_switch_Q8 int
 	var TargetRate_bps, channelRate_bps, LBRR_symbol, sum int32
 	var MStargetRates_bps [2]int32
 	psEnc := encState
-	var buf [MAX_FRAME_LENGTH_MS * MAX_API_FS_KHZ]int16
+	var buf []int16
 	var transition, curr_block, tot_blocks int
 
+	if encControl.ReducedDependency != 0 {
+		psEnc.state_Fxx[0].sCmn.first_frame_after_reset = 1
+		psEnc.state_Fxx[1].sCmn.first_frame_after_reset = 1
+	}
 	psEnc.state_Fxx[1].sCmn.nFramesEncoded = 0
 	psEnc.state_Fxx[0].sCmn.nFramesEncoded = 0
 
 	/* Check values in encoder control structure */
-	/* Note: C has `( ret = check_control_input( encControl ) != 0 )`, i.e. ret is the comparison result (1), not the error code */
-	ret = b2i(CheckControlInput(encControl) != 0)
-	if ret != 0 {
+	if ret = CheckControlInput(encControl); ret != 0 {
 		silk_assert(false)
 		return ret
 	}
@@ -128,7 +130,7 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 
 	if int(encControl.NChannelsInternal) > psEnc.nChannelsInternal {
 		/* Mono -> Stereo transition: init state of second channel and stereo state */
-		ret += psEnc.state_Fxx[1].InitEncoder()
+		ret += psEnc.state_Fxx[1].InitEncoder(psEnc.state_Fxx[0].sCmn.arch)
 		clear(psEnc.sStereo.pred_prev_Q13[:])
 		clear(psEnc.sStereo.sSide[:])
 		psEnc.sStereo.mid_side_amp_Q0[0] = 0
@@ -158,15 +160,13 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 	if prefillFlag != 0 {
 		/* Only accept input length of 10 ms */
 		if nBlocksOf10ms != 1 {
-			ret = SILK_ENC_INPUT_INVALID_NO_OF_SAMPLES
 			silk_assert(false)
-			return ret
+			return SILK_ENC_INPUT_INVALID_NO_OF_SAMPLES
 		}
 		/* Reset Encoder */
 		for n = 0; n < int(encControl.NChannelsInternal); n++ {
-			if ret = psEnc.state_Fxx[n].InitEncoder(); ret != 0 {
-				silk_assert(false)
-			}
+			ret = psEnc.state_Fxx[n].InitEncoder(psEnc.state_Fxx[n].sCmn.arch)
+			silk_assert(ret == 0)
 		}
 		tmp_payloadSize_ms = encControl.PayloadSize_ms
 		encControl.PayloadSize_ms = 10
@@ -179,15 +179,13 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 	} else {
 		/* Only accept input lengths that are a multiple of 10 ms */
 		if nBlocksOf10ms*int(encControl.API_sampleRate) != 100*nSamplesIn || nSamplesIn < 0 {
-			ret = SILK_ENC_INPUT_INVALID_NO_OF_SAMPLES
 			silk_assert(false)
-			return ret
+			return SILK_ENC_INPUT_INVALID_NO_OF_SAMPLES
 		}
 		/* Make sure no more than one packet can be produced */
 		if 1000*int32(nSamplesIn) > int32(encControl.PayloadSize_ms)*encControl.API_sampleRate {
-			ret = SILK_ENC_INPUT_INVALID_NO_OF_SAMPLES
 			silk_assert(false)
-			return ret
+			return SILK_ENC_INPUT_INVALID_NO_OF_SAMPLES
 		}
 	}
 
@@ -214,9 +212,16 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 	silk_assert(encControl.NChannelsInternal == 1 || psEnc.state_Fxx[0].sCmn.fs_kHz == psEnc.state_Fxx[1].sCmn.fs_kHz)
 
 	/* Input buffering/resampling and encoding */
+	nSamplesToBufferMax =
+		10 * nBlocksOf10ms * psEnc.state_Fxx[0].sCmn.fs_kHz
+	nSamplesFromInputMax =
+		int(DIV32_16(int32(nSamplesToBufferMax)*
+			psEnc.state_Fxx[0].sCmn.API_fs_Hz,
+			psEnc.state_Fxx[0].sCmn.fs_kHz*1000))
+	buf = make([]int16, nSamplesFromInputMax)
 	for {
 		nSamplesToBuffer = psEnc.state_Fxx[0].sCmn.frame_length - psEnc.state_Fxx[0].sCmn.inputBufIx
-		nSamplesToBuffer = min(nSamplesToBuffer, 10*nBlocksOf10ms*psEnc.state_Fxx[0].sCmn.fs_kHz)
+		nSamplesToBuffer = min(nSamplesToBuffer, nSamplesToBufferMax)
 		nSamplesFromInput = int(DIV32_16(int32(nSamplesToBuffer)*psEnc.state_Fxx[0].sCmn.API_fs_Hz, psEnc.state_Fxx[0].sCmn.fs_kHz*1000))
 		/* Resample and write to buffer */
 		if encControl.NChannelsAPI == 2 && encControl.NChannelsInternal == 2 {
@@ -230,7 +235,7 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 			}
 
 			ret += psEnc.state_Fxx[0].sCmn.resampler_state.Resampler(
-				psEnc.state_Fxx[0].sCmn.inputBuf[psEnc.state_Fxx[0].sCmn.inputBufIx+2:], buf[:], int32(nSamplesFromInput))
+				psEnc.state_Fxx[0].sCmn.inputBuf[psEnc.state_Fxx[0].sCmn.inputBufIx+2:], buf, int32(nSamplesFromInput))
 			psEnc.state_Fxx[0].sCmn.inputBufIx += nSamplesToBuffer
 
 			nSamplesToBuffer = psEnc.state_Fxx[1].sCmn.frame_length - psEnc.state_Fxx[1].sCmn.inputBufIx
@@ -239,7 +244,7 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 				buf[n] = samplesIn[2*n+1]
 			}
 			ret += psEnc.state_Fxx[1].sCmn.resampler_state.Resampler(
-				psEnc.state_Fxx[1].sCmn.inputBuf[psEnc.state_Fxx[1].sCmn.inputBufIx+2:], buf[:], int32(nSamplesFromInput))
+				psEnc.state_Fxx[1].sCmn.inputBuf[psEnc.state_Fxx[1].sCmn.inputBufIx+2:], buf, int32(nSamplesFromInput))
 
 			psEnc.state_Fxx[1].sCmn.inputBufIx += nSamplesToBuffer
 		} else if encControl.NChannelsAPI == 2 && encControl.NChannelsInternal == 1 {
@@ -249,11 +254,11 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 				buf[n] = int16(RSHIFT_ROUND(sum, 1))
 			}
 			ret += psEnc.state_Fxx[0].sCmn.resampler_state.Resampler(
-				psEnc.state_Fxx[0].sCmn.inputBuf[psEnc.state_Fxx[0].sCmn.inputBufIx+2:], buf[:], int32(nSamplesFromInput))
+				psEnc.state_Fxx[0].sCmn.inputBuf[psEnc.state_Fxx[0].sCmn.inputBufIx+2:], buf, int32(nSamplesFromInput))
 			/* On the first mono frame, average the results for the two resampler states  */
 			if psEnc.nPrevChannelsInternal == 2 && psEnc.state_Fxx[0].sCmn.nFramesEncoded == 0 {
 				ret += psEnc.state_Fxx[1].sCmn.resampler_state.Resampler(
-					psEnc.state_Fxx[1].sCmn.inputBuf[psEnc.state_Fxx[1].sCmn.inputBufIx+2:], buf[:], int32(nSamplesFromInput))
+					psEnc.state_Fxx[1].sCmn.inputBuf[psEnc.state_Fxx[1].sCmn.inputBufIx+2:], buf, int32(nSamplesFromInput))
 				for n = 0; n < psEnc.state_Fxx[0].sCmn.frame_length; n++ {
 					psEnc.state_Fxx[0].sCmn.inputBuf[psEnc.state_Fxx[0].sCmn.inputBufIx+n+2] =
 						int16(RSHIFT(int(psEnc.state_Fxx[0].sCmn.inputBuf[psEnc.state_Fxx[0].sCmn.inputBufIx+n+2])+
@@ -265,7 +270,7 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 			silk_assert(encControl.NChannelsAPI == 1 && encControl.NChannelsInternal == 1)
 			copy(buf[:nSamplesFromInput], samplesIn[:nSamplesFromInput])
 			ret += psEnc.state_Fxx[0].sCmn.resampler_state.Resampler(
-				psEnc.state_Fxx[0].sCmn.inputBuf[psEnc.state_Fxx[0].sCmn.inputBufIx+2:], buf[:], int32(nSamplesFromInput))
+				psEnc.state_Fxx[0].sCmn.inputBuf[psEnc.state_Fxx[0].sCmn.inputBufIx+2:], buf, int32(nSamplesFromInput))
 			psEnc.state_Fxx[0].sCmn.inputBufIx += nSamplesToBuffer
 		}
 
@@ -331,26 +336,33 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 				for n = 0; n < int(encControl.NChannelsInternal); n++ {
 					clear(psEnc.state_Fxx[n].sCmn.LBRR_flags[:])
 				}
+
+				psEnc.nBitsUsedLBRR = int32(psRangeEnc.Tell())
 			}
 
 			HPVariableCutoff(psEnc.state_Fxx[:])
 
 			/* Total target bits for packet */
 			nBits = int(DIV32_16(MUL(encControl.BitRate, encControl.PayloadSize_ms), 1000))
-			/* Subtract half of the bits already used */
+			/* Subtract bits used for LBRR */
 			if prefillFlag == 0 {
-				nBits -= psRangeEnc.Tell() >> 1
+				nBits -= int(psEnc.nBitsUsedLBRR)
 			}
 			/* Divide by number of uncoded frames left in packet */
-			nBits = int(DIV32_16(nBits, psEnc.state_Fxx[0].sCmn.nFramesPerPacket-psEnc.state_Fxx[0].sCmn.nFramesEncoded))
+			nBits = int(DIV32_16(nBits, psEnc.state_Fxx[0].sCmn.nFramesPerPacket))
 			/* Convert to bits/second */
 			if encControl.PayloadSize_ms == 10 {
 				TargetRate_bps = SMULBB(nBits, 100)
 			} else {
 				TargetRate_bps = SMULBB(nBits, 50)
 			}
-			/* Subtract fraction of bits in excess of target in previous packets */
+			/* Subtract fraction of bits in excess of target in previous frames and packets */
 			TargetRate_bps -= DIV32_16(MUL(psEnc.nBitsExceeded, 1000), BITRESERVOIR_DECAY_TIME_MS)
+			if prefillFlag == 0 && psEnc.state_Fxx[0].sCmn.nFramesEncoded > 0 {
+				/* Compare actual vs target bits so far in this packet */
+				var bitsBalance int32 = int32(psRangeEnc.Tell()) - psEnc.nBitsUsedLBRR - int32(nBits*psEnc.state_Fxx[0].sCmn.nFramesEncoded)
+				TargetRate_bps -= DIV32_16(MUL(bitsBalance, 1000), BITRESERVOIR_DECAY_TIME_MS)
+			}
 			/* Never exceed input bitrate */
 			TargetRate_bps = LIMIT(TargetRate_bps, encControl.BitRate, 5000)
 

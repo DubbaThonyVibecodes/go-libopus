@@ -18,8 +18,9 @@ func NLSFDelDecQuant( // O    Returns RD value in Q25
 	order int16, // I    Number of input values
 ) int32 {
 	var i, j, nStates, ind_tmp, ind_min_max, ind_max_min, in_Q10, res_Q10 int
-	var pred_Q10, diff_Q10, out0_Q10, out1_Q10, rate0_Q5, rate1_Q5 int
-	var RD_tmp_Q25, min_Q25, min_max_Q25, max_min_Q25, pred_coef_Q16 int32
+	var pred_Q10, diff_Q10, rate0_Q5, rate1_Q5 int
+	var out0_Q10, out1_Q10 int16
+	var RD_tmp_Q25, min_Q25, min_max_Q25, max_min_Q25 int32
 	var ind_sort [NLSF_QUANT_DEL_DEC_STATES]int
 	var ind [NLSF_QUANT_DEL_DEC_STATES][MAX_LPC_ORDER]int8
 	var prev_out_Q10 [2 * NLSF_QUANT_DEL_DEC_STATES]int16
@@ -28,6 +29,27 @@ func NLSFDelDecQuant( // O    Returns RD value in Q25
 	var RD_max_Q25 [NLSF_QUANT_DEL_DEC_STATES]int32
 	var rates_Q5 []uint8
 
+	var out0_Q10_table [2 * NLSF_QUANT_MAX_AMPLITUDE_EXT]int
+	var out1_Q10_table [2 * NLSF_QUANT_MAX_AMPLITUDE_EXT]int
+
+	for i = -NLSF_QUANT_MAX_AMPLITUDE_EXT; i <= NLSF_QUANT_MAX_AMPLITUDE_EXT-1; i++ {
+		out0_Q10 = int16(LSHIFT(i, 10))
+		out1_Q10 = ADD16(out0_Q10, 1024)
+		if i > 0 {
+			out0_Q10 = SUB16(out0_Q10, SILK_FIX_CONST(NLSF_QUANT_LEVEL_ADJ, 10))
+			out1_Q10 = SUB16(out1_Q10, SILK_FIX_CONST(NLSF_QUANT_LEVEL_ADJ, 10))
+		} else if i == 0 {
+			out1_Q10 = SUB16(out1_Q10, SILK_FIX_CONST(NLSF_QUANT_LEVEL_ADJ, 10))
+		} else if i == -1 {
+			out0_Q10 = ADD16(out0_Q10, SILK_FIX_CONST(NLSF_QUANT_LEVEL_ADJ, 10))
+		} else {
+			out0_Q10 = ADD16(out0_Q10, SILK_FIX_CONST(NLSF_QUANT_LEVEL_ADJ, 10))
+			out1_Q10 = ADD16(out1_Q10, SILK_FIX_CONST(NLSF_QUANT_LEVEL_ADJ, 10))
+		}
+		out0_Q10_table[i+NLSF_QUANT_MAX_AMPLITUDE_EXT] = int(RSHIFT(SMULBB(out0_Q10, quant_step_size_Q16), 16))
+		out1_Q10_table[i+NLSF_QUANT_MAX_AMPLITUDE_EXT] = int(RSHIFT(SMULBB(out1_Q10, quant_step_size_Q16), 16))
+	}
+
 	silk_assert((NLSF_QUANT_DEL_DEC_STATES & (NLSF_QUANT_DEL_DEC_STATES - 1)) == 0) // must be power of two
 
 	nStates = 1
@@ -35,35 +57,22 @@ func NLSFDelDecQuant( // O    Returns RD value in Q25
 	prev_out_Q10[0] = 0
 	for i = int(order) - 1; ; i-- {
 		rates_Q5 = ec_rates_Q5[ec_ix[i]:]
-		pred_coef_Q16 = LSHIFT(int32(pred_coef_Q8[i]), 8)
 		in_Q10 = int(x_Q10[i])
 		for j = 0; j < nStates; j++ {
-			pred_Q10 = int(SMULWB(pred_coef_Q16, prev_out_Q10[j]))
+			pred_Q10 = int(RSHIFT(SMULBB(int16(pred_coef_Q8[i]), prev_out_Q10[j]), 8))
 			res_Q10 = int(SUB16(in_Q10, pred_Q10))
-			ind_tmp = int(SMULWB(int32(inv_quant_step_size_Q6), res_Q10))
+			ind_tmp = int(RSHIFT(SMULBB(inv_quant_step_size_Q6, res_Q10), 16))
 			ind_tmp = LIMIT(ind_tmp, -NLSF_QUANT_MAX_AMPLITUDE_EXT, NLSF_QUANT_MAX_AMPLITUDE_EXT-1)
 			ind[j][i] = int8(ind_tmp)
 
 			// compute outputs for ind_tmp and ind_tmp + 1
-			out0_Q10 = int(LSHIFT(ind_tmp, 10))
-			out1_Q10 = int(ADD16(out0_Q10, 1024))
-			if ind_tmp > 0 {
-				out0_Q10 = int(SUB16(out0_Q10, SILK_FIX_CONST(NLSF_QUANT_LEVEL_ADJ, 10)))
-				out1_Q10 = int(SUB16(out1_Q10, SILK_FIX_CONST(NLSF_QUANT_LEVEL_ADJ, 10)))
-			} else if ind_tmp == 0 {
-				out1_Q10 = int(SUB16(out1_Q10, SILK_FIX_CONST(NLSF_QUANT_LEVEL_ADJ, 10)))
-			} else if ind_tmp == -1 {
-				out0_Q10 = int(ADD16(out0_Q10, SILK_FIX_CONST(NLSF_QUANT_LEVEL_ADJ, 10)))
-			} else {
-				out0_Q10 = int(ADD16(out0_Q10, SILK_FIX_CONST(NLSF_QUANT_LEVEL_ADJ, 10)))
-				out1_Q10 = int(ADD16(out1_Q10, SILK_FIX_CONST(NLSF_QUANT_LEVEL_ADJ, 10)))
-			}
-			out0_Q10 = int(SMULWB(int32(out0_Q10), quant_step_size_Q16))
-			out1_Q10 = int(SMULWB(int32(out1_Q10), quant_step_size_Q16))
-			out0_Q10 = int(ADD16(out0_Q10, pred_Q10))
-			out1_Q10 = int(ADD16(out1_Q10, pred_Q10))
-			prev_out_Q10[j] = int16(out0_Q10)
-			prev_out_Q10[j+nStates] = int16(out1_Q10)
+			out0_Q10 = int16(out0_Q10_table[ind_tmp+NLSF_QUANT_MAX_AMPLITUDE_EXT])
+			out1_Q10 = int16(out1_Q10_table[ind_tmp+NLSF_QUANT_MAX_AMPLITUDE_EXT])
+
+			out0_Q10 = ADD16(out0_Q10, pred_Q10)
+			out1_Q10 = ADD16(out1_Q10, pred_Q10)
+			prev_out_Q10[j] = out0_Q10
+			prev_out_Q10[j+nStates] = out1_Q10
 
 			// compute RD for ind_tmp and ind_tmp + 1
 			if ind_tmp+1 >= NLSF_QUANT_MAX_AMPLITUDE {
@@ -93,7 +102,7 @@ func NLSFDelDecQuant( // O    Returns RD value in Q25
 			RD_Q25[j+nStates] = SMLABB(MLA(RD_tmp_Q25, SMULBB(diff_Q10, diff_Q10), w_Q5[i]), mu_Q20, rate1_Q5)
 		}
 
-		if nStates < NLSF_QUANT_DEL_DEC_STATES {
+		if nStates <= (NLSF_QUANT_DEL_DEC_STATES >> 1) {
 			// double number of states and copy
 			for j = 0; j < nStates; j++ {
 				ind[j+nStates][i] = ind[j][i] + 1
@@ -111,9 +120,9 @@ func NLSFDelDecQuant( // O    Returns RD value in Q25
 					RD_Q25[j] = RD_min_Q25[j]
 					RD_Q25[j+NLSF_QUANT_DEL_DEC_STATES] = RD_max_Q25[j]
 					// swap prev_out values
-					out0_Q10 = int(prev_out_Q10[j])
+					out0_Q10 = prev_out_Q10[j]
 					prev_out_Q10[j] = prev_out_Q10[j+NLSF_QUANT_DEL_DEC_STATES]
-					prev_out_Q10[j+NLSF_QUANT_DEL_DEC_STATES] = int16(out0_Q10)
+					prev_out_Q10[j+NLSF_QUANT_DEL_DEC_STATES] = out0_Q10
 					ind_sort[j] = j + NLSF_QUANT_DEL_DEC_STATES
 				} else {
 					RD_min_Q25[j] = RD_Q25[j]

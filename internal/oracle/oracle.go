@@ -203,8 +203,32 @@ type sched struct {
 	val   int32
 }
 
+func parseFramedur(v string) (int32, error) {
+	switch v {
+	case "arg":
+		return opus.OPUS_FRAMESIZE_ARG, nil
+	case "2.5":
+		return opus.OPUS_FRAMESIZE_2_5_MS, nil
+	case "5":
+		return opus.OPUS_FRAMESIZE_5_MS, nil
+	case "10":
+		return opus.OPUS_FRAMESIZE_10_MS, nil
+	case "20":
+		return opus.OPUS_FRAMESIZE_20_MS, nil
+	case "40":
+		return opus.OPUS_FRAMESIZE_40_MS, nil
+	case "60":
+		return opus.OPUS_FRAMESIZE_60_MS, nil
+	case "variable":
+		return opus.OPUS_FRAMESIZE_VARIABLE, nil
+	}
+	return 0, die("bad frame duration %q", v)
+}
+
 func parseSchedVal(what, v string, rate int) (int32, error) {
 	switch what {
+	case "framedur":
+		return parseFramedur(v)
 	case "bw", "maxbw":
 		return parseBw(v)
 	case "mode":
@@ -269,7 +293,7 @@ func (e msEnc) encode(pcm []int16, frameSize int, data []byte, maxBytes int) int
 	return e.MultistreamEncode(pcm, frameSize, data, int32(maxBytes))
 }
 
-func applySched(enc encoder, s *sched, frameSize *int) error {
+func applySched(enc encoder, s *sched, frameSize *int, framedur *int32) error {
 	r := opus.OPUS_OK
 	switch s.what {
 	case "bitrate":
@@ -304,6 +328,11 @@ func applySched(enc encoder, s *sched, frameSize *int) error {
 		r = enc.Ctl(opus.OPUS_SET_VOICE_RATIO_REQUEST, s.val)
 	case "reset":
 		r = enc.Ctl(opus.OPUS_RESET_STATE)
+	case "framedur":
+		r = enc.Ctl(opus.OPUS_SET_EXPERT_FRAME_DURATION_REQUEST, s.val)
+		*framedur = s.val
+	case "pred":
+		r = enc.Ctl(opus.OPUS_SET_PREDICTION_DISABLED_REQUEST, s.val)
 	case "framesize":
 		*frameSize = int(s.val)
 	default:
@@ -343,6 +372,8 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 	bw, maxbw := int32(opus.OPUS_AUTO), int32(opus.OPUS_AUTO)
 	complexity := int32(10)
 	fec, lossperc, dtx := int32(0), int32(0), int32(0)
+	framedur, nopred := int32(opus.OPUS_FRAMESIZE_ARG), int32(0)
+	remaining := 0
 	forcech := int32(opus.OPUS_AUTO)
 	sig := int32(opus.OPUS_AUTO)
 	lsbdepth := int32(16)
@@ -410,6 +441,10 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 			lsbdepth = int32(atoi(next()))
 		case "--maxpayload":
 			maxpayload = atoi(next())
+		case "--framedur":
+			framedur, err = parseFramedur(next())
+		case "--nopred":
+			nopred = 1
 		case "--voiceratio":
 			voiceratio = int32(atoi(next()))
 		case "--sweep":
@@ -548,6 +583,18 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 			}
 			return nil
 		},
+		func() error {
+			if framedur != opus.OPUS_FRAMESIZE_ARG {
+				return set(opus.OPUS_SET_EXPERT_FRAME_DURATION_REQUEST, framedur)
+			}
+			return nil
+		},
+		func() error {
+			if nopred != 0 {
+				return set(opus.OPUS_SET_PREDICTION_DISABLED_REQUEST, nopred)
+			}
+			return nil
+		},
 	}
 	for _, s := range steps {
 		if err := s(); err != nil {
@@ -582,6 +629,8 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 			{opus.OPUS_GET_SIGNAL_REQUEST, "signal"},
 			{opus.OPUS_GET_FORCE_CHANNELS_REQUEST, "forcech"},
 			{opus.OPUS_GET_LSB_DEPTH_REQUEST, "lsb"},
+			{opus.OPUS_GET_EXPERT_FRAME_DURATION_REQUEST, "framedur"},
+			{opus.OPUS_GET_PREDICTION_DISABLED_REQUEST, "pred"},
 		} {
 			if err := get(g.req, g.name); err != nil {
 				return nil, err
@@ -606,7 +655,7 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 	for !stop {
 		for s := range scheds {
 			if scheds[s].frame == count {
-				if err := applySched(enc, &scheds[s], &frameSize); err != nil {
+				if err := applySched(enc, &scheds[s], &frameSize, &framedur); err != nil {
 					return nil, err
 				}
 			}
@@ -673,14 +722,17 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 			frameSize = int(m[2]) * rate / 48000
 		}
 		// read_s16: like opus_demo the last (possibly empty) frame is zero padded and still encoded
-		n := frameSize * ch
+		if remaining > frameSize {
+			remaining = frameSize
+		}
+		n := (frameSize - remaining) * ch
 		avail := len(in) - pos
 		if avail > n {
 			avail = n
 		}
-		copy(buf[:avail], in[pos:pos+avail])
+		copy(buf[remaining*ch:remaining*ch+avail], in[pos:pos+avail])
 		pos += avail
-		read := avail / ch
+		read := remaining + avail/ch
 		if read < frameSize {
 			clear(buf[read*ch : frameSize*ch])
 			stop = true
@@ -719,6 +771,20 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 		line := fmt.Sprintf("E i=%d fs=%d len=%d rng=%08x bw=%d", count, frameSize, length, rng, ebw)
 		if length > 0 {
 			line += fmt.Sprintf(" toc=%02x", data[0])
+		}
+		remaining = 0
+		if framedur != opus.OPUS_FRAMESIZE_ARG {
+			// like opus_demo: the encoder may consume fewer samples than offered; keep the rest
+			nbEncoded := frameSize
+			if length > 1 {
+				nbEncoded = int(opus.PacketGetSamplesPerFrame(data, int32(rate))) * opus.PacketGetNbFrames(data, int32(length))
+			}
+			if nbEncoded <= 0 || nbEncoded > frameSize {
+				nbEncoded = frameSize
+			}
+			remaining = frameSize - nbEncoded
+			copy(buf[:remaining*ch], buf[nbEncoded*ch:nbEncoded*ch+remaining*ch])
+			line += fmt.Sprintf(" enc=%d", nbEncoded)
 		}
 		res.Trace = append(res.Trace, line)
 		currModeCount += frameSize
@@ -857,21 +923,12 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 			return nil, err
 		}
 		line := fmt.Sprintf("H fs=%d", v)
-		if ms {
-			v = gain
-		} else if err := set(opus.OPUS_GET_GAIN_REQUEST, &v); err != nil {
+		if err := set(opus.OPUS_GET_GAIN_REQUEST, &v); err != nil {
 			return nil, err
 		}
 		res.Trace = append(res.Trace, fmt.Sprintf("%s gain=%d", line, v))
 	}
-	// The multistream decoder of this version has no OPUS_GET_LAST_PACKET_DURATION;
-	// mirror the elementary decoder's semantics (last decoded sample count,
-	// initially 0 -> we use 20 ms so that a leading loss still decodes).
-	lastDur := int32(rate / 50)
 	getDur := func() (int32, error) {
-		if ms {
-			return lastDur, nil
-		}
 		var v int32
 		err := set(opus.OPUS_GET_LAST_PACKET_DURATION_REQUEST, &v)
 		return v, err
@@ -984,9 +1041,6 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 		if err := set(opus.OPUS_GET_BANDWIDTH_REQUEST, &dbw); err != nil {
 			return nil, err
 		}
-		if n > 0 {
-			lastDur = int32(n)
-		}
 		var err error
 		if dur, err = getDur(); err != nil {
 			return nil, err
@@ -1083,7 +1137,7 @@ type RepackResult struct {
 
 // RunRepack mirrors cmd_repack in gen.c.
 func RunRepack(args []string, pkts []testvec.Packet) (*RepackResult, error) {
-	merge, split := 1, false
+	merge, split, pad, streams := 1, false, 0, 0
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--merge":
@@ -1093,6 +1147,16 @@ func RunRepack(args []string, pkts []testvec.Packet) (*RepackResult, error) {
 			}
 		case "--split":
 			split = true
+		case "--pad":
+			if i+1 < len(args) {
+				pad = atoi(args[i+1])
+				i++
+			}
+		case "--streams":
+			if i+1 < len(args) {
+				streams = atoi(args[i+1])
+				i++
+			}
 		default:
 			return nil, die("unknown option %q", args[i])
 		}
@@ -1119,6 +1183,38 @@ func RunRepack(args []string, pkts []testvec.Packet) (*RepackResult, error) {
 		}
 		// gen.c reads into bufs[inrp] (a fresh MAX_PACKET buffer per slot)
 		bufs[inrp] = append([]byte(nil), p.Data...)
+		if pad != 0 {
+			// opus_packet_pad / opus_multistream_packet_pad in place, then unpad a copy
+			newlen := ulen + int32(pad)
+			if int(newlen) > len(outbuf) {
+				return nil, die("pad too large")
+			}
+			copy(outbuf, bufs[0][:ulen])
+			var r int
+			if streams > 0 {
+				r = opus.MultistreamPacketPad(outbuf, ulen, newlen, streams)
+			} else {
+				r = opus.PacketPad(outbuf, ulen, newlen)
+			}
+			var sb strings.Builder
+			fmt.Fprintf(&sb, "R i=%d pad=%d", count, r)
+			if r == opus.OPUS_OK {
+				tmp := append([]byte(nil), outbuf[:newlen]...)
+				var ul int32
+				if streams > 0 {
+					ul = opus.MultistreamPacketUnpad(tmp, newlen, streams)
+				} else {
+					ul = opus.PacketUnpad(tmp, newlen)
+				}
+				fmt.Fprintf(&sb, " unpad=%d", ul)
+				if ul > 0 {
+					fmt.Fprintf(&sb, " ucrc=%08x", crc32.ChecksumIEEE(tmp[:ul]))
+				}
+				res.Packets = append(res.Packets, testvec.Packet{Data: append([]byte(nil), outbuf[:newlen]...), Rng: 0})
+			}
+			res.Trace = append(res.Trace, sb.String())
+			continue
+		}
 		if split {
 			rp.RepacketizerInit()
 			r := rp.RepacketizerCat(bufs[0], ulen) // the C reads into bufs[inrp] which is bufs[0] in split mode
@@ -1150,7 +1246,9 @@ func RunRepack(args []string, pkts []testvec.Packet) (*RepackResult, error) {
 		} else { // flush what we have and start over with this packet
 			emit(rp.RepacketizerOut(outbuf, int32(len(outbuf))))
 			rp.RepacketizerInit()
-			r = rp.RepacketizerCat(bufs[inrp], ulen)
+			// the packet becomes frame 0: it moves to slot 0 so that later packets cannot overwrite it
+			bufs[0] = bufs[inrp]
+			r = rp.RepacketizerCat(bufs[0], ulen)
 			res.Trace = append(res.Trace, fmt.Sprintf("R i=%d cat=%d nf=%d", count, r, rp.RepacketizerGetNbFrames()))
 			if r == opus.OPUS_OK {
 				inrp = 1

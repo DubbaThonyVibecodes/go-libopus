@@ -87,7 +87,7 @@ func (e *EcEnc) EncInit(buf []byte, size uint32) {
 // C: void ec_encode(ec_enc *_this,unsigned _fl,unsigned _fh,unsigned _ft)
 func (e *EcEnc) Encode(fl, fh, ft uint32) {
 	var r uint32
-	r = e.rng / ft
+	r = Udiv(e.rng, ft)
 	if fl > 0 {
 		e.val += e.rng - IMUL32(r, ft-fl)
 		e.rng = IMUL32(r, fh-fl)

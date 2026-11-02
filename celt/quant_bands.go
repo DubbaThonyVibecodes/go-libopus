@@ -2,7 +2,7 @@ package celt
 
 // C: celt/quant_bands.h, celt/quant_bands.c — coarse/fine energy quantisation.
 
-// Mean energy in each band quantized in Q6
+// Mean energy in each band quantized in Q4
 var eMeans = [25]int8{
 	103, 100, 92, 85, 81,
 	77, 72, 70, 78, 75,
@@ -110,12 +110,12 @@ func loss_distortion(eBands, oldEBands []int16, start, end, length, C int) int32
 //	const opus_val16 *eBands, opus_val16 *oldEBands,
 //	opus_int32 budget, opus_int32 tell,
 //	const unsigned char *prob_model, opus_val16 *error, ec_enc *enc,
-//	int C, int LM, int intra, opus_val16 max_decay)
+//	int C, int LM, int intra, opus_val16 max_decay, int lfe)
 func quant_coarse_energy_impl(m *CELTMode, start, end int,
 	eBands, oldEBands []int16,
 	budget, tell int32,
 	prob_model []uint8, error []int16, enc *EcEnc,
-	C, LM, intra int, max_decay int16) int {
+	C, LM, intra int, max_decay int16, lfe int) int {
 	var i, c int
 	var badness int = 0
 	var prev = [2]int32{0, 0}
@@ -169,6 +169,9 @@ func quant_coarse_energy_impl(m *CELTMode, start, end int,
 					qi = IMAX(-1, qi)
 				}
 			}
+			if lfe != 0 && i >= 2 {
+				qi = IMIN(qi, 0)
+			}
 			if budget-tell >= 15 {
 				var pi int
 				pi = 2 * IMIN(i, 20)
@@ -200,6 +203,9 @@ func quant_coarse_energy_impl(m *CELTMode, start, end int,
 			}
 		}
 	}
+	if lfe != 0 {
+		return 0
+	}
 	return badness
 }
 
@@ -207,11 +213,11 @@ func quant_coarse_energy_impl(m *CELTMode, start, end int,
 //
 //	const opus_val16 *eBands, opus_val16 *oldEBands, opus_uint32 budget,
 //	opus_val16 *error, ec_enc *enc, int C, int LM, int nbAvailableBytes,
-//	int force_intra, opus_val32 *delayedIntra, int two_pass, int loss_rate)
+//	int force_intra, opus_val32 *delayedIntra, int two_pass, int loss_rate, int lfe)
 func QuantCoarseEnergy(m *CELTMode, start, end, effEnd int,
 	eBands, oldEBands []int16, budget uint32,
 	error []int16, enc *EcEnc, C, LM, nbAvailableBytes int,
-	force_intra int, delayedIntra *int32, two_pass, loss_rate int) {
+	force_intra int, delayedIntra *int32, two_pass, loss_rate int, lfe int) {
 	var intra int
 	var max_decay int16
 	var enc_start_state EcEnc
@@ -232,12 +238,12 @@ func QuantCoarseEnergy(m *CELTMode, start, end, effEnd int,
 		intra = 0
 	}
 
-	// Encode the global flags using a simple probability model
-	// (first symbols in the stream)
-
 	max_decay = QCONST16(16.0, DB_SHIFT)
 	if end-start > 10 {
 		max_decay = int16(MIN32(int32(max_decay), SHL32(EXTEND32(nbAvailableBytes), DB_SHIFT-3)))
+	}
+	if lfe != 0 {
+		max_decay = QCONST16(3.0, DB_SHIFT)
 	}
 	enc_start_state = *enc
 
@@ -247,7 +253,7 @@ func QuantCoarseEnergy(m *CELTMode, start, end, effEnd int,
 
 	if two_pass != 0 || intra != 0 {
 		badness1 = quant_coarse_energy_impl(m, start, end, eBands, oldEBands_intra, int32(budget),
-			int32(tell), e_prob_model[LM][1][:], error_intra, enc, C, LM, 1, max_decay)
+			int32(tell), e_prob_model[LM][1][:], error_intra, enc, C, LM, 1, max_decay, lfe)
 	}
 
 	if intra == 0 {
@@ -255,6 +261,7 @@ func QuantCoarseEnergy(m *CELTMode, start, end, effEnd int,
 		var enc_intra_state EcEnc
 		var tell_intra int32
 		var nstart_bytes, nintra_bytes uint32
+		var save_bytes uint32
 		var badness2 int
 
 		tell_intra = int32(enc.TellFrac())
@@ -264,14 +271,15 @@ func QuantCoarseEnergy(m *CELTMode, start, end, effEnd int,
 		nstart_bytes = enc_start_state.RangeBytes()
 		nintra_bytes = enc_intra_state.RangeBytes()
 		intra_buf = enc_intra_state.GetBuffer()[nstart_bytes:]
-		intra_bits := make([]byte, nintra_bytes-nstart_bytes)
+		save_bytes = nintra_bytes - nstart_bytes
+		intra_bits := make([]byte, save_bytes)
 		// Copy bits from intra bit-stream
 		copy(intra_bits, intra_buf[:nintra_bytes-nstart_bytes])
 
 		*enc = enc_start_state
 
 		badness2 = quant_coarse_energy_impl(m, start, end, eBands, oldEBands, int32(budget),
-			int32(tell), e_prob_model[LM][intra][:], error, enc, C, LM, 0, max_decay)
+			int32(tell), e_prob_model[LM][intra][:], error, enc, C, LM, 0, max_decay, lfe)
 
 		if two_pass != 0 && (badness1 < badness2 || (badness1 == badness2 && int32(enc.TellFrac())+intra_bias > tell_intra)) {
 			*enc = enc_intra_state
@@ -463,28 +471,6 @@ func UnquantEnergyFinalise(m *CELTMode, start, end int, oldEBands []int16, fine_
 					break
 				}
 			}
-		}
-	}
-}
-
-// C: void log2Amp(const CELTMode *m, int start, int end, celt_ener *eBands, const opus_val16 *oldEBands, int C)
-func Log2Amp(m *CELTMode, start, end int, eBands []int32, oldEBands []int16, C int) {
-	var c, i int
-	c = 0
-	for {
-		for i = 0; i < start; i++ {
-			eBands[i+c*m.nbEBands] = 0
-		}
-		for ; i < end; i++ {
-			var lg int16 = ADD16(oldEBands[i+c*m.nbEBands], SHL16(int16(eMeans[i]), 6))
-			eBands[i+c*m.nbEBands] = PSHR32(Exp2(lg), 4)
-		}
-		for ; i < m.nbEBands; i++ {
-			eBands[i+c*m.nbEBands] = 0
-		}
-		c++
-		if c >= C {
-			break
 		}
 	}
 }

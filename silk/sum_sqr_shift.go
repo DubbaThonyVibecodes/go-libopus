@@ -25,6 +25,7 @@ func SumSqrShift(
 			// Scale down
 			nrg = int32(RSHIFT_uint(uint32(nrg), 2))
 			shft = 2
+			i += 2
 			break
 		}
 	}

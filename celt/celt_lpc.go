@@ -13,9 +13,7 @@ func Lpc(_lpc []int16, ac []int32, p int) {
 	var error int32 = ac[0]
 	var lpc [LPC_ORDER]int32
 
-	for i = 0; i < p; i++ {
-		lpc[i] = 0
-	}
+	clear(lpc[:p])
 	if ac[0] != 0 {
 		for i = 0; i < p; i++ {
 			// Sum up this iteration's reflection coefficient
@@ -47,78 +45,173 @@ func Lpc(_lpc []int16, ac []int32, p int) {
 	}
 }
 
-// C: void celt_fir(const opus_val16 *x, const opus_val16 *num, opus_val16 *y, int N, int ord, opus_val16 *mem)
-func Fir(x, num, y []int16, N, ord int, mem []int16) {
+// C: void celt_fir_c(const opus_val16 *_x, const opus_val16 *num, opus_val16 *_y, int N, int ord, opus_val16 *mem, int arch)
+// C: #define celt_fir(x, num, y, N, ord, mem, arch) (celt_fir_c(x, num, y, N, ord, mem, arch))
+func Fir(_x, num, _y []int16, N, ord int, mem []int16, arch int) {
 	var i, j int
+	rnum := make([]int16, ord)
+	x := make([]int16, N+ord)
+	for i = 0; i < ord; i++ {
+		rnum[i] = num[ord-i-1]
+	}
+	for i = 0; i < ord; i++ {
+		x[i] = mem[ord-i-1]
+	}
 	for i = 0; i < N; i++ {
-		var sum int32 = SHL32(EXTEND32(x[i]), SIG_SHIFT)
+		x[i+ord] = _x[i]
+	}
+	for i = 0; i < ord; i++ {
+		mem[i] = _x[N-i-1]
+	}
+	for i = 0; i < N-3; i += 4 {
+		var sum = [4]int32{0, 0, 0, 0}
+		XcorrKernel(rnum, x[i:], sum[:], ord, arch)
+		_y[i] = SATURATE16(ADD32(EXTEND32(_x[i]), PSHR32(sum[0], SIG_SHIFT)))
+		_y[i+1] = SATURATE16(ADD32(EXTEND32(_x[i+1]), PSHR32(sum[1], SIG_SHIFT)))
+		_y[i+2] = SATURATE16(ADD32(EXTEND32(_x[i+2]), PSHR32(sum[2], SIG_SHIFT)))
+		_y[i+3] = SATURATE16(ADD32(EXTEND32(_x[i+3]), PSHR32(sum[3], SIG_SHIFT)))
+	}
+	for ; i < N; i++ {
+		var sum int32 = 0
 		for j = 0; j < ord; j++ {
-			sum += MULT16_16(num[j], mem[j])
+			sum = MAC16_16(sum, rnum[j], x[i+j])
 		}
-		for j = ord - 1; j >= 1; j-- {
-			mem[j] = mem[j-1]
-		}
-		mem[0] = x[i]
-		y[i] = ROUND16(sum, SIG_SHIFT)
+		_y[i] = SATURATE16(ADD32(EXTEND32(_x[i]), PSHR32(sum, SIG_SHIFT)))
 	}
 }
 
-// C: void celt_iir(const opus_val32 *x, const opus_val16 *den, opus_val32 *y, int N, int ord, opus_val16 *mem)
-func Iir(x []int32, den []int16, y []int32, N, ord int, mem []int16) {
+// C: void celt_iir(const opus_val32 *_x, const opus_val16 *den, opus_val32 *_y, int N, int ord, opus_val16 *mem, int arch)
+func Iir(_x []int32, den []int16, _y []int32, N, ord int, mem []int16, arch int) {
 	var i, j int
-	for i = 0; i < N; i++ {
-		var sum int32 = x[i]
+
+	celt_assert((ord & 3) == 0)
+	rden := make([]int16, ord)
+	y := make([]int16, N+ord)
+	for i = 0; i < ord; i++ {
+		rden[i] = den[ord-i-1]
+	}
+	for i = 0; i < ord; i++ {
+		y[i] = -mem[ord-i-1]
+	}
+	for ; i < N+ord; i++ {
+		y[i] = 0
+	}
+	for i = 0; i < N-3; i += 4 {
+		// Unroll by 4 as if it were an FIR filter
+		var sum [4]int32
+		sum[0] = _x[i]
+		sum[1] = _x[i+1]
+		sum[2] = _x[i+2]
+		sum[3] = _x[i+3]
+		XcorrKernel(rden, y[i:], sum[:], ord, arch)
+
+		// Patch up the result to compensate for the fact that this is an IIR
+		y[i+ord] = -ROUND16(sum[0], SIG_SHIFT)
+		_y[i] = sum[0]
+		sum[1] = MAC16_16(sum[1], y[i+ord], den[0])
+		y[i+ord+1] = -ROUND16(sum[1], SIG_SHIFT)
+		_y[i+1] = sum[1]
+		sum[2] = MAC16_16(sum[2], y[i+ord+1], den[0])
+		sum[2] = MAC16_16(sum[2], y[i+ord], den[1])
+		y[i+ord+2] = -ROUND16(sum[2], SIG_SHIFT)
+		_y[i+2] = sum[2]
+
+		sum[3] = MAC16_16(sum[3], y[i+ord+2], den[0])
+		sum[3] = MAC16_16(sum[3], y[i+ord+1], den[1])
+		sum[3] = MAC16_16(sum[3], y[i+ord], den[2])
+		y[i+ord+3] = -ROUND16(sum[3], SIG_SHIFT)
+		_y[i+3] = sum[3]
+	}
+	for ; i < N; i++ {
+		var sum int32 = _x[i]
 		for j = 0; j < ord; j++ {
-			sum -= MULT16_16(den[j], mem[j])
+			sum -= MULT16_16(rden[j], y[i+j])
 		}
-		for j = ord - 1; j >= 1; j-- {
-			mem[j] = mem[j-1]
-		}
-		mem[0] = ROUND16(sum, SIG_SHIFT)
-		y[i] = sum
+		y[i+ord] = ROUND16(sum, SIG_SHIFT)
+		_y[i] = sum
+	}
+	for i = 0; i < ord; i++ {
+		mem[i] = int16(_y[N-i-1])
 	}
 }
 
 // Autocorr computes the autocorrelation of x (n samples) up to lag, with an
-// optional window applied to overlap samples at each end.
+// optional window applied to overlap samples at each end. It returns the
+// shift that was applied.
 //
-// C: void _celt_autocorr(const opus_val16 *x, opus_val32 *ac, const opus_val16 *window, int overlap, int lag, int n)
-func Autocorr(x []int16, ac []int32, window []int16, overlap, lag, n int) {
+// C: int _celt_autocorr(const opus_val16 *x, opus_val32 *ac, const opus_val16 *window, int overlap, int lag, int n, int arch)
+func Autocorr(x []int16, ac []int32, window []int16, overlap, lag, n int, arch int) int {
 	var d int32
-	var i int
+	var i, k int
+	var fastN int = n - lag
+	var shift int
+	var xptr []int16
 	xx := make([]int16, n)
 	celt_assert(n > 0)
 	celt_assert(overlap >= 0)
-	for i = 0; i < n; i++ {
-		xx[i] = x[i]
-	}
-	for i = 0; i < overlap; i++ {
-		xx[i] = int16(MULT16_16_Q15(x[i], window[i]))
-		xx[n-i-1] = int16(MULT16_16_Q15(x[n-i-1], window[i]))
-	}
-	{
-		var ac0 int32 = 0
-		var shift int
+	if overlap == 0 {
+		xptr = x
+	} else {
 		for i = 0; i < n; i++ {
-			ac0 += SHR32(MULT16_16(xx[i], xx[i]), 9)
+			xx[i] = x[i]
 		}
-		ac0 += int32(1 + n)
+		for i = 0; i < overlap; i++ {
+			xx[i] = int16(MULT16_16_Q15(x[i], window[i]))
+			xx[n-i-1] = int16(MULT16_16_Q15(x[n-i-1], window[i]))
+		}
+		xptr = xx
+	}
+	shift = 0
+	{
+		var ac0 int32
+		ac0 = int32(1 + (n << 7))
+		if n&1 != 0 {
+			ac0 += SHR32(MULT16_16(xptr[0], xptr[0]), 9)
+		}
+		for i = (n & 1); i < n; i += 2 {
+			ac0 += SHR32(MULT16_16(xptr[i], xptr[i]), 9)
+			ac0 += SHR32(MULT16_16(xptr[i+1], xptr[i+1]), 9)
+		}
 
 		shift = int(Ilog2(ac0)) - 30 + 10
-		shift = (shift + 1) / 2
-		for i = 0; i < n; i++ {
-			xx[i] = int16(VSHR32(xx[i], shift))
+		shift = (shift) / 2
+		if shift > 0 {
+			for i = 0; i < n; i++ {
+				xx[i] = int16(PSHR32(xptr[i], shift))
+			}
+			xptr = xx
+		} else {
+			shift = 0
 		}
 	}
-	for lag >= 0 {
+	PitchXcorr(xptr, xptr, ac, fastN, lag+1, arch)
+	for k = 0; k <= lag; k++ {
 		d = 0
-		for i = lag; i < n; i++ {
-			d += int32(xx[i]) * int32(xx[i-lag])
+		for i = k + fastN; i < n; i++ {
+			d = MAC16_16(d, xptr[i], xptr[i-k])
 		}
-		ac[lag] = d
-		// printf ("%f ", ac[lag]);
-		lag--
+		ac[k] += d
 	}
-	// printf ("\n");
-	ac[0] += 10
+	shift = 2 * shift
+	if shift <= 0 {
+		ac[0] += SHL32(int32(1), -shift)
+	}
+	if ac[0] < 268435456 {
+		var shift2 int = 29 - EC_ILOG(uint32(ac[0]))
+		for i = 0; i <= lag; i++ {
+			ac[i] = SHL32(ac[i], shift2)
+		}
+		shift -= shift2
+	} else if ac[0] >= 536870912 {
+		var shift2 int = 1
+		if ac[0] >= 1073741824 {
+			shift2++
+		}
+		for i = 0; i <= lag; i++ {
+			ac[i] = SHR32(ac[i], shift2)
+		}
+		shift += shift2
+	}
+
+	return shift
 }

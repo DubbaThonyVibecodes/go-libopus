@@ -29,6 +29,9 @@ const (
 	MU_LTP_QUANT_MB float32 = 0.025
 	MU_LTP_QUANT_WB float32 = 0.02
 
+	// Max cumulative LTP gain
+	MAX_SUM_LOG_GAIN_DB float32 = 250.0
+
 	// High pass filtering
 
 	// Smoothing parameters for low end of pitch frequency range estimation

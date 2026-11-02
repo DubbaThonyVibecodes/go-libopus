@@ -9,17 +9,14 @@ import "github.com/DubbaThonyVibecodes/go-libopus/celt"
 /****************/
 //
 // C: opus_int silk_decode_frame(silk_decoder_state *psDec, ec_dec *psRangeDec, opus_int16 pOut[],
-// opus_int32 *pN, opus_int lostFlag, opus_int condCoding)
-func (psDec *DecoderState) DecodeFrame(psRangeDec *celt.EcDec, pOut []int16, pN *int32, lostFlag int, condCoding int) int {
+// opus_int32 *pN, opus_int lostFlag, opus_int condCoding, int arch)
+func (psDec *DecoderState) DecodeFrame(psRangeDec *celt.EcDec, pOut []int16, pN *int32, lostFlag int, condCoding int, arch int) int {
 	var psDecCtrl *DecoderControl
 	var L, mv_len int
 	ret := 0
-	var pulses []int
 
 	L = psDec.frame_length
 	psDecCtrl = new(DecoderControl)
-	pulses = make([]int, (L+SHELL_CODEC_FRAME_LENGTH-1) &
-		^(SHELL_CODEC_FRAME_LENGTH-1))
 	psDecCtrl.LTP_scale_Q14 = 0
 
 	/* Safety checks */
@@ -27,6 +24,9 @@ func (psDec *DecoderState) DecodeFrame(psRangeDec *celt.EcDec, pOut []int16, pN 
 
 	if lostFlag == FLAG_DECODE_NORMAL ||
 		(lostFlag == FLAG_DECODE_LBRR && psDec.LBRR_flags[psDec.nFramesDecoded] == 1) {
+		var pulses []int16
+		pulses = make([]int16, (L+SHELL_CODEC_FRAME_LENGTH-1) &
+			^(SHELL_CODEC_FRAME_LENGTH-1))
 		/*********************************************/
 		/* Decode quantization indices of side info  */
 		/*********************************************/
@@ -46,12 +46,12 @@ func (psDec *DecoderState) DecodeFrame(psRangeDec *celt.EcDec, pOut []int16, pN 
 		/********************************************************/
 		/* Run inverse NSQ                                      */
 		/********************************************************/
-		psDec.DecodeCore(psDecCtrl, pOut, pulses)
+		psDec.DecodeCore(psDecCtrl, pOut, pulses, arch)
 
 		/********************************************************/
 		/* Update PLC state                                     */
 		/********************************************************/
-		psDec.PLC(psDecCtrl, pOut, 0)
+		psDec.PLC(psDecCtrl, pOut, 0, arch)
 
 		psDec.lossCnt = 0
 		psDec.prevSignalType = int(psDec.indices.signalType)
@@ -61,7 +61,7 @@ func (psDec *DecoderState) DecodeFrame(psRangeDec *celt.EcDec, pOut []int16, pN 
 		psDec.first_frame_after_reset = 0
 	} else {
 		/* Handle packet loss by extrapolation */
-		psDec.PLC(psDecCtrl, pOut, 1)
+		psDec.PLC(psDecCtrl, pOut, 1, arch)
 	}
 
 	/*************************/
@@ -72,15 +72,15 @@ func (psDec *DecoderState) DecodeFrame(psRangeDec *celt.EcDec, pOut []int16, pN 
 	copy(psDec.outBuf[:mv_len], psDec.outBuf[psDec.frame_length:psDec.frame_length+mv_len])
 	copy(psDec.outBuf[mv_len:mv_len+psDec.frame_length], pOut[:psDec.frame_length])
 
-	/****************************************************************/
-	/* Ensure smooth connection of extrapolated and good frames     */
-	/****************************************************************/
-	psDec.PLCGlueFrames(pOut, L)
-
 	/************************************************/
 	/* Comfort noise generation / estimation        */
 	/************************************************/
 	psDec.CNG(psDecCtrl, pOut, L)
+
+	/****************************************************************/
+	/* Ensure smooth connection of extrapolated and good frames     */
+	/****************************************************************/
+	psDec.PLCGlueFrames(pOut, L)
 
 	/* Update some decoder state variables */
 	psDec.lagPrev = psDecCtrl.pitchL[psDec.nb_subfr-1]

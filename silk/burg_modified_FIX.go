@@ -2,9 +2,12 @@ package silk
 
 // C: silk/fixed/burg_modified_FIX.c
 
+import "github.com/DubbaThonyVibecodes/go-libopus/celt"
+
 // Compute reflection coefficients from input signal
 //
-// C: void silk_burg_modified(opus_int32 *res_nrg, opus_int *res_nrg_Q, opus_int32 A_Q16[], const opus_int16 x[], const opus_int32 minInvGain_Q30, const opus_int subfr_length, const opus_int nb_subfr, const opus_int D)
+// C: void silk_burg_modified_c(opus_int32 *res_nrg, opus_int *res_nrg_Q, opus_int32 A_Q16[], const opus_int16 x[], const opus_int32 minInvGain_Q30, const opus_int subfr_length, const opus_int nb_subfr, const opus_int D, int arch)
+// C: #define silk_burg_modified(res_nrg, res_nrg_Q, A_Q16, x, minInvGain_Q30, subfr_length, nb_subfr, D, arch) ((void)(arch), silk_burg_modified_c(res_nrg, res_nrg_Q, A_Q16, x, minInvGain_Q30, subfr_length, nb_subfr, D, arch))
 func BurgModified(
 	res_nrg *int32, // O    Residual energy
 	res_nrg_Q *int, // O    Residual energy Q value
@@ -14,6 +17,7 @@ func BurgModified(
 	subfr_length int, // I    Input signal subframe length (incl. D preceding samples)
 	nb_subfr int, // I    Number of subframes stacked in x
 	D int, // I    Order
+	arch int, // I    Run-time architecture
 ) {
 	const MAX_FRAME_SIZE = 384 // subfr_length * nb_subfr = ( 0.005 * 16000 + 16 ) * 4 = 384
 
@@ -22,7 +26,7 @@ func BurgModified(
 	const MIN_RSHIFTS = -16
 	const MAX_RSHIFTS = (32 - QA)
 
-	var k, n, s, lz, rshifts, rshifts_extra, reached_max_gain int
+	var k, n, s, lz, rshifts, reached_max_gain int
 	var C0, num, nrg, rc_Q31, invGain_Q30, Atmp_QA, Atmp1, tmp1, tmp2, x1, x2 int32
 	var x_ptr []int16
 	var C_first_row [SILK_MAX_ORDER_LPC]int32
@@ -30,27 +34,28 @@ func BurgModified(
 	var Af_QA [SILK_MAX_ORDER_LPC]int32
 	var CAf [SILK_MAX_ORDER_LPC + 1]int32
 	var CAb [SILK_MAX_ORDER_LPC + 1]int32
+	var xcorr [SILK_MAX_ORDER_LPC]int32
+	var C0_64 int64
 
 	silk_assert(subfr_length*nb_subfr <= MAX_FRAME_SIZE)
 
 	// Compute autocorrelations, added over subframes
-	SumSqrShift(&C0, &rshifts, x, nb_subfr*subfr_length)
+	C0_64 = InnerProd16Aligned64(x, x, subfr_length*nb_subfr, arch)
+	lz = int(CLZ64(C0_64))
+	rshifts = 32 + 1 + N_BITS_HEAD_ROOM - lz
 	if rshifts > MAX_RSHIFTS {
-		C0 = LSHIFT32(C0, rshifts-MAX_RSHIFTS)
-		silk_assert(C0 > 0)
 		rshifts = MAX_RSHIFTS
-	} else {
-		lz = int(CLZ32(C0)) - 1
-		rshifts_extra = N_BITS_HEAD_ROOM - lz
-		if rshifts_extra > 0 {
-			rshifts_extra = min(rshifts_extra, MAX_RSHIFTS-rshifts)
-			C0 = RSHIFT32(C0, rshifts_extra)
-		} else {
-			rshifts_extra = max(rshifts_extra, MIN_RSHIFTS-rshifts)
-			C0 = LSHIFT32(C0, -rshifts_extra)
-		}
-		rshifts += rshifts_extra
 	}
+	if rshifts < MIN_RSHIFTS {
+		rshifts = MIN_RSHIFTS
+	}
+
+	if rshifts > 0 {
+		C0 = int32(RSHIFT64(C0_64, rshifts))
+	} else {
+		C0 = LSHIFT32(int32(C0_64), -rshifts)
+	}
+
 	CAf[0] = C0 + SMMUL(SILK_FIX_CONST(FIND_LPC_COND_FAC, 32), C0) + 1 // Q(-rshifts)
 	CAb[0] = CAf[0]
 	clear(C_first_row[:SILK_MAX_ORDER_LPC])
@@ -59,15 +64,23 @@ func BurgModified(
 			x_ptr = x[s*subfr_length:]
 			for n = 1; n < D+1; n++ {
 				C_first_row[n-1] += int32(RSHIFT64(
-					InnerProd16Aligned64(x_ptr, x_ptr[n:], subfr_length-n), rshifts))
+					InnerProd16Aligned64(x_ptr, x_ptr[n:], subfr_length-n, arch), rshifts))
 			}
 		}
 	} else {
 		for s = 0; s < nb_subfr; s++ {
+			var i int
+			var d int32
 			x_ptr = x[s*subfr_length:]
+			celt.PitchXcorr(x_ptr, x_ptr[1:], xcorr[:], subfr_length-D, D, arch)
 			for n = 1; n < D+1; n++ {
-				C_first_row[n-1] += LSHIFT32(
-					InnerProdAligned(x_ptr, x_ptr[n:], subfr_length-n), -rshifts)
+				for i, d = n+subfr_length-D, 0; i < subfr_length; i++ {
+					d = celt.MAC16_16(d, x_ptr[i], x_ptr[i-n])
+				}
+				xcorr[n-1] += d
+			}
+			for n = 1; n < D+1; n++ {
+				C_first_row[n-1] += LSHIFT32(xcorr[n-1], -rshifts)
 			}
 		}
 	}
@@ -116,8 +129,11 @@ func BurgModified(
 					C_first_row[k] = MLA(C_first_row[k], x1, x_ptr[n-k-1])          // Q( -rshifts )
 					C_last_row[k] = MLA(C_last_row[k], x2, x_ptr[subfr_length-n+k]) // Q( -rshifts )
 					Atmp1 = RSHIFT_ROUND(Af_QA[k], QA-17)                           // Q17
-					tmp1 = MLA(tmp1, x_ptr[n-k-1], Atmp1)                           // Q17
-					tmp2 = MLA(tmp2, x_ptr[subfr_length-n+k], Atmp1)                // Q17
+					// We sometimes have get overflows in the multiplications (even beyond +/- 2^32),
+					// but they cancel each other and the real result seems to always fit in a 32-bit
+					// signed integer. This was determined experimentally, not theoretically (unfortunately).
+					tmp1 = MLA_ovflw(tmp1, x_ptr[n-k-1], Atmp1)            // Q17
+					tmp2 = MLA_ovflw(tmp2, x_ptr[subfr_length-n+k], Atmp1) // Q17
 				}
 				tmp1 = -tmp1 // Q17
 				tmp2 = -tmp2 // Q17
@@ -170,12 +186,14 @@ func BurgModified(
 			// Max prediction gain exceeded; set reflection coefficient such that max prediction gain is exactly hit
 			tmp2 = (int32(1) << 30) - DIV32_varQ(minInvGain_Q30, invGain_Q30, 30) // Q30
 			rc_Q31 = SQRT_APPROX(tmp2)                                            // Q15
-			// Newton-Raphson iteration
-			rc_Q31 = RSHIFT32(rc_Q31+DIV32(tmp2, rc_Q31), 1) // Q15
-			rc_Q31 = LSHIFT32(rc_Q31, 16)                    // Q31
-			if num < 0 {
-				// Ensure adjusted reflection coefficients has the original sign
-				rc_Q31 = -rc_Q31
+			if rc_Q31 > 0 {
+				// Newton-Raphson iteration
+				rc_Q31 = RSHIFT32(rc_Q31+DIV32(tmp2, rc_Q31), 1) // Q15
+				rc_Q31 = LSHIFT32(rc_Q31, 16)                    // Q31
+				if num < 0 {
+					// Ensure adjusted reflection coefficients has the original sign
+					rc_Q31 = -rc_Q31
+				}
 			}
 			invGain_Q30 = minInvGain_Q30
 			reached_max_gain = 1
@@ -218,12 +236,12 @@ func BurgModified(
 		if rshifts > 0 {
 			for s = 0; s < nb_subfr; s++ {
 				x_ptr = x[s*subfr_length:]
-				C0 -= int32(RSHIFT64(InnerProd16Aligned64(x_ptr, x_ptr, D), rshifts))
+				C0 -= int32(RSHIFT64(InnerProd16Aligned64(x_ptr, x_ptr, D, arch), rshifts))
 			}
 		} else {
 			for s = 0; s < nb_subfr; s++ {
 				x_ptr = x[s*subfr_length:]
-				C0 -= LSHIFT32(InnerProdAligned(x_ptr, x_ptr, D), -rshifts)
+				C0 -= LSHIFT32(InnerProdAligned(x_ptr, x_ptr, D, arch), -rshifts)
 			}
 		}
 		// Approximate residual energy

@@ -5,7 +5,7 @@ package silk
 // Calculates residual energies of input subframes where all subframes have LPC_order
 // of preceding samples
 //
-// C: void silk_residual_energy_FIX(opus_int32 nrgs[ MAX_NB_SUBFR ], opus_int nrgsQ[ MAX_NB_SUBFR ], const opus_int16 x[], opus_int16 a_Q12[ 2 ][ MAX_LPC_ORDER ], const opus_int32 gains[ MAX_NB_SUBFR ], const opus_int subfr_length, const opus_int nb_subfr, const opus_int LPC_order)
+// C: void silk_residual_energy_FIX(opus_int32 nrgs[ MAX_NB_SUBFR ], opus_int nrgsQ[ MAX_NB_SUBFR ], const opus_int16 x[], opus_int16 a_Q12[ 2 ][ MAX_LPC_ORDER ], const opus_int32 gains[ MAX_NB_SUBFR ], const opus_int subfr_length, const opus_int nb_subfr, const opus_int LPC_order, int arch)
 func ResidualEnergyFIX(
 	nrgs []int32, // O    Residual energy per subframe
 	nrgsQ []int, // O    Q value per subframe
@@ -15,10 +15,11 @@ func ResidualEnergyFIX(
 	subfr_length int, // I    Subframe length
 	nb_subfr int, // I    Number of subframes
 	LPC_order int, // I    LPC order
+	arch int, // I    Run-time architecture
 ) {
 	var offset, i, j, rshift, lz1, lz2 int
 	var LPC_res_ptr int // C: opus_int16 *LPC_res_ptr; index into LPC_res[]
-	var LPC_res [(MAX_FRAME_LENGTH + MAX_NB_SUBFR*MAX_LPC_ORDER) / 2]int16
+	var LPC_res []int16
 	var x_ptr int // C: const opus_int16 *x_ptr; index into x[]
 	var tmp32 int32
 
@@ -26,9 +27,11 @@ func ResidualEnergyFIX(
 	offset = LPC_order + subfr_length
 
 	// Filter input to create the LPC residual for each frame half, and measure subframe energies
+	LPC_res = make([]int16, (MAX_NB_SUBFR>>1)*offset)
+	silk_assert((nb_subfr>>1)*(MAX_NB_SUBFR>>1) == nb_subfr)
 	for i = 0; i < nb_subfr>>1; i++ {
 		// Calculate half frame LPC residual signal including preceding samples
-		LPCAnalysisFilter(LPC_res[:], x[x_ptr:], a_Q12[i][:], int32((MAX_NB_SUBFR>>1)*offset), int32(LPC_order))
+		LPCAnalysisFilter(LPC_res, x[x_ptr:], a_Q12[i][:], int32((MAX_NB_SUBFR>>1)*offset), int32(LPC_order), arch)
 
 		// Point to first subframe of the just calculated LPC residual signal
 		LPC_res_ptr = LPC_order

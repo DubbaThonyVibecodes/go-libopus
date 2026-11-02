@@ -1,5 +1,7 @@
 package silk
 
+import "github.com/DubbaThonyVibecodes/go-libopus/celt"
+
 // C: silk/fixed/vector_ops_FIX.c
 
 // Copy and multiply a vector by a constant
@@ -41,25 +43,23 @@ func ScaleVector32Q26Lshift18(
 //   - len should be positive 16bit integer.
 //   - only when len>6, memory access can be reduced by half.
 //
-// C: opus_int32 silk_inner_prod_aligned(const opus_int16 *const inVec1, const opus_int16 *const inVec2, const opus_int len)
+// C: opus_int32 silk_inner_prod_aligned(const opus_int16 *const inVec1, const opus_int16 *const inVec2, const opus_int len, int arch)
 func InnerProdAligned(
 	inVec1 []int16, //    I input vector 1
 	inVec2 []int16, //    I input vector 2
 	len int, //    I vector lengths
+	arch int, //    I Run-time architecture
 ) int32 {
-	var i int
-	var sum int32 = 0
-	for i = 0; i < len; i++ {
-		sum = SMLABB(sum, inVec1[i], inVec2[i])
-	}
-	return sum
+	return celt.InnerProd(inVec1, inVec2, len, arch)
 }
 
-// C: opus_int64 silk_inner_prod16_aligned_64(const opus_int16 *inVec1, const opus_int16 *inVec2, const opus_int len)
+// C: opus_int64 silk_inner_prod16_aligned_64_c(const opus_int16 *inVec1, const opus_int16 *inVec2, const opus_int len)
+// C: #define silk_inner_prod16_aligned_64(inVec1, inVec2, len, arch) ((void)(arch),silk_inner_prod16_aligned_64_c(inVec1, inVec2, len))
 func InnerProd16Aligned64(
 	inVec1 []int16, //    I input vector 1
 	inVec2 []int16, //    I input vector 2
 	len int, //    I vector lengths
+	arch int, //    I Run-time architecture
 ) int64 {
 	var i int
 	var sum int64 = 0
@@ -67,38 +67,4 @@ func InnerProd16Aligned64(
 		sum = SMLALBB(sum, inVec1[i], inVec2[i])
 	}
 	return sum
-}
-
-// Function that returns the maximum absolut value of the input vector
-//
-// C: opus_int16 silk_int16_array_maxabs(const opus_int16 *vec, const opus_int32 len)
-func Int16ArrayMaxabs( // O   Maximum absolute value, max: 2^15-1
-	vec []int16, // I   Input vector  [len]
-	len int32, // I   Length of input vector
-) int16 {
-	var max, i, lvl, ind int32 = 0, 0, 0, 0
-	if len == 0 {
-		return 0
-	}
-
-	ind = len - 1
-	max = SMULBB(vec[ind], vec[ind])
-	for i = len - 2; i >= 0; i-- {
-		lvl = SMULBB(vec[i], vec[i])
-		if lvl > max {
-			max = lvl
-			ind = i
-		}
-	}
-
-	// Do not return 32768, as it will not fit in an int16 so may lead to problems later on
-	if max >= 1073676289 { // (2^15-1)^2 = 1073676289
-		return int16_MAX
-	} else {
-		if vec[ind] < 0 {
-			return -vec[ind]
-		} else {
-			return vec[ind]
-		}
-	}
 }

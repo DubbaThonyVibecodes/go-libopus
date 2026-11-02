@@ -132,6 +132,7 @@ type EncoderState struct {
 	pitchEstimationThreshold_Q16  int32         // Threshold for pitch estimator
 	LTPQuantLowComplexity         int           // Flag for low complexity LTP quantization
 	mu_LTP_Q9                     int           // Rate-distortion tradeoff in LTP quantization
+	sum_log_gain_Q7               int32         // Cumulative max prediction gain
 	NLSF_MSVQ_Survivors           int           // Number of survivors in NLSF MSVQ
 	first_frame_after_reset       int           // Flag for deactivating NLSF interpolation, pitch prediction
 	controlled_since_last_payload int           // Flag for ensuring codec_control only runs once per packet
@@ -151,6 +152,8 @@ type EncoderState struct {
 
 	indices SideInfoIndices
 	pulses  [MAX_FRAME_LENGTH]int8
+
+	arch int
 
 	// Input/output buffering
 	inputBuf         [MAX_FRAME_LENGTH + 2]int16 // Buffer containing input signal

@@ -11,7 +11,9 @@ import "unsafe"
 //
 // The C code reinterprets scalar buffers as kiss_fft_cpx arrays with casts;
 // cpxView does the same without copying (two consecutive int32 == one
-// kiss_fft_cpx, which has no padding).
+// KissFftCpx, which has no padding).
+//
+// clt_mdct_init / clt_mdct_clear are CUSTOM_MODES only and not ported.
 
 type mdct_lookup struct {
 	n        int
@@ -22,26 +24,40 @@ type mdct_lookup struct {
 
 // cpxView aliases a scalar buffer as complex pairs, like the C cast
 // (kiss_fft_cpx *)f.
-func cpxView(f []int32) []kiss_fft_cpx {
-	return unsafe.Slice((*kiss_fft_cpx)(unsafe.Pointer(&f[0])), len(f)/2)
+func cpxView(f []int32) []KissFftCpx {
+	return unsafe.Slice((*KissFftCpx)(unsafe.Pointer(&f[0])), len(f)/2)
 }
 
 // MdctForward computes a forward MDCT and scales by 4/N; trashes the input array.
 //
-// C: void clt_mdct_forward(const mdct_lookup *l, kiss_fft_scalar *in, kiss_fft_scalar * OPUS_RESTRICT out,
+// C: void clt_mdct_forward_c(const mdct_lookup *l, kiss_fft_scalar *in, kiss_fft_scalar * OPUS_RESTRICT out,
 //
-//	const opus_val16 *window, int overlap, int shift, int stride)
-func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift, stride int) {
+//	const opus_val16 *window, int overlap, int shift, int stride, int arch)
+//
+// C: #define clt_mdct_forward(_l, _in, _out, _window, _overlap, _shift, _stride, _arch) clt_mdct_forward_c(...)
+func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift, stride int, arch int) {
 	var i int
 	var N, N2, N4 int
-	var sine int16
+	var st *kiss_fft_state = l.kfft[shift]
+	var trig []int16
+	var scale int16
+	// Allows us to scale with MULT16_32_Q16(), which is faster than
+	// MULT16_32_Q15() on ARM.
+	var scale_shift int = st.scale_shift - 1
+	_ = arch
+	scale = st.scale
+
 	N = l.n
-	N >>= uint(shift)
+	trig = l.trig
+	for i = 0; i < shift; i++ {
+		N >>= 1
+		trig = trig[N:]
+	}
 	N2 = N >> 1
 	N4 = N >> 2
+
 	f := make([]int32, N2)
-	// sin(x) ~= x here
-	sine = int16(TRIG_UPSCALE * (int32(QCONST16(0.7853981, 15)) + int32(N2)) / int32(N))
+	f2 := make([]KissFftCpx, N4)
 
 	// Consider the input to be composed of four blocks: [a, b, c, d]
 	// Window, shuffle, fold
@@ -52,7 +68,7 @@ func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift
 		yp := 0
 		wp1 := overlap >> 1
 		wp2 := (overlap >> 1) - 1
-		for i = 0; i < (overlap >> 2); i++ {
+		for i = 0; i < ((overlap + 3) >> 2); i++ {
 			// Real part arranged as -d-cR, Imag part arranged as -b+aR
 			f[yp] = MULT16_32_Q15(window[wp2], in[xp1+N2]) + MULT16_32_Q15(window[wp1], in[xp2])
 			yp++
@@ -65,7 +81,7 @@ func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift
 		}
 		wp1 = 0
 		wp2 = overlap - 1
-		for ; i < N4-(overlap>>2); i++ {
+		for ; i < N4-((overlap+3)>>2); i++ {
 			// Real part arranged as a-bR, Imag part arranged as -c-dR
 			f[yp] = in[xp2]
 			yp++
@@ -89,23 +105,29 @@ func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift
 	// Pre-rotation
 	{
 		yp := 0
-		t := l.trig
+		t := trig
 		for i = 0; i < N4; i++ {
+			var yc KissFftCpx
+			var t0, t1 int16
 			var re, im, yr, yi int32
+			t0 = t[i]
+			t1 = t[N4+i]
 			re = f[yp]
-			im = f[yp+1]
-			yr = -S_MUL(re, t[i<<uint(shift)]) - S_MUL(im, t[(N4-i)<<uint(shift)])
-			yi = -S_MUL(im, t[i<<uint(shift)]) + S_MUL(re, t[(N4-i)<<uint(shift)])
-			// works because the cos is nearly one
-			f[yp] = yr + S_MUL(yi, sine)
 			yp++
-			f[yp] = yi - S_MUL(yr, sine)
+			im = f[yp]
 			yp++
+			yr = S_MUL(re, t0) - S_MUL(im, t1)
+			yi = S_MUL(im, t0) + S_MUL(re, t1)
+			yc.R = yr
+			yc.I = yi
+			yc.R = PSHR32(MULT16_32_Q16(scale, yc.R), scale_shift)
+			yc.I = PSHR32(MULT16_32_Q16(scale, yc.I), scale_shift)
+			f2[st.bitrev[i]] = yc
 		}
 	}
 
-	// N/4 complex FFT, down-scales by 4/N
-	Fft(l.kfft[shift], cpxView(f), cpxView(in[:N2]))
+	// N/4 complex FFT, does not downscale anymore
+	FftImpl(st, f2)
 
 	// Post-rotate
 	{
@@ -113,15 +135,15 @@ func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift
 		fp := 0
 		yp1 := 0
 		yp2 := stride * (N2 - 1)
-		t := l.trig
+		t := trig
+		// Temp pointers to make it really clear to the compiler what we're doing
 		for i = 0; i < N4; i++ {
 			var yr, yi int32
-			yr = S_MUL(in[fp+1], t[(N4-i)<<uint(shift)]) + S_MUL(in[fp], t[i<<uint(shift)])
-			yi = S_MUL(in[fp], t[(N4-i)<<uint(shift)]) - S_MUL(in[fp+1], t[i<<uint(shift)])
-			// works because the cos is nearly one
-			out[yp1] = yr - S_MUL(yi, sine)
-			out[yp2] = yi + S_MUL(yr, sine)
-			fp += 2
+			yr = S_MUL(f2[fp].I, t[N4+i]) - S_MUL(f2[fp].R, t[i])
+			yi = S_MUL(f2[fp].R, t[N4+i]) + S_MUL(f2[fp].I, t[i])
+			out[yp1] = yr
+			out[yp2] = yi
+			fp++
 			yp1 += 2 * stride
 			yp2 -= 2 * stride
 		}
@@ -129,127 +151,105 @@ func MdctForward(l *mdct_lookup, in, out []int32, window []int16, overlap, shift
 }
 
 // MdctBackward computes a backward MDCT (no scaling) and performs weighted
-// overlap-add (scales implicitly by 1/2). outOff is the index in out the C
-// `out` pointer refers to; the C code writes from out-(N2-overlap)/2 onwards,
-// so callers pass a slice that includes that headroom.
+// overlap-add (scales implicitly by 1/2).
 //
-// C: void clt_mdct_backward(const mdct_lookup *l, kiss_fft_scalar *in, kiss_fft_scalar * OPUS_RESTRICT out,
+// C: void clt_mdct_backward_c(const mdct_lookup *l, kiss_fft_scalar *in, kiss_fft_scalar * OPUS_RESTRICT out,
 //
-//	const opus_val16 * OPUS_RESTRICT window, int overlap, int shift, int stride)
-func MdctBackward(l *mdct_lookup, in []int32, out []int32, outOff int, window []int16, overlap, shift, stride int) {
+//	const opus_val16 * OPUS_RESTRICT window, int overlap, int shift, int stride, int arch)
+//
+// C: #define clt_mdct_backward(_l, _in, _out, _window, _overlap, _shift, _stride, _arch) clt_mdct_backward_c(...)
+func MdctBackward(l *mdct_lookup, in []int32, out []int32, window []int16, overlap, shift, stride int, arch int) {
 	var i int
 	var N, N2, N4 int
-	var sine int16
+	var trig []int16
+	_ = arch
+
 	N = l.n
-	N >>= uint(shift)
+	trig = l.trig
+	for i = 0; i < shift; i++ {
+		N >>= 1
+		trig = trig[N:]
+	}
 	N2 = N >> 1
 	N4 = N >> 2
-	f := make([]int32, N2)
-	f2 := make([]int32, N2)
-	// sin(x) ~= x here
-	sine = int16(TRIG_UPSCALE * (int32(QCONST16(0.7853981, 15)) + int32(N2)) / int32(N))
 
 	// Pre-rotate
 	{
 		// Temp pointers to make it really clear to the compiler what we're doing
 		xp1 := 0
 		xp2 := stride * (N2 - 1)
-		yp := 0
-		t := l.trig
+		yp := out[(overlap >> 1):]
+		t := trig
+		bitrev := l.kfft[shift].bitrev
 		for i = 0; i < N4; i++ {
+			var rev int
 			var yr, yi int32
-			yr = -S_MUL(in[xp2], t[i<<uint(shift)]) + S_MUL(in[xp1], t[(N4-i)<<uint(shift)])
-			yi = -S_MUL(in[xp2], t[(N4-i)<<uint(shift)]) - S_MUL(in[xp1], t[i<<uint(shift)])
-			// works because the cos is nearly one
-			f2[yp] = yr - S_MUL(yi, sine)
-			yp++
-			f2[yp] = yi + S_MUL(yr, sine)
-			yp++
+			rev = int(bitrev[i])
+			yr = S_MUL(in[xp2], t[i]) + S_MUL(in[xp1], t[N4+i])
+			yi = S_MUL(in[xp1], t[i]) - S_MUL(in[xp2], t[N4+i])
+			// We swap real and imag because we use an FFT instead of an IFFT.
+			yp[2*rev+1] = yr
+			yp[2*rev] = yi
+			// Storing the pre-rotation directly in the bitrev order.
 			xp1 += 2 * stride
 			xp2 -= 2 * stride
 		}
 	}
 
-	// Inverse N/4 complex FFT. This one should *not* downscale even in fixed-point
-	Ifft(l.kfft[shift], cpxView(f2), cpxView(f))
+	FftImpl(l.kfft[shift], cpxView(out[(overlap>>1):(overlap>>1)+N2]))
 
-	// Post-rotate
+	// Post-rotate and de-shuffle from both ends of the buffer at once to make
+	// it in-place.
 	{
-		fp := 0
-		t := l.trig
-
-		for i = 0; i < N4; i++ {
+		yp0 := (overlap >> 1)
+		yp1 := (overlap >> 1) + N2 - 2
+		t := trig
+		// Loop to (N4+1)>>1 to handle odd N4. When N4 is odd, the
+		// middle pair will be computed twice.
+		for i = 0; i < (N4+1)>>1; i++ {
 			var re, im, yr, yi int32
-			re = f[fp]
-			im = f[fp+1]
+			var t0, t1 int16
+			// We swap real and imag because we're using an FFT instead of an IFFT.
+			re = out[yp0+1]
+			im = out[yp0+0]
+			t0 = t[i]
+			t1 = t[N4+i]
 			// We'd scale up by 2 here, but instead it's done when mixing the windows
-			yr = S_MUL(re, t[i<<uint(shift)]) - S_MUL(im, t[(N4-i)<<uint(shift)])
-			yi = S_MUL(im, t[i<<uint(shift)]) + S_MUL(re, t[(N4-i)<<uint(shift)])
-			// works because the cos is nearly one
-			f[fp] = yr - S_MUL(yi, sine)
-			fp++
-			f[fp] = yi + S_MUL(yr, sine)
-			fp++
+			yr = S_MUL(re, t0) + S_MUL(im, t1)
+			yi = S_MUL(re, t1) - S_MUL(im, t0)
+			// We swap real and imag because we're using an FFT instead of an IFFT.
+			re = out[yp1+1]
+			im = out[yp1+0]
+			out[yp0+0] = yr
+			out[yp1+1] = yi
+
+			t0 = t[(N4 - i - 1)]
+			t1 = t[(N2 - i - 1)]
+			// We'd scale up by 2 here, but instead it's done when mixing the windows
+			yr = S_MUL(re, t0) + S_MUL(im, t1)
+			yi = S_MUL(re, t1) - S_MUL(im, t0)
+			out[yp1+0] = yr
+			out[yp0+1] = yi
+			yp0 += 2
+			yp1 -= 2
 		}
 	}
-	// De-shuffle the components for the middle of the window only
-	{
-		fp1 := 0
-		fp2 := N2 - 1
-		yp := 0
-		for i = 0; i < N4; i++ {
-			f2[yp] = -f[fp1]
-			yp++
-			f2[yp] = f[fp2]
-			yp++
-			fp1 += 2
-			fp2 -= 2
-		}
-	}
-	o := outOff - ((N2 - overlap) >> 1)
+
 	// Mirror on both sides for TDAC
 	{
-		fp1 := N4 - 1
-		xp1 := o + N2 - 1
-		yp1 := o + N4 - overlap/2
+		xp1 := overlap - 1
+		yp1 := 0
 		wp1 := 0
 		wp2 := overlap - 1
-		for i = 0; i < N4-overlap/2; i++ {
-			out[xp1] = f2[fp1]
-			xp1--
-			fp1--
-		}
-		for ; i < N4; i++ {
-			var x1 int32
-			x1 = f2[fp1]
-			fp1--
-			out[yp1] += -MULT16_32_Q15(window[wp1], x1)
+
+		for i = 0; i < overlap/2; i++ {
+			var x1, x2 int32
+			x1 = out[xp1]
+			x2 = out[yp1]
+			out[yp1] = MULT16_32_Q15(window[wp2], x2) - MULT16_32_Q15(window[wp1], x1)
 			yp1++
-			out[xp1] += MULT16_32_Q15(window[wp2], x1)
+			out[xp1] = MULT16_32_Q15(window[wp1], x2) + MULT16_32_Q15(window[wp2], x1)
 			xp1--
-			wp1++
-			wp2--
-		}
-	}
-	{
-		fp2 := N4
-		xp2 := o + N2
-		yp2 := o + N - 1 - (N4 - overlap/2)
-		wp1 := 0
-		wp2 := overlap - 1
-		for i = 0; i < N4-overlap/2; i++ {
-			out[xp2] = f2[fp2]
-			xp2++
-			fp2++
-		}
-		for ; i < N4; i++ {
-			var x2 int32
-			x2 = f2[fp2]
-			fp2++
-			out[yp2] = MULT16_32_Q15(window[wp1], x2)
-			yp2--
-			out[xp2] = MULT16_32_Q15(window[wp2], x2)
-			xp2++
 			wp1++
 			wp2--
 		}

@@ -1,5 +1,5 @@
 {
- "oracle": "libopus 1.0.3-fixed",
+ "oracle": "libopus 1.1.5-fixed",
  "cases": [
   {
    "name": "dec/aria_48k_audio_32k.plain",
@@ -12,7 +12,7 @@
    ],
    "pkt": "enc/aria_48k_audio_32k.pkt",
    "trace": "dec/aria_48k_audio_32k.plain.trace.gz",
-   "pcmSha256": "4a97b6827a2783ae3ed15aaa1f6d8b38390d436975a339145be36d9c5960a6e8",
+   "pcmSha256": "73a4dfb1369067823e15855d6d4695be931770a6c65ea38f048167373cd8fb04",
    "pcmBytes": 1155840
   },
   {
@@ -30,7 +30,7 @@
    ],
    "pkt": "enc/aria_48k_audio_64k.pkt",
    "trace": "dec/aria_48k_audio_64k.loss10_s5.trace.gz",
-   "pcmSha256": "f6360e6949667dd7acc26a744b5fc5a11a5b7f47a3ffb085b6b777e96b0b37d0",
+   "pcmSha256": "7c4d0cd41902c1b9b15c5546d505189dcbc1eb255125c405847a6d16432e4e44",
    "pcmBytes": 1155840
   },
   {
@@ -44,7 +44,7 @@
    ],
    "pkt": "enc/aria_48k_audio_64k.pkt",
    "trace": "dec/aria_48k_audio_64k.plain.trace.gz",
-   "pcmSha256": "e8cc5607f08e0a72b4b50c98ebf8744d85d8520c9fa7f874e1d0f88b7f8f851b",
+   "pcmSha256": "db9d80f1c083542c7668caab85e266625d98c8da3b486f851ecd8ca873902ee7",
    "pcmBytes": 1155840
   },
   {
@@ -58,7 +58,7 @@
    ],
    "pkt": "enc/aria_48k_audio_dtx.pkt",
    "trace": "dec/aria_48k_audio_dtx.plain.trace.gz",
-   "pcmSha256": "48c614a5fb50b5c5b0c8bf7ee414ecb149888842e8cd2097ae48f76342798075",
+   "pcmSha256": "f301347782f57bcb4eede31ebf9b9c5f94cabb6b99ab0217bc84ba43f7468d40",
    "pcmBytes": 1155840
   },
   {
@@ -72,7 +72,7 @@
    ],
    "pkt": "enc/aria_48k_voip_dtx.pkt",
    "trace": "dec/aria_48k_voip_dtx.plain.trace.gz",
-   "pcmSha256": "681aaacd3db9bfbecac3c201d5587de1b1b84cb18de3b6533549c68fbf737ef1",
+   "pcmSha256": "c669ecf50bb5014a7c1fc82f72d5c5177664d68e73d7cea6529d61c049124361",
    "pcmBytes": 1155840
   },
   {
@@ -86,7 +86,7 @@
    ],
    "pkt": "enc/mix_16k_voip_20k.pkt",
    "trace": "dec/mix_16k_voip_20k.plain.trace.gz",
-   "pcmSha256": "68c60d8054eca0a460e735149df848985d5f490b05c1f7e2f2704c107982090d",
+   "pcmSha256": "2752c3564203f14523cf1b66e3b14e7de3d7dec953b32d5d00a722d3f14b75d1",
    "pcmBytes": 385280
   },
   {
@@ -100,7 +100,7 @@
    ],
    "pkt": "enc/mix_48k_audio_32k.pkt",
    "trace": "dec/mix_48k_audio_32k.plain.trace.gz",
-   "pcmSha256": "987734c062ba7b3f83ec4f142341c241dad29f54edb5ac6733fcfa5723777ac5",
+   "pcmSha256": "71e551af0803c60bc21b8eb8861d77b79571eec7964cbc05f62c10616a998464",
    "pcmBytes": 1155840
   },
   {
@@ -114,7 +114,7 @@
    ],
    "pkt": "enc/mix_48k_audio_64k.pkt",
    "trace": "dec/mix_48k_audio_64k.as1ch.trace.gz",
-   "pcmSha256": "aa177d70ad317f50afe5ded4d1379a04efc8da3976632f293685c3081229760d",
+   "pcmSha256": "eda3ef7bf18d20235726545af4f64dc3eea1e47f09f689094d40d3bd7048e930",
    "pcmBytes": 577920
   },
   {
@@ -132,7 +132,7 @@
    ],
    "pkt": "enc/mix_48k_audio_64k.pkt",
    "trace": "dec/mix_48k_audio_64k.loss10_s6.trace.gz",
-   "pcmSha256": "df3030360fce3cd0b998f5305e51670d9c76c2fad3001c2eea642d4a390087a6",
+   "pcmSha256": "4b4f941f86a567a28055afd9410714268fdb65a5853156e488528ceac3174f8c",
    "pcmBytes": 1155840
   },
   {
@@ -146,7 +146,7 @@
    ],
    "pkt": "enc/mix_48k_audio_64k.pkt",
    "trace": "dec/mix_48k_audio_64k.plain.trace.gz",
-   "pcmSha256": "6c843e0a933bf3edc5dfa38ef9de00fa5164e3e88552e4590225cd2de01f62ab",
+   "pcmSha256": "dc984d221b68e608bc30708d25515551138c74528346f0992d738a9d878f0bb0",
    "pcmBytes": 1155840
   },
   {
@@ -160,7 +160,7 @@
    ],
    "pkt": "enc/mix_48k_audio_forcemono.pkt",
    "trace": "dec/mix_48k_audio_forcemono.plain.trace.gz",
-   "pcmSha256": "2999d12e00fdab761dc9a93a6c8035fb1a1cbf2eccb614fef5e73eb88d8f9389",
+   "pcmSha256": "dbcd7ffd8e1cbb2bb54835f07b7f70d3386bf77a8a5b948aa83d314490cad76b",
    "pcmBytes": 1155840
   },
   {
@@ -174,8 +174,390 @@
    ],
    "pkt": "enc/mix_48k_audio_forcestereo_mono.pkt",
    "trace": "dec/mix_48k_audio_forcestereo_mono.plain.trace.gz",
-   "pcmSha256": "6bd96993f8a2be1ad706e852b5883c171090b102696755a0a523956b80404cd0",
+   "pcmSha256": "7ec241d8b087292743d5375c079d08d6cf729d8ab69f2e6b55f1c1e09ed0910c",
    "pcmBytes": 577920
+  },
+  {
+   "name": "dec/mix_48k_audio_framedur10.loss10_s40",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--lossperc",
+    "10",
+    "--seed",
+    "40"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur10.pkt",
+   "trace": "dec/mix_48k_audio_framedur10.loss10_s40.trace.gz",
+   "pcmSha256": "fed2efeb422bff61b01997c5dab1576faa729075ffca4038718d765b1d5d4036",
+   "pcmBytes": 1144320
+  },
+  {
+   "name": "dec/mix_48k_audio_framedur10.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur10.pkt",
+   "trace": "dec/mix_48k_audio_framedur10.plain.trace.gz",
+   "pcmSha256": "a039590089b62aa2b59e05c1b93c1269d6c0ddb2eb4007e37992d8161fe746fe",
+   "pcmBytes": 1144320
+  },
+  {
+   "name": "dec/mix_48k_audio_framedur20.loss10_s40",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--lossperc",
+    "10",
+    "--seed",
+    "40"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur20.pkt",
+   "trace": "dec/mix_48k_audio_framedur20.loss10_s40.trace.gz",
+   "pcmSha256": "4da5b540cb1d7071fab42011e45c32638575fedf6b7c64c5380024b7d05fd7cd",
+   "pcmBytes": 1148160
+  },
+  {
+   "name": "dec/mix_48k_audio_framedur20.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur20.pkt",
+   "trace": "dec/mix_48k_audio_framedur20.plain.trace.gz",
+   "pcmSha256": "0538d588aee820e78a023b5811ccf976427cd0414396084efde088cd8761c924",
+   "pcmBytes": 1148160
+  },
+  {
+   "name": "dec/mix_48k_audio_framedur2p5.loss10_s40",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--lossperc",
+    "10",
+    "--seed",
+    "40"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur2p5.pkt",
+   "trace": "dec/mix_48k_audio_framedur2p5.loss10_s40.trace.gz",
+   "pcmSha256": "423f70dae78deacdd6b2ed95011086f3944390dd04656ce808274f0135e6bc61",
+   "pcmBytes": 1141440
+  },
+  {
+   "name": "dec/mix_48k_audio_framedur2p5.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur2p5.pkt",
+   "trace": "dec/mix_48k_audio_framedur2p5.plain.trace.gz",
+   "pcmSha256": "f1fdeda7f5e24858a255d603721527e590c8762e4f2f075b217e7b02e68d8fab",
+   "pcmBytes": 1141440
+  },
+  {
+   "name": "dec/mix_48k_audio_framedur40.loss10_s40",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--lossperc",
+    "10",
+    "--seed",
+    "40"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur40.pkt",
+   "trace": "dec/mix_48k_audio_framedur40.loss10_s40.trace.gz",
+   "pcmSha256": "09f8e534d4059cd4016b914f14197a7a94453716dd2d3f146db581f699fdb8ea",
+   "pcmBytes": 1152000
+  },
+  {
+   "name": "dec/mix_48k_audio_framedur40.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur40.pkt",
+   "trace": "dec/mix_48k_audio_framedur40.plain.trace.gz",
+   "pcmSha256": "721809e8d1042e836b5824a3ae652d3a01e22f94e2dd58500d178f0495c7774d",
+   "pcmBytes": 1152000
+  },
+  {
+   "name": "dec/mix_48k_audio_framedur5.loss10_s40",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--lossperc",
+    "10",
+    "--seed",
+    "40"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur5.pkt",
+   "trace": "dec/mix_48k_audio_framedur5.loss10_s40.trace.gz",
+   "pcmSha256": "bd15fb1b6f12e5254443955d02f18aeb882de912e675ccc6b0400788a620b49f",
+   "pcmBytes": 1142400
+  },
+  {
+   "name": "dec/mix_48k_audio_framedur5.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur5.pkt",
+   "trace": "dec/mix_48k_audio_framedur5.plain.trace.gz",
+   "pcmSha256": "18456bf7982d6ac724fb8e62e3249630a235ca0038d5d728cd92a117167195c5",
+   "pcmBytes": 1142400
+  },
+  {
+   "name": "dec/mix_48k_audio_framedur60.loss10_s40",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--lossperc",
+    "10",
+    "--seed",
+    "40"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur60.pkt",
+   "trace": "dec/mix_48k_audio_framedur60.loss10_s40.trace.gz",
+   "pcmSha256": "482a171af35592ad9b81421c162e0400e85fecf6b3cd5bb92675cf86f42e9e9b",
+   "pcmBytes": 1163520
+  },
+  {
+   "name": "dec/mix_48k_audio_framedur60.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur60.pkt",
+   "trace": "dec/mix_48k_audio_framedur60.plain.trace.gz",
+   "pcmSha256": "5a841b177d7cf282540100190898abeca39def91461fe0d3b31cbc28604a4187",
+   "pcmBytes": 1163520
+  },
+  {
+   "name": "dec/mix_48k_audio_framedur_variable_fs20.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur_variable_fs20.pkt",
+   "trace": "dec/mix_48k_audio_framedur_variable_fs20.plain.trace.gz",
+   "pcmSha256": "60da9d5627bb1d799140014574e20b64557c82f3fda20f50e8b80f0d7d24a9dd",
+   "pcmBytes": 1151520
+  },
+  {
+   "name": "dec/mix_48k_audio_framedurvariable.loss10_s40",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--lossperc",
+    "10",
+    "--seed",
+    "40"
+   ],
+   "pkt": "enc/mix_48k_audio_framedurvariable.pkt",
+   "trace": "dec/mix_48k_audio_framedurvariable.loss10_s40.trace.gz",
+   "pcmSha256": "dbe92053615d3150e492a563105827b0762cfd6a1543a7678265e480c47dccde",
+   "pcmBytes": 1145760
+  },
+  {
+   "name": "dec/mix_48k_audio_framedurvariable.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_audio_framedurvariable.pkt",
+   "trace": "dec/mix_48k_audio_framedurvariable.plain.trace.gz",
+   "pcmSha256": "a185b2a735925010786d798bd215866ef170dccf53d1791614971397e2d98662",
+   "pcmBytes": 1147200
+  },
+  {
+   "name": "dec/mix_48k_audio_nopred.loss10_s41",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--lossperc",
+    "10",
+    "--seed",
+    "41"
+   ],
+   "pkt": "enc/mix_48k_audio_nopred.pkt",
+   "trace": "dec/mix_48k_audio_nopred.loss10_s41.trace.gz",
+   "pcmSha256": "dbc7929982dce0148b5ab80e17048981a3d370df7b828bc873a2ccdddb842a87",
+   "pcmBytes": 1155840
+  },
+  {
+   "name": "dec/mix_48k_audio_nopred.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_audio_nopred.pkt",
+   "trace": "dec/mix_48k_audio_nopred.plain.trace.gz",
+   "pcmSha256": "a7ea38698e06e8b9380bfac5304ae549932a2aa0b8d03f2c0657f9cb952231b6",
+   "pcmBytes": 1155840
+  },
+  {
+   "name": "dec/mix_48k_audio_pad.pad1",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "repack/mix_48k_audio_pad.pad1.pkt",
+   "trace": "dec/mix_48k_audio_pad.pad1.trace.gz",
+   "pcmSha256": "a84304d64d59af2a1a0844e029ebf08ebe8aa93c130f2c9e462d06edbd4193df",
+   "pcmBytes": 1155840
+  },
+  {
+   "name": "dec/mix_48k_audio_pad.pad300",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "repack/mix_48k_audio_pad.pad300.pkt",
+   "trace": "dec/mix_48k_audio_pad.pad300.trace.gz",
+   "pcmSha256": "a84304d64d59af2a1a0844e029ebf08ebe8aa93c130f2c9e462d06edbd4193df",
+   "pcmBytes": 1155840
+  },
+  {
+   "name": "dec/mix_48k_audio_pad.pad7",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "repack/mix_48k_audio_pad.pad7.pkt",
+   "trace": "dec/mix_48k_audio_pad.pad7.trace.gz",
+   "pcmSha256": "a84304d64d59af2a1a0844e029ebf08ebe8aa93c130f2c9e462d06edbd4193df",
+   "pcmBytes": 1155840
+  },
+  {
+   "name": "dec/mix_48k_audio_pad.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_audio_pad.pkt",
+   "trace": "dec/mix_48k_audio_pad.plain.trace.gz",
+   "pcmSha256": "a84304d64d59af2a1a0844e029ebf08ebe8aa93c130f2c9e462d06edbd4193df",
+   "pcmBytes": 1155840
+  },
+  {
+   "name": "dec/mix_48k_audio_pad_fs10_cbr.merge2",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "repack/mix_48k_audio_pad_fs10_cbr.merge2.pkt",
+   "trace": "dec/mix_48k_audio_pad_fs10_cbr.merge2.trace.gz",
+   "pcmSha256": "0211b04c7537ba847c494564f61eceac85c68152d4fbb12fb58fd8e5c466c3e9",
+   "pcmBytes": 1153920
+  },
+  {
+   "name": "dec/mix_48k_audio_pad_fs10_cbr.merge6",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "repack/mix_48k_audio_pad_fs10_cbr.merge6.pkt",
+   "trace": "dec/mix_48k_audio_pad_fs10_cbr.merge6.trace.gz",
+   "pcmSha256": "0211b04c7537ba847c494564f61eceac85c68152d4fbb12fb58fd8e5c466c3e9",
+   "pcmBytes": 1153920
+  },
+  {
+   "name": "dec/mix_48k_audio_pad_fs10_cbr.pad5",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "repack/mix_48k_audio_pad_fs10_cbr.pad5.pkt",
+   "trace": "dec/mix_48k_audio_pad_fs10_cbr.pad5.trace.gz",
+   "pcmSha256": "0211b04c7537ba847c494564f61eceac85c68152d4fbb12fb58fd8e5c466c3e9",
+   "pcmBytes": 1153920
+  },
+  {
+   "name": "dec/mix_48k_audio_pad_fs10_cbr.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_audio_pad_fs10_cbr.pkt",
+   "trace": "dec/mix_48k_audio_pad_fs10_cbr.plain.trace.gz",
+   "pcmSha256": "0211b04c7537ba847c494564f61eceac85c68152d4fbb12fb58fd8e5c466c3e9",
+   "pcmBytes": 1153920
   },
   {
    "name": "dec/mix_48k_force_celt.loss10_s9",
@@ -192,7 +574,7 @@
    ],
    "pkt": "enc/mix_48k_force_celt.pkt",
    "trace": "dec/mix_48k_force_celt.loss10_s9.trace.gz",
-   "pcmSha256": "218ddc4f59c26e1362b2086b47f1af82029ffc47964db206843d3a36418e1892",
+   "pcmSha256": "5ea5b8292f4cb25d3830e8e58da7faedd788a21cbbbc91bec10458f4ec1fa668",
    "pcmBytes": 1155840
   },
   {
@@ -206,7 +588,7 @@
    ],
    "pkt": "enc/mix_48k_force_celt.pkt",
    "trace": "dec/mix_48k_force_celt.plain.trace.gz",
-   "pcmSha256": "45b03436ba9891a52630c66fa963866177040f45ea325b837e1ca69b35865884",
+   "pcmSha256": "a84304d64d59af2a1a0844e029ebf08ebe8aa93c130f2c9e462d06edbd4193df",
    "pcmBytes": 1155840
   },
   {
@@ -220,7 +602,7 @@
    ],
    "pkt": "enc/mix_48k_force_hybrid.pkt",
    "trace": "dec/mix_48k_force_hybrid.plain.trace.gz",
-   "pcmSha256": "d287be5ad4daab590e4257abc7cd4e28eae8075a350447209c422941bb2be72d",
+   "pcmSha256": "1128a0a004d08c4279a8bcc395eb24d1175abf9385a31e8f150dcf04b579d839",
    "pcmBytes": 1155840
   },
   {
@@ -234,7 +616,21 @@
    ],
    "pkt": "enc/mix_48k_force_silk.pkt",
    "trace": "dec/mix_48k_force_silk.plain.trace.gz",
-   "pcmSha256": "d287be5ad4daab590e4257abc7cd4e28eae8075a350447209c422941bb2be72d",
+   "pcmSha256": "1128a0a004d08c4279a8bcc395eb24d1175abf9385a31e8f150dcf04b579d839",
+   "pcmBytes": 1155840
+  },
+  {
+   "name": "dec/mix_48k_lowdelay_nopred.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_lowdelay_nopred.pkt",
+   "trace": "dec/mix_48k_lowdelay_nopred.plain.trace.gz",
+   "pcmSha256": "72ece996dc544bdeb7207b9d6816c75dd7374e5c26c7ea8daab1d29aa012dedb",
    "pcmBytes": 1155840
   },
   {
@@ -252,7 +648,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_celt_32k.pkt",
    "trace": "dec/mix_48k_modelist_celt_32k.loss10_s8.trace.gz",
-   "pcmSha256": "2bef1b79d62367d4d54b85a3e5b444a0cf5a5a289b482e7f651361715e9dda68",
+   "pcmSha256": "3b912830673aa549c9ff11ce41974f883ccd9fd1a5f38679c078ebc0d6b3747a",
    "pcmBytes": 1154400
   },
   {
@@ -266,7 +662,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_celt_32k.pkt",
    "trace": "dec/mix_48k_modelist_celt_32k.plain.trace.gz",
-   "pcmSha256": "00a6b80cd6deefbbdd5e4d2cb73e1cc23da2c663f0c6d36f91604a927d362564",
+   "pcmSha256": "d22b06e2531dcb196aaea99adf286b0d23dfad0b887fcb70c34450b61c96ae4d",
    "pcmBytes": 1152480
   },
   {
@@ -280,7 +676,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_celt_64k.pkt",
    "trace": "dec/mix_48k_modelist_celt_64k.plain.trace.gz",
-   "pcmSha256": "35a9db5b65c3bba697a4af60b2551d36003c803a9555e43f09aa67436f523511",
+   "pcmSha256": "639a5132a18e6e5cd02c7005f885f4d713576a10ccc525837bf50bc290a27b0e",
    "pcmBytes": 1152480
   },
   {
@@ -298,7 +694,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_celthq_32k.pkt",
    "trace": "dec/mix_48k_modelist_celthq_32k.loss10_s8.trace.gz",
-   "pcmSha256": "33bc7468affb092912cd1be2f4b63049c222fb4e0f5fc835e00eb63269b93ab7",
+   "pcmSha256": "d0b81bd090efa0d23151278900f8eccc8de7526cf641a86eb4466b73fe617d0a",
    "pcmBytes": 1152480
   },
   {
@@ -312,7 +708,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_celthq_32k.pkt",
    "trace": "dec/mix_48k_modelist_celthq_32k.plain.trace.gz",
-   "pcmSha256": "8e1d7139a52436fe5d8810132955723f1e39c4924ff7781d371bcae5b348cef8",
+   "pcmSha256": "61eb8c5b082eeddb260f7fee0680cdb326c57e5f3bcd7cac76b888f080f29b86",
    "pcmBytes": 1152480
   },
   {
@@ -326,7 +722,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_celthq_64k.pkt",
    "trace": "dec/mix_48k_modelist_celthq_64k.plain.trace.gz",
-   "pcmSha256": "e610940c6b3170966ee4ef4749a837c5f83790934204db8fb682651af73250c8",
+   "pcmSha256": "3b3e817c530e5a99f7f03f930265f70f3fb94b0780a61fe86872f93885a9cd38",
    "pcmBytes": 1152480
   },
   {
@@ -344,7 +740,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_hybrid24_32k.pkt",
    "trace": "dec/mix_48k_modelist_hybrid24_32k.loss10_s8.trace.gz",
-   "pcmSha256": "8c68910c608e9b764e88d56a7f8edb0c217ba7a59a641bfa0c8fb619be40b604",
+   "pcmSha256": "ca0252dd62eda491467d562ac342336ca02329e0613526863ffc08c31ea2f505",
    "pcmBytes": 1153920
   },
   {
@@ -358,7 +754,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_hybrid24_32k.pkt",
    "trace": "dec/mix_48k_modelist_hybrid24_32k.plain.trace.gz",
-   "pcmSha256": "5860ec2827528ea9629f44d9c3c21f5fe753e2674a9e2e887acabcc77a81ac90",
+   "pcmSha256": "2c85ef9f4e99003d8c8e4618d57868f1e9aed05a52601cfb84daef8a759a5032",
    "pcmBytes": 1153920
   },
   {
@@ -372,7 +768,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_hybrid24_64k.pkt",
    "trace": "dec/mix_48k_modelist_hybrid24_64k.plain.trace.gz",
-   "pcmSha256": "6bec00519771b8ac7094387c3a6310a21cb2f7a3974db32b61159925b327ad7f",
+   "pcmSha256": "58c4ed44e468f48e25712c98f2ae48f459ab8c52e2a9c9b110bdbaf0b872f22a",
    "pcmBytes": 1153920
   },
   {
@@ -390,7 +786,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_hybrid48_32k.pkt",
    "trace": "dec/mix_48k_modelist_hybrid48_32k.loss10_s8.trace.gz",
-   "pcmSha256": "0785ad7782af6d252f8016563533f31220012dad2787a424f02969c8d5c1919a",
+   "pcmSha256": "3ea35a8741d93b8e8bbeca7d48f2207c299309cdc0b43bf2598e7d59b956382a",
    "pcmBytes": 1153920
   },
   {
@@ -404,7 +800,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_hybrid48_32k.pkt",
    "trace": "dec/mix_48k_modelist_hybrid48_32k.plain.trace.gz",
-   "pcmSha256": "de2780ae90ba060d83569a5f7adaed8754873ab562467fa656104eb79fa2f1d9",
+   "pcmSha256": "01e0511721a625811139f99dfbf90b8de836061249bd76fc4a228ded2ccaadde",
    "pcmBytes": 1153920
   },
   {
@@ -418,7 +814,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_hybrid48_64k.pkt",
    "trace": "dec/mix_48k_modelist_hybrid48_64k.plain.trace.gz",
-   "pcmSha256": "f4a13df50aa940e90b316707cf0062e71efa5272bd18e3974c11b2c87c1fada0",
+   "pcmSha256": "a2092f3b8bb31690057212e1f61320798ec300c77f6c28d8801eabe0fbe969ed",
    "pcmBytes": 1153920
   },
   {
@@ -436,7 +832,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_silk12_32k.pkt",
    "trace": "dec/mix_48k_modelist_silk12_32k.loss10_s8.trace.gz",
-   "pcmSha256": "ba59617a97a6af895a8ae8b909ce87e219b31b89cec9d3198f3f5a950e860226",
+   "pcmSha256": "35543059cf652df2cae685225950da414c997c2ceab66d98e49f39df7cb2364f",
    "pcmBytes": 1144320
   },
   {
@@ -450,7 +846,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_silk12_32k.pkt",
    "trace": "dec/mix_48k_modelist_silk12_32k.plain.trace.gz",
-   "pcmSha256": "a4ac4b76e4b2133ab9c342de91916cd9e3c563cea1d5be3730f54bbf18452e47",
+   "pcmSha256": "062ad6f1c7ce3492d2995b86afe5058fdfdb8ed5b3436839e5a078b651a09f8f",
    "pcmBytes": 1153920
   },
   {
@@ -464,7 +860,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_silk12_64k.pkt",
    "trace": "dec/mix_48k_modelist_silk12_64k.plain.trace.gz",
-   "pcmSha256": "2971f8c678d5246bff9b6bd0430f7b8afc58f7f42cee2d7eeac5df85afb8bab6",
+   "pcmSha256": "3a84a31058dcb80e233e65dd0bd187b8a4810937565d741040b4d0c423ebc9de",
    "pcmBytes": 1153920
   },
   {
@@ -482,7 +878,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_silk16_32k.pkt",
    "trace": "dec/mix_48k_modelist_silk16_32k.loss10_s8.trace.gz",
-   "pcmSha256": "bed7bdbd8270ec120b7a085b142d39b3f27dd863418a44a5d110902b84e8c416",
+   "pcmSha256": "cb844d55ecd9ad1747f842b2cf8f18e60cd4590ed61e1d345b4332a92ba21ddb",
    "pcmBytes": 1144320
   },
   {
@@ -496,7 +892,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_silk16_32k.pkt",
    "trace": "dec/mix_48k_modelist_silk16_32k.plain.trace.gz",
-   "pcmSha256": "4b7a5473f6363c27eba08a645b2a2c4824c4f869d71810bb393ce151c76bc09b",
+   "pcmSha256": "b9983da3eb30d16a2192fb92a440c72b2cfda6c353ea8b825a9f3b594e5925f9",
    "pcmBytes": 1153920
   },
   {
@@ -510,7 +906,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_silk16_64k.pkt",
    "trace": "dec/mix_48k_modelist_silk16_64k.plain.trace.gz",
-   "pcmSha256": "857d0aaa01d34ab05fdc639a8b1940a43e957e9794719f6d6a52278d701c2e98",
+   "pcmSha256": "588a44628dc0b603056c81f229d98ec39968afe05ad48d2cd21bdeb7a368d907",
    "pcmBytes": 1153920
   },
   {
@@ -528,7 +924,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_silk8_32k.pkt",
    "trace": "dec/mix_48k_modelist_silk8_32k.loss10_s8.trace.gz",
-   "pcmSha256": "59a89d2a03b52bd529394dd11b18beba4c8c30426af3b20e8e3dff845cdd0c1e",
+   "pcmSha256": "10e537f6f124bd69f60aaa70cae5e08be14f04244e131b511f1ca773bddee692",
    "pcmBytes": 1144320
   },
   {
@@ -542,7 +938,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_silk8_32k.pkt",
    "trace": "dec/mix_48k_modelist_silk8_32k.plain.trace.gz",
-   "pcmSha256": "fabb47482ba52864c5a9ac00f3a537a5f1915a7cad4f0e91c1b66ae480122d21",
+   "pcmSha256": "aca55a3daab2844438f85cea032e620837e9ab15b83aec36c1449daac3a8cb61",
    "pcmBytes": 1153920
   },
   {
@@ -556,7 +952,7 @@
    ],
    "pkt": "enc/mix_48k_modelist_silk8_64k.pkt",
    "trace": "dec/mix_48k_modelist_silk8_64k.plain.trace.gz",
-   "pcmSha256": "6c8958e1ae3b1194ea0eb0683ba4159a3c22f03e235a85a396ff7631a4a09018",
+   "pcmSha256": "13fa60cb3ed3b1d4f3066e0802efd1daee5908ae59aa02c4a54cb279f1e5caae",
    "pcmBytes": 1153920
   },
   {
@@ -574,7 +970,7 @@
    ],
    "pkt": "enc/mix_48k_randfs_sweep.pkt",
    "trace": "dec/mix_48k_randfs_sweep.loss10_s17.trace.gz",
-   "pcmSha256": "0c60bd192403072be8a8b418e68be3e716cfaee916bdf1ab4996eb9ea6819b66",
+   "pcmSha256": "12b7679834bfa47cc46e9e984344d1da9021ee4f3448541d914d482d9adab3ab",
    "pcmBytes": 1158720
   },
   {
@@ -588,7 +984,7 @@
    ],
    "pkt": "enc/mix_48k_randfs_sweep.pkt",
    "trace": "dec/mix_48k_randfs_sweep.plain.trace.gz",
-   "pcmSha256": "d63b3992067ee8f655c90f0f3ce74be615e418a7545226339bc56edc0d566047",
+   "pcmSha256": "b5417fe0dcffc53e1dae44fd1843de9dd2f9e1d74d57ece10caf84fa479813de",
    "pcmBytes": 1154880
   },
   {
@@ -602,7 +998,7 @@
    ],
    "pkt": "enc/mix_48k_randfs_voip.pkt",
    "trace": "dec/mix_48k_randfs_voip.plain.trace.gz",
-   "pcmSha256": "8e312ec413a00313b24d2af06d8ed4610074fc1ea0bad961b5fca04044bf2500",
+   "pcmSha256": "58534c3bba5fa6f3e2ef7913ce06983cd7b83375d2e08d5f95136d351bf3f79b",
    "pcmBytes": 1152960
   },
   {
@@ -616,7 +1012,7 @@
    ],
    "pkt": "enc/mix_48k_sched_app.pkt",
    "trace": "dec/mix_48k_sched_app.plain.trace.gz",
-   "pcmSha256": "1da0917bc456d41cce54de172e60aa3cab790b190804e09274505bae2fde9620",
+   "pcmSha256": "14a740d8f58e9e81dbb61d801f59b824e9114f2059acea5abad4b3070b941f3d",
    "pcmBytes": 1155840
   },
   {
@@ -630,7 +1026,7 @@
    ],
    "pkt": "enc/mix_48k_sched_bitrate.pkt",
    "trace": "dec/mix_48k_sched_bitrate.plain.trace.gz",
-   "pcmSha256": "b430a4adb6cdc71b4fd09f15547d6823674127589a5f77081570d1d08b4bd943",
+   "pcmSha256": "7c45a9c8a1f9517a3a6f391c9e8bab49a3ffadfa70301e22c6bc5bc606c520dc",
    "pcmBytes": 1155840
   },
   {
@@ -644,7 +1040,7 @@
    ],
    "pkt": "enc/mix_48k_sched_bw.pkt",
    "trace": "dec/mix_48k_sched_bw.plain.trace.gz",
-   "pcmSha256": "4ebdfda2c53dfd70941ff164a19d23bea32142f6c293e9ef05de051d7be3b92c",
+   "pcmSha256": "8f2eaab73b06551aa1d006c2ef46b4fd67691534d122d12b7f3377b3b853c659",
    "pcmBytes": 1155840
   },
   {
@@ -658,7 +1054,7 @@
    ],
    "pkt": "enc/mix_48k_sched_bw_voip.pkt",
    "trace": "dec/mix_48k_sched_bw_voip.plain.trace.gz",
-   "pcmSha256": "0c81e0af4aaebdb481d814931ba41aac0c664429aa0495dbead4e16454ac0d4c",
+   "pcmSha256": "e08b506e0895ca5388011e4973d91d59a607638f2ac64b3b1a163f090a59a9d3",
    "pcmBytes": 1155840
   },
   {
@@ -672,7 +1068,7 @@
    ],
    "pkt": "enc/mix_48k_sched_cplx.pkt",
    "trace": "dec/mix_48k_sched_cplx.plain.trace.gz",
-   "pcmSha256": "38e8f7dacfca2867e283ba3205dd31d09f554ce991cd7be0983e74e9cb754c50",
+   "pcmSha256": "7207b45c64673409eaacd0bcda609c4d54505f97985f0a5f2e3e438c16996d3c",
    "pcmBytes": 1155840
   },
   {
@@ -690,7 +1086,7 @@
    ],
    "pkt": "enc/mix_48k_sched_everything.pkt",
    "trace": "dec/mix_48k_sched_everything.loss10_s15.trace.gz",
-   "pcmSha256": "fd7d42b4159f65bfe6c6385762052cd8eb80f14fe99198d2b4ee01ee1cf65f8b",
+   "pcmSha256": "4a89ccebb05755d8b29226e15af324f93d851923c244d114e54e603151900fa6",
    "pcmBytes": 1155840
   },
   {
@@ -704,7 +1100,7 @@
    ],
    "pkt": "enc/mix_48k_sched_everything.pkt",
    "trace": "dec/mix_48k_sched_everything.plain.trace.gz",
-   "pcmSha256": "3c1855c09f3b24488540425bdf4084b78b14fff3e0d1edcf5f4b8a9cf9772e31",
+   "pcmSha256": "619b9507d1f0c02bd2110e07a01be7a78cdcd2a5517ddf4ba92435b0ee964028",
    "pcmBytes": 1155840
   },
   {
@@ -723,7 +1119,7 @@
    ],
    "pkt": "enc/mix_48k_sched_fec.pkt",
    "trace": "dec/mix_48k_sched_fec.fec_loss20_s13.trace.gz",
-   "pcmSha256": "5572857a1f46c2e2d2d5247f289fedf5253cc599c5308bcffe6d59423d498e8b",
+   "pcmSha256": "9e1188f0cffca62ed380d402ba338306bbe5a94713b876604905645a38479d89",
    "pcmBytes": 1152000
   },
   {
@@ -741,7 +1137,7 @@
    ],
    "pkt": "enc/mix_48k_sched_fec.pkt",
    "trace": "dec/mix_48k_sched_fec.loss20_s13.trace.gz",
-   "pcmSha256": "fff4163282d0e6b675714e9c2c1f1693afe5e269f4d93add0562e95e93efd0d9",
+   "pcmSha256": "774e4aee92ecb31d83cb54c53dc6015a587f415c91bacba9121700677e1bc75c",
    "pcmBytes": 1155840
   },
   {
@@ -755,7 +1151,7 @@
    ],
    "pkt": "enc/mix_48k_sched_fec.pkt",
    "trace": "dec/mix_48k_sched_fec.plain.trace.gz",
-   "pcmSha256": "89ca6d74ad121f4b6d5dfe64c6f18689e7146fae178bf2f79412bacb3ddc79be",
+   "pcmSha256": "eb228cec0547e77d38a26e79f42ca8ebab596de40cb4d9e3c64454a340425499",
    "pcmBytes": 1155840
   },
   {
@@ -773,7 +1169,7 @@
    ],
    "pkt": "enc/mix_48k_sched_forcech.pkt",
    "trace": "dec/mix_48k_sched_forcech.loss10_s12.trace.gz",
-   "pcmSha256": "fcc8e8c5b4ae03da4e92081cbf8a92f1a26732aca5de81fd071ee15575045c30",
+   "pcmSha256": "81f5e97506cad057077ab0ae2ac46dec794d2c85f73e049679927ecd1d14254a",
    "pcmBytes": 1155840
   },
   {
@@ -787,7 +1183,7 @@
    ],
    "pkt": "enc/mix_48k_sched_forcech.pkt",
    "trace": "dec/mix_48k_sched_forcech.plain.trace.gz",
-   "pcmSha256": "a453cfe89089151645ad0543a18f1c3592d825e8c7280e849d259fae92bff541",
+   "pcmSha256": "f85c70e6aacbcf49fc9d2b45b766280257a81d784111cbad000123d0441b98de",
    "pcmBytes": 1155840
   },
   {
@@ -801,8 +1197,22 @@
    ],
    "pkt": "enc/mix_48k_sched_forcech_voip.pkt",
    "trace": "dec/mix_48k_sched_forcech_voip.plain.trace.gz",
-   "pcmSha256": "93ebfcbcc46b3efcff954e31a76e93ba226d9b0f85f24faec10a1cfbdfda8e4d",
+   "pcmSha256": "0bd243b832468b71515be47c8fde377cfdf83658e9da36bfacaf4f545bfd878f",
    "pcmBytes": 1155840
+  },
+  {
+   "name": "dec/mix_48k_sched_framedur.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_sched_framedur.pkt",
+   "trace": "dec/mix_48k_sched_framedur.plain.trace.gz",
+   "pcmSha256": "f60e6a1b481ebc42fd4cecb6305323edf776d149f351194b4be2b9e035279797",
+   "pcmBytes": 1145760
   },
   {
    "name": "dec/mix_48k_sched_framesize.plain",
@@ -815,7 +1225,7 @@
    ],
    "pkt": "enc/mix_48k_sched_framesize.pkt",
    "trace": "dec/mix_48k_sched_framesize.plain.trace.gz",
-   "pcmSha256": "60ab45b2808f387d7c8efd5774f7de9eaf32f4d3fa10d4990b58dbd83ad90758",
+   "pcmSha256": "f1c7b411f18e971abbb5885552c0fe5bd9820a4532858ccf8d475e008ba564ff",
    "pcmBytes": 1155840
   },
   {
@@ -829,7 +1239,7 @@
    ],
    "pkt": "enc/mix_48k_sched_lsb.pkt",
    "trace": "dec/mix_48k_sched_lsb.plain.trace.gz",
-   "pcmSha256": "6c843e0a933bf3edc5dfa38ef9de00fa5164e3e88552e4590225cd2de01f62ab",
+   "pcmSha256": "5531dd97e70942be79cf2cb674bc5a36432a56fa35b44894ab47c92442f96e69",
    "pcmBytes": 1155840
   },
   {
@@ -843,7 +1253,7 @@
    ],
    "pkt": "enc/mix_48k_sched_maxbw.pkt",
    "trace": "dec/mix_48k_sched_maxbw.plain.trace.gz",
-   "pcmSha256": "68c026fe5e967e5aef8e4273fa0f121ca6443f7c6aeaac66873208f35d840e0d",
+   "pcmSha256": "fbd743def25631d99449136a0e19f5cf66e4f042faf3982ff93019ed50d3cdf4",
    "pcmBytes": 1155840
   },
   {
@@ -861,7 +1271,7 @@
    ],
    "pkt": "enc/mix_48k_sched_modes.pkt",
    "trace": "dec/mix_48k_sched_modes.loss10_s11.trace.gz",
-   "pcmSha256": "34cd94e6ff39bcb9d66f2eaf75b2bbb7b07840940b38731813ec995064b93050",
+   "pcmSha256": "e885ba863ed9ebf31edce4f548174fd15cdd803b8341b1a1956fa001ed55f649",
    "pcmBytes": 1155840
   },
   {
@@ -875,7 +1285,7 @@
    ],
    "pkt": "enc/mix_48k_sched_modes.pkt",
    "trace": "dec/mix_48k_sched_modes.plain.trace.gz",
-   "pcmSha256": "7d0436d23c33afba69a74b10f04a471dde9bc78e210b4c458ac0c7faa3ba2234",
+   "pcmSha256": "b14b7156c9efc46c8c771e63c138398b443b60c6c07568fb3e176a4ed0da2b4c",
    "pcmBytes": 1155840
   },
   {
@@ -889,8 +1299,22 @@
    ],
    "pkt": "enc/mix_48k_sched_modes_fs10.pkt",
    "trace": "dec/mix_48k_sched_modes_fs10.plain.trace.gz",
-   "pcmSha256": "809c3599fcd1a16c54bc3f2014122e9dbe8399dd0cdf27b643ca073277fb1f8b",
+   "pcmSha256": "3db9c907c211dfa1a3a207710e12d03698c903dc0cab2f678aab3681070db49f",
    "pcmBytes": 1153920
+  },
+  {
+   "name": "dec/mix_48k_sched_pred.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_sched_pred.pkt",
+   "trace": "dec/mix_48k_sched_pred.plain.trace.gz",
+   "pcmSha256": "06dc922086a4e6cbd016887c841ff82d3ce622d47f8169613077bf1f40bf0d38",
+   "pcmBytes": 1155840
   },
   {
    "name": "dec/mix_48k_sched_reset.plain",
@@ -903,7 +1327,7 @@
    ],
    "pkt": "enc/mix_48k_sched_reset.pkt",
    "trace": "dec/mix_48k_sched_reset.plain.trace.gz",
-   "pcmSha256": "27be3060feb740fce05206e6679d502b824d835ec94abd441999ad87299f64ee",
+   "pcmSha256": "1aea4d002c7e73bbe36c31aa31d202acf4234611abed32a521e127a15d46923c",
    "pcmBytes": 1155840
   },
   {
@@ -919,7 +1343,7 @@
    ],
    "pkt": "enc/mix_48k_sched_reset.pkt",
    "trace": "dec/mix_48k_sched_reset.reset.trace.gz",
-   "pcmSha256": "b97167691a2c858d647c26aad18bedbfb771d0a34a1ce99fbf1457de31a0b841",
+   "pcmSha256": "9a933c5d4f09687b0efba4651b1c33899c20d4fa902780d9f08aff71f76b22c7",
    "pcmBytes": 1155840
   },
   {
@@ -933,7 +1357,7 @@
    ],
    "pkt": "enc/mix_48k_sched_signal.pkt",
    "trace": "dec/mix_48k_sched_signal.plain.trace.gz",
-   "pcmSha256": "2441101984b86bef3805bb729f17f055f81f5b9992a94d3f540a5046884b9d09",
+   "pcmSha256": "be08857f9da9def1377ca04a429d6c1908128b56dc0c28f68bd3a42960f3c20b",
    "pcmBytes": 1155840
   },
   {
@@ -947,7 +1371,7 @@
    ],
    "pkt": "enc/mix_48k_sched_vbr.pkt",
    "trace": "dec/mix_48k_sched_vbr.plain.trace.gz",
-   "pcmSha256": "d0b1943a6f55c4c649276a6120f9cf3b2408f14fcd6642da30a89be4d1e10c5e",
+   "pcmSha256": "297a83c4d1891ba96ea32602d80613d442174939cf121dc59fbe57fc6c3489ef",
    "pcmBytes": 1155840
   },
   {
@@ -961,7 +1385,7 @@
    ],
    "pkt": "enc/mix_48k_voip_24k.pkt",
    "trace": "dec/mix_48k_voip_24k.plain.trace.gz",
-   "pcmSha256": "1a42f9b48d5f60e195cd0c8fa081ec602db9d9703a36dfee8e610f59b89142f8",
+   "pcmSha256": "fe625c9d7a2943913124437127fd7f549cc091f2869954fa30ec9eafaf09a747",
    "pcmBytes": 1155840
   },
   {
@@ -975,7 +1399,7 @@
    ],
    "pkt": "enc/mix_48k_voip_48k.pkt",
    "trace": "dec/mix_48k_voip_48k.plain.trace.gz",
-   "pcmSha256": "ba73527baa2fc158ebf79c33014b1dba9ed91e76beecffc489d409ade96bed11",
+   "pcmSha256": "cd050a1f1a5ff6caacec27f422e74819c98acb1f6b80f43c5ce4fa06d7d2f2d8",
    "pcmBytes": 1155840
   },
   {
@@ -994,7 +1418,7 @@
    ],
    "pkt": "enc/mix_48k_voip_48k_fec.pkt",
    "trace": "dec/mix_48k_voip_48k_fec.fec_loss15_s7.trace.gz",
-   "pcmSha256": "e231340fda2b9ffeee0d336c90b4e8e1bce026743f2b39d57302614865442248",
+   "pcmSha256": "450ff09087e271ea9d7f6d8f25f5e4c0c8b6c6e473920c6ebd64062f182b026c",
    "pcmBytes": 1152000
   },
   {
@@ -1008,8 +1432,22 @@
    ],
    "pkt": "enc/mix_48k_voip_48k_fec.pkt",
    "trace": "dec/mix_48k_voip_48k_fec.plain.trace.gz",
-   "pcmSha256": "4ba62fbd347f099fa75255de156f6f360893556ceb457569d7c495748cc2dde0",
+   "pcmSha256": "5279cec6c2229039afb34eea3f0098695a950ac9098b62c19d977d7e67f86a0f",
    "pcmBytes": 1155840
+  },
+  {
+   "name": "dec/mix_48k_voip_framedur_variable_cplx5.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_voip_framedur_variable_cplx5.pkt",
+   "trace": "dec/mix_48k_voip_framedur_variable_cplx5.plain.trace.gz",
+   "pcmSha256": "a247b8e521b064d7ccb3056475ca1dd9df7ca61148d7eff36fddeaa8c2835df6",
+   "pcmBytes": 1145280
   },
   {
    "name": "dec/mix_8k_voip_14k.plain",
@@ -1022,7 +1460,7 @@
    ],
    "pkt": "enc/mix_8k_voip_14k.pkt",
    "trace": "dec/mix_8k_voip_14k.plain.trace.gz",
-   "pcmSha256": "596878c7e25eb371170d9d5f4022ce7da57fb42c0294a5d9912e2f2712c0f972",
+   "pcmSha256": "f6c1a356c720c26a4160ba3173b9b99398ac6b231c34ab0f769dbf98ba7c2378",
    "pcmBytes": 192640
   },
   {
@@ -1046,7 +1484,7 @@
    ],
    "pkt": "enc/ms_3ch.pkt",
    "trace": "dec/ms_3ch.loss10_s32.trace.gz",
-   "pcmSha256": "874d4b70af3fb90f44869e6c4b8e5a1f78f5dfd96663b872eae1ad72b611a3fe",
+   "pcmSha256": "b034c6cb072d0220173dca32748356f7656da0e31e49afbe1bf683407ba82b59",
    "pcmBytes": 437760
   },
   {
@@ -1066,7 +1504,27 @@
    ],
    "pkt": "enc/ms_3ch.pkt",
    "trace": "dec/ms_3ch.plain.trace.gz",
-   "pcmSha256": "579105b63b23e741c9f50c04f7e0115da443f7d5113e75c68d80115dac11fe68",
+   "pcmSha256": "81a8b4db5c5d447e633bb86be36155a60f9713b31d246b0d865234f0f5c913ff",
+   "pcmBytes": 437760
+  },
+  {
+   "name": "dec/ms_3ch_omit.pad40",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "3",
+    "--streams",
+    "1",
+    "--coupled",
+    "1",
+    "--mapping",
+    "0,255,1"
+   ],
+   "pkt": "repack/ms_3ch_omit.pad40.pkt",
+   "trace": "dec/ms_3ch_omit.pad40.trace.gz",
+   "pcmSha256": "6400e91ffb12e7441bd4884bec968c95fb25acbd0749812972dfa52a12cb6548",
    "pcmBytes": 437760
   },
   {
@@ -1086,7 +1544,7 @@
    ],
    "pkt": "enc/ms_3ch_omit.pkt",
    "trace": "dec/ms_3ch_omit.plain.trace.gz",
-   "pcmSha256": "416b4643a456453e5d49b0ce19864f774b1c31577c44badc08d6803ad52431b0",
+   "pcmSha256": "6400e91ffb12e7441bd4884bec968c95fb25acbd0749812972dfa52a12cb6548",
    "pcmBytes": 437760
   },
   {
@@ -1106,7 +1564,7 @@
    ],
    "pkt": "enc/ms_4ch.pkt",
    "trace": "dec/ms_4ch.plain.trace.gz",
-   "pcmSha256": "48475d353e1b018eee00389d65475459e1ef06cbcb60a1c299996ea559c4b13c",
+   "pcmSha256": "2219bd8e184d39bdb88f6355ff4782f9f7fd39e1738f95c128007133258d0a29",
    "pcmBytes": 583680
   },
   {
@@ -1130,7 +1588,27 @@
    ],
    "pkt": "enc/ms_51.pkt",
    "trace": "dec/ms_51.loss10_s33.trace.gz",
-   "pcmSha256": "384f2d65bf114eced39262b7655a7e256e6393cd83bbec28b9116386f9f14779",
+   "pcmSha256": "49964cbea01eaa5da4bb850816884d818faf90da7b1886b7ab9c57e8ca6dfbea",
+   "pcmBytes": 875520
+  },
+  {
+   "name": "dec/ms_51.pad9",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "6",
+    "--streams",
+    "4",
+    "--coupled",
+    "2",
+    "--mapping",
+    "0,4,1,2,3,5"
+   ],
+   "pkt": "repack/ms_51.pad9.pkt",
+   "trace": "dec/ms_51.pad9.trace.gz",
+   "pcmSha256": "a38bd0e7610e4192161c3a7dea1f624c388ec1553d98e5508f16facfb61f4c26",
    "pcmBytes": 875520
   },
   {
@@ -1150,7 +1628,7 @@
    ],
    "pkt": "enc/ms_51.pkt",
    "trace": "dec/ms_51.plain.trace.gz",
-   "pcmSha256": "1546b56e9004fc26ba20d7e3393d4e02d9d699815fa5fd755877c6f4b9a6973b",
+   "pcmSha256": "a38bd0e7610e4192161c3a7dea1f624c388ec1553d98e5508f16facfb61f4c26",
    "pcmBytes": 875520
   },
   {
@@ -1170,7 +1648,7 @@
    ],
    "pkt": "enc/ms_51_16k.pkt",
    "trace": "dec/ms_51_16k.plain.trace.gz",
-   "pcmSha256": "51397fb89dff8ff04c32f944ba114ac055616ae6edbbc6727c68661f2044c68f",
+   "pcmSha256": "6da3c889b921d1a35287401816477f6add9560182a82c77cbd58c75a660f5669",
    "pcmBytes": 291840
   },
   {
@@ -1190,7 +1668,7 @@
    ],
    "pkt": "enc/ms_51_cbr.pkt",
    "trace": "dec/ms_51_cbr.plain.trace.gz",
-   "pcmSha256": "e63f894f17fe48cca409b92935d4aed97808d809747fce316bda03fcc532004c",
+   "pcmSha256": "541ccb3c07d60a1ae043086e6f31eee27e060b634b568ad3c30c56b1aeae3af4",
    "pcmBytes": 875520
   },
   {
@@ -1210,7 +1688,7 @@
    ],
    "pkt": "enc/ms_51_lowdelay_fs5.pkt",
    "trace": "dec/ms_51_lowdelay_fs5.plain.trace.gz",
-   "pcmSha256": "4689970b8d67dcbde651a790db602231602be6ff5b1372d9cf04ff3ff7c317da",
+   "pcmSha256": "118e9925cd17463d505db5913080e8d535fe7d0c46c5fe411e8902d3f125fd0f",
    "pcmBytes": 866880
   },
   {
@@ -1230,7 +1708,7 @@
    ],
    "pkt": "enc/ms_51_voip_fs10.pkt",
    "trace": "dec/ms_51_voip_fs10.plain.trace.gz",
-   "pcmSha256": "d91dc7ba1f68d5b7c3483a91daa0a5def0bdea2fe7b05b09017fe71285437116",
+   "pcmSha256": "9e55fea9fe09324dda66d5968c6c4c18013e54bfdc8d63260e4c4df98d12cc3c",
    "pcmBytes": 869760
   },
   {
@@ -1250,7 +1728,7 @@
    ],
    "pkt": "enc/ms_8ch.pkt",
    "trace": "dec/ms_8ch.plain.trace.gz",
-   "pcmSha256": "2d7eaf50937fa3dc4ebfd673e77cfdc5b833f24bf1debe47ed59c0a221089d03",
+   "pcmSha256": "37cd159d079d532476916e613eda52c7957a6f77f31f8397031aed2b30ca501e",
    "pcmBytes": 1167360
   },
   {
@@ -1274,7 +1752,7 @@
    ],
    "pkt": "enc/ms_mono_1s.pkt",
    "trace": "dec/ms_mono_1s.loss10_s30.trace.gz",
-   "pcmSha256": "71b320afeec75d4f4b8ef9ac9a54b44c899da76e6e69e09b7700d1a7b842e4a1",
+   "pcmSha256": "8f6a0ad1a7d4f3fe4ba10ac461c7a41efd67978246fcf1c1aad380e47f172049",
    "pcmBytes": 193920
   },
   {
@@ -1294,7 +1772,7 @@
    ],
    "pkt": "enc/ms_mono_1s.pkt",
    "trace": "dec/ms_mono_1s.plain.trace.gz",
-   "pcmSha256": "187884fe4dc212848740d20cb241b984ac94940a59b0d7099ea311f56e848602",
+   "pcmSha256": "0ef1f4b2e2d4be9876bf48902aacd702e84d0b81e3d437991c236f0e08c9ae69",
    "pcmBytes": 193920
   },
   {
@@ -1314,7 +1792,7 @@
    ],
    "pkt": "enc/ms_stereo_2mono.pkt",
    "trace": "dec/ms_stereo_2mono.plain.trace.gz",
-   "pcmSha256": "bc834c9f146711524fcebf341f2cb7e74da74246fb5e0ca7a3bb804c9e19918f",
+   "pcmSha256": "73c752f4004eb37e917b4c701476c8b6dc0dcf70497ad76ad8143056e36086f5",
    "pcmBytes": 387840
   },
   {
@@ -1338,7 +1816,47 @@
    ],
    "pkt": "enc/ms_stereo_coupled.pkt",
    "trace": "dec/ms_stereo_coupled.loss10_s31.trace.gz",
-   "pcmSha256": "300f8d840eb35115069a9ec7bc0d51ce358689646c0e243da8ac653ea755f109",
+   "pcmSha256": "ec23b5e6240f6d119db8dc360c9f1a87def4b2b0fb038dd273103e5a26f94747",
+   "pcmBytes": 387840
+  },
+  {
+   "name": "dec/ms_stereo_coupled.pad200",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--streams",
+    "1",
+    "--coupled",
+    "1",
+    "--mapping",
+    "0,1"
+   ],
+   "pkt": "repack/ms_stereo_coupled.pad200.pkt",
+   "trace": "dec/ms_stereo_coupled.pad200.trace.gz",
+   "pcmSha256": "a6253d3b17480209fed1226e597c1499b8fcbd4e8c2f423868da6b79ed5aa32e",
+   "pcmBytes": 387840
+  },
+  {
+   "name": "dec/ms_stereo_coupled.pad3",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--streams",
+    "1",
+    "--coupled",
+    "1",
+    "--mapping",
+    "0,1"
+   ],
+   "pkt": "repack/ms_stereo_coupled.pad3.pkt",
+   "trace": "dec/ms_stereo_coupled.pad3.trace.gz",
+   "pcmSha256": "a6253d3b17480209fed1226e597c1499b8fcbd4e8c2f423868da6b79ed5aa32e",
    "pcmBytes": 387840
   },
   {
@@ -1358,7 +1876,7 @@
    ],
    "pkt": "enc/ms_stereo_coupled.pkt",
    "trace": "dec/ms_stereo_coupled.plain.trace.gz",
-   "pcmSha256": "b4700bf50c94bbcd6e435995382314743f07a2221c15a38b56be6a648d79fe60",
+   "pcmSha256": "a6253d3b17480209fed1226e597c1499b8fcbd4e8c2f423868da6b79ed5aa32e",
    "pcmBytes": 387840
   },
   {
@@ -1378,7 +1896,7 @@
    ],
    "pkt": "enc/ms_stereo_swapped.pkt",
    "trace": "dec/ms_stereo_swapped.plain.trace.gz",
-   "pcmSha256": "47b5c164bc68efe386f4af96f7dfce0b50ab1913a85eb273a8351d9ce2e053d6",
+   "pcmSha256": "6746cb6a3d3ae0bffc0eb498eb9f15ace93ee1d566931be8b168235359d9e8a1",
    "pcmBytes": 387840
   },
   {
@@ -1392,7 +1910,7 @@
    ],
    "pkt": "enc/piano_12k_audio_24k.pkt",
    "trace": "dec/piano_12k_audio_24k.plain.trace.gz",
-   "pcmSha256": "023299ae164eaf803ac1a1d4849aed7ba6123f964a15d51cdfff1b692acfe9e2",
+   "pcmSha256": "8620655d718fb6825f5ab8818295e5277b30949f1a0b06ecae430f30ac043176",
    "pcmBytes": 288960
   },
   {
@@ -1406,7 +1924,7 @@
    ],
    "pkt": "enc/piano_16k_audio_32k.pkt",
    "trace": "dec/piano_16k_audio_32k.plain.trace.gz",
-   "pcmSha256": "74b1b7572633288282041cf00140eba65889dab10100618e5bbd059c4f37a1db",
+   "pcmSha256": "a7e4754ee542b0f39509ce5254e813defcb73c9883c6c58d8f94ae6123389518",
    "pcmBytes": 385280
   },
   {
@@ -1420,7 +1938,7 @@
    ],
    "pkt": "enc/piano_24k_audio_48k.pkt",
    "trace": "dec/piano_24k_audio_48k.at48k.trace.gz",
-   "pcmSha256": "9e1d2bb8cb06211191f03b83be83f2afd4c49ae3f077d20be8c768f7665f4dd3",
+   "pcmSha256": "7c5904ba24ca30d4d69598e5585e8bb3ec650e0c09f0a5b1bfdb4c8f8e552a1c",
    "pcmBytes": 1155840
   },
   {
@@ -1434,7 +1952,7 @@
    ],
    "pkt": "enc/piano_24k_audio_48k.pkt",
    "trace": "dec/piano_24k_audio_48k.plain.trace.gz",
-   "pcmSha256": "e4a0610159f3d78c52df9e8ca519670657ce0588218b961289c9be6026648252",
+   "pcmSha256": "1d5bc871cd9be630661613bd2399455d52f9870ba7f8e6cdae6c61d688c2ec7a",
    "pcmBytes": 577920
   },
   {
@@ -1448,7 +1966,7 @@
    ],
    "pkt": "enc/piano_24k_lowdelay_48k.pkt",
    "trace": "dec/piano_24k_lowdelay_48k.plain.trace.gz",
-   "pcmSha256": "f59be5e1dc494cb93b44dba9b1fddb2f12eda4bd85994820e89ba66644141845",
+   "pcmSha256": "80881b07108967b953030acfb5494e70816547740d66b0a882a93ec8fbadef5e",
    "pcmBytes": 577920
   },
   {
@@ -1462,7 +1980,7 @@
    ],
    "pkt": "enc/piano_48k_audio_128000.pkt",
    "trace": "dec/piano_48k_audio_128000.plain.trace.gz",
-   "pcmSha256": "8ee8d5de2d8ccf50cc2a2165b17ed2ddb7b38749e4ee2c95f376788c4f89d2d3",
+   "pcmSha256": "ca962f0f50cf7c33e03861370e2d6271e27d157423cd0d6a9c971ce58977df1c",
    "pcmBytes": 1155840
   },
   {
@@ -1476,7 +1994,7 @@
    ],
    "pkt": "enc/piano_48k_audio_192000.pkt",
    "trace": "dec/piano_48k_audio_192000.plain.trace.gz",
-   "pcmSha256": "00579ba1221714fd0ef8498eedb276fabc2e24e0b6afbe470ad3ad574bb8f4c1",
+   "pcmSha256": "20ab7c2df7e9bfafb28900737b705fdc9aacef531424a06f9cec09a7d2742b4e",
    "pcmBytes": 1155840
   },
   {
@@ -1490,7 +2008,7 @@
    ],
    "pkt": "enc/piano_48k_audio_24000.pkt",
    "trace": "dec/piano_48k_audio_24000.plain.trace.gz",
-   "pcmSha256": "6795c6340a8dc0170c300f1967220e72c7b167f7a11fd88ddf0824782dd49583",
+   "pcmSha256": "60035f4c3b2012efda66c2d1adf5b827a3783abe9d380de639b609f5bfaf1e64",
    "pcmBytes": 1155840
   },
   {
@@ -1504,7 +2022,7 @@
    ],
    "pkt": "enc/piano_48k_audio_256000.pkt",
    "trace": "dec/piano_48k_audio_256000.plain.trace.gz",
-   "pcmSha256": "912428cc0a0b3031292695fff7c5c312f39fb03b136634681d3ca3611277ba0b",
+   "pcmSha256": "b8dad67cd80b7bce49e74aa941054bc02c213523cf73844d34b21076a9fa84da",
    "pcmBytes": 1155840
   },
   {
@@ -1518,7 +2036,7 @@
    ],
    "pkt": "enc/piano_48k_audio_48000.pkt",
    "trace": "dec/piano_48k_audio_48000.plain.trace.gz",
-   "pcmSha256": "3ca81e3fc739b2f78521c111f3768bed84a330b0c4f46284dc1a2ecbda6bc889",
+   "pcmSha256": "6d5b65746f587c25438ff4a739d45eae322dbadde5f043d827d916bded1d9c7c",
    "pcmBytes": 1155840
   },
   {
@@ -1532,7 +2050,7 @@
    ],
    "pkt": "enc/piano_48k_audio_64000.pkt",
    "trace": "dec/piano_48k_audio_64000.as1ch.trace.gz",
-   "pcmSha256": "5181ce04332a00e9dcea6d4e165083dfbe5e4ce8386f06a1f636831f52ffcfa6",
+   "pcmSha256": "f2b4655aa0ae09b61c96208e9e712746a92238b3a5a1b44664317ecdafe32a58",
    "pcmBytes": 577920
   },
   {
@@ -1546,7 +2064,7 @@
    ],
    "pkt": "enc/piano_48k_audio_64000.pkt",
    "trace": "dec/piano_48k_audio_64000.at16k.trace.gz",
-   "pcmSha256": "1c17f057d9f762961cf462b3e38e55768cda88bc8b14f14242eabd0753e150f4",
+   "pcmSha256": "713c45a7913c3125fac302ef68ee6c09c815d7d554bb86e7af483ace6457c36a",
    "pcmBytes": 385280
   },
   {
@@ -1560,7 +2078,7 @@
    ],
    "pkt": "enc/piano_48k_audio_64000.pkt",
    "trace": "dec/piano_48k_audio_64000.at24k.trace.gz",
-   "pcmSha256": "04e9e48f63d392d748a1f9db4863c87dd930552ba5f69715395f07cce6fd2b83",
+   "pcmSha256": "bf83388b7bc8e582f9e8e4c3c1baaf392f6be07cd8c27c70c96e251af354d910",
    "pcmBytes": 577920
   },
   {
@@ -1574,7 +2092,7 @@
    ],
    "pkt": "enc/piano_48k_audio_64000.pkt",
    "trace": "dec/piano_48k_audio_64000.at8k.trace.gz",
-   "pcmSha256": "9f377502004fbf93792259b434f64229a228285e49dedf6c9589016f5fb6c417",
+   "pcmSha256": "1531c74f7a1e4e3fcdadbc0cd855bc0024b2dee21e81bbd77e7906a5bd4fbee9",
    "pcmBytes": 192640
   },
   {
@@ -1589,7 +2107,7 @@
    ],
    "pkt": "enc/piano_48k_audio_64000.pkt",
    "trace": "dec/piano_48k_audio_64000.float.trace.gz",
-   "pcmSha256": "8a48a50d98cd7d6b698f02f49d796b440f74ba53a97590b334dc19e599050b78",
+   "pcmSha256": "a2dd9c466597704c4da67a51ca7b941cc6ee6170dc9e26960b129dbb83272ece",
    "pcmBytes": 1155840
   },
   {
@@ -1605,7 +2123,7 @@
    ],
    "pkt": "enc/piano_48k_audio_64000.pkt",
    "trace": "dec/piano_48k_audio_64000.gain.trace.gz",
-   "pcmSha256": "ee31aef3b44f5724bb3f1d1f1cd4d9f8b6dc872a89aa391d4bcfe20f392c8ccb",
+   "pcmSha256": "13599aa65492a9914b0445803756b8802c7b3d3cb6c49fd15470fc34f3fe4341",
    "pcmBytes": 1155840
   },
   {
@@ -1623,7 +2141,7 @@
    ],
    "pkt": "enc/piano_48k_audio_64000.pkt",
    "trace": "dec/piano_48k_audio_64000.gainsched.trace.gz",
-   "pcmSha256": "4e918e9b55411b43bbe0c05a3344793ce7074872b03825e7c62b24db0f2eb973",
+   "pcmSha256": "c99d6cf31adea5b1d64b5570d1c10cfcb61a0ac963dd903166030ef110b14796",
    "pcmBytes": 1155840
   },
   {
@@ -1641,7 +2159,7 @@
    ],
    "pkt": "enc/piano_48k_audio_64000.pkt",
    "trace": "dec/piano_48k_audio_64000.loss10_s1.trace.gz",
-   "pcmSha256": "25d807aaccdf63937e1e10d40f151547e02e6cb0832fb3c1ca66ea6242e468c7",
+   "pcmSha256": "3b0f01a084becaa0ff46cb96c537760dce9332f154f1dca39caeb8dfb126c877",
    "pcmBytes": 1155840
   },
   {
@@ -1659,7 +2177,7 @@
    ],
    "pkt": "enc/piano_48k_audio_64000.pkt",
    "trace": "dec/piano_48k_audio_64000.loss40_s2.trace.gz",
-   "pcmSha256": "7f089d44da758c3c8986456e08c7f59131d4cca3c8be8f08b6569fdc380ccaf7",
+   "pcmSha256": "efabfd4e92ae94254a9d586f293b44116d4f81baa51df1b0ae271e382cb7736f",
    "pcmBytes": 1155840
   },
   {
@@ -1673,7 +2191,7 @@
    ],
    "pkt": "enc/piano_48k_audio_64000.pkt",
    "trace": "dec/piano_48k_audio_64000.plain.trace.gz",
-   "pcmSha256": "8a48a50d98cd7d6b698f02f49d796b440f74ba53a97590b334dc19e599050b78",
+   "pcmSha256": "a2dd9c466597704c4da67a51ca7b941cc6ee6170dc9e26960b129dbb83272ece",
    "pcmBytes": 1155840
   },
   {
@@ -1689,7 +2207,7 @@
    ],
    "pkt": "enc/piano_48k_audio_64000.pkt",
    "trace": "dec/piano_48k_audio_64000.reset.trace.gz",
-   "pcmSha256": "e28e5de88ff4015a7edab3d5a397f49754e257c9f556dcbb41d0dff99c4292d6",
+   "pcmSha256": "7b351c65e8857f79b8f802c34bd32edd30e648dc1ac9962b13213b73afbf49e5",
    "pcmBytes": 1155840
   },
   {
@@ -1703,7 +2221,7 @@
    ],
    "pkt": "enc/piano_48k_audio_96000.pkt",
    "trace": "dec/piano_48k_audio_96000.plain.trace.gz",
-   "pcmSha256": "4ab4ed0f07a8e98a0b5703dd6c3ee85fac6f9e24b5b3533ec4fac58763308924",
+   "pcmSha256": "b0a2d36c02a710d4be8f40c7bf4a322d6338140df3860f0c217a9902383ecac2",
    "pcmBytes": 1155840
   },
   {
@@ -1717,7 +2235,7 @@
    ],
    "pkt": "enc/piano_48k_audio_bwMB.pkt",
    "trace": "dec/piano_48k_audio_bwMB.plain.trace.gz",
-   "pcmSha256": "f581efd65a9c622112cfb630277679410033d5092358ef361bed4ff6bf6164c5",
+   "pcmSha256": "d2d6b7ef5e053b12b38ed2a9c94c1b874de2800de47f1c0d42f1427a5ad86392",
    "pcmBytes": 1155840
   },
   {
@@ -1731,7 +2249,7 @@
    ],
    "pkt": "enc/piano_48k_audio_bwNB.pkt",
    "trace": "dec/piano_48k_audio_bwNB.plain.trace.gz",
-   "pcmSha256": "9c6d5348a4ff68d4c87e612c58c84bcc81490cf85a4ec6caca525f564b82e7e8",
+   "pcmSha256": "588c797147eaaf69dbbdf93715128e5c7ec737e74a6905ac94d8b6158672c608",
    "pcmBytes": 1155840
   },
   {
@@ -1745,7 +2263,7 @@
    ],
    "pkt": "enc/piano_48k_audio_bwSWB.pkt",
    "trace": "dec/piano_48k_audio_bwSWB.plain.trace.gz",
-   "pcmSha256": "03365826dda6e68216ff04f28ed1d54466258672825fe5a30f564ccddcb982c6",
+   "pcmSha256": "88a94008b868582b6f55f1c65c266b373612337694e2c2730f147113a65bb7ec",
    "pcmBytes": 1155840
   },
   {
@@ -1759,7 +2277,7 @@
    ],
    "pkt": "enc/piano_48k_audio_bwWB.pkt",
    "trace": "dec/piano_48k_audio_bwWB.plain.trace.gz",
-   "pcmSha256": "f581efd65a9c622112cfb630277679410033d5092358ef361bed4ff6bf6164c5",
+   "pcmSha256": "d2d6b7ef5e053b12b38ed2a9c94c1b874de2800de47f1c0d42f1427a5ad86392",
    "pcmBytes": 1155840
   },
   {
@@ -1777,7 +2295,7 @@
    ],
    "pkt": "enc/piano_48k_audio_cbr.pkt",
    "trace": "dec/piano_48k_audio_cbr.loss10_s4.trace.gz",
-   "pcmSha256": "90ec5cf73cde1ec5cd043fd6f5c24269a9e9da5f81a3d2f097ec5fe92d54b9e2",
+   "pcmSha256": "8209c299d4fb04f6ec605593190c91d0153172e3f7bb3800ba94e552668d57ff",
    "pcmBytes": 1155840
   },
   {
@@ -1791,7 +2309,7 @@
    ],
    "pkt": "enc/piano_48k_audio_cbr.pkt",
    "trace": "dec/piano_48k_audio_cbr.plain.trace.gz",
-   "pcmSha256": "e001eaddd8f78bfcaebc5e41a68c1c76bdeb61cb613e6b2ff8344f2c2faf6174",
+   "pcmSha256": "d74d0f4d6744c8aac246aada54988903eed28184b00f912d355315d852ce56df",
    "pcmBytes": 1155840
   },
   {
@@ -1805,7 +2323,7 @@
    ],
    "pkt": "enc/piano_48k_audio_cbr_fs10.pkt",
    "trace": "dec/piano_48k_audio_cbr_fs10.plain.trace.gz",
-   "pcmSha256": "e0166241f91b797a961ecff0de71846cffeb86fc811abad0069cc3eb7aef8b1f",
+   "pcmSha256": "68b91917de960afbb7fdce9a3297759ab001648ffa69fa340dc1bc973132f498",
    "pcmBytes": 1153920
   },
   {
@@ -1819,7 +2337,7 @@
    ],
    "pkt": "enc/piano_48k_audio_cplx0.pkt",
    "trace": "dec/piano_48k_audio_cplx0.plain.trace.gz",
-   "pcmSha256": "18d9ec7a17638603ddded592067b625cf84a004ce4b63f438caac0e1d66b6c9a",
+   "pcmSha256": "e3876fcca8be75ddd3dfe459ebfd466bd1dc42b4ab60d6fbc68d7da08faa0c59",
    "pcmBytes": 1155840
   },
   {
@@ -1833,7 +2351,7 @@
    ],
    "pkt": "enc/piano_48k_audio_cplx5.pkt",
    "trace": "dec/piano_48k_audio_cplx5.plain.trace.gz",
-   "pcmSha256": "8a48a50d98cd7d6b698f02f49d796b440f74ba53a97590b334dc19e599050b78",
+   "pcmSha256": "9f650ade0c5facab78d8550e59dfb1d981fa824b82091564cfec3802435544eb",
    "pcmBytes": 1155840
   },
   {
@@ -1847,7 +2365,7 @@
    ],
    "pkt": "enc/piano_48k_audio_cvbr.pkt",
    "trace": "dec/piano_48k_audio_cvbr.plain.trace.gz",
-   "pcmSha256": "c96170ad47a251ac130ad03b5d008048f98f74c005818f8769f116edad09cffe",
+   "pcmSha256": "4ec92cfe8b4314ee9c1b953723f5bd3a4da1fd55a29d08f7a4f0ef77c560779f",
    "pcmBytes": 1155840
   },
   {
@@ -1861,8 +2379,22 @@
    ],
    "pkt": "enc/piano_48k_audio_forcemono.pkt",
    "trace": "dec/piano_48k_audio_forcemono.plain.trace.gz",
-   "pcmSha256": "25772a89e3a701688377e74860aa2c4c6c59efb32abce3bf16dbd8588326cbd3",
+   "pcmSha256": "5dd4880236a855d5232d2a95d924b1bf86f2d29cb8c00af9869209c4de975337",
    "pcmBytes": 1155840
+  },
+  {
+   "name": "dec/piano_48k_audio_framedur_variable_cbr.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/piano_48k_audio_framedur_variable_cbr.pkt",
+   "trace": "dec/piano_48k_audio_framedur_variable_cbr.plain.trace.gz",
+   "pcmSha256": "003153286987ad7e45c2835ece6c1298ea4d850693befbd491b2e5cf6ee5fc63",
+   "pcmBytes": 1145760
   },
   {
    "name": "dec/piano_48k_audio_fs10.loss10_s3",
@@ -1879,7 +2411,7 @@
    ],
    "pkt": "enc/piano_48k_audio_fs10.pkt",
    "trace": "dec/piano_48k_audio_fs10.loss10_s3.trace.gz",
-   "pcmSha256": "225cc935bb3f67b4bc6ab8614330c0054c0ba202fe5370ec898d43cdd977cc6a",
+   "pcmSha256": "594ccdc8b835f23d934611e490d7e655817a5a3a23d78a3c22b77de5932a2c42",
    "pcmBytes": 1153920
   },
   {
@@ -1893,7 +2425,7 @@
    ],
    "pkt": "repack/piano_48k_audio_fs10.merge2.pkt",
    "trace": "dec/piano_48k_audio_fs10.merge2.trace.gz",
-   "pcmSha256": "d04094d39491fefc004c7b44901dc2e64b7e23a6120e179b621121f1500148a1",
+   "pcmSha256": "ebb72882dd26c3624e5c267d458c0ffdfd37e011d760b0e82e1eb6e8be2280d6",
    "pcmBytes": 1153920
   },
   {
@@ -1907,7 +2439,7 @@
    ],
    "pkt": "repack/piano_48k_audio_fs10.merge6.pkt",
    "trace": "dec/piano_48k_audio_fs10.merge6.trace.gz",
-   "pcmSha256": "d04094d39491fefc004c7b44901dc2e64b7e23a6120e179b621121f1500148a1",
+   "pcmSha256": "ebb72882dd26c3624e5c267d458c0ffdfd37e011d760b0e82e1eb6e8be2280d6",
    "pcmBytes": 1153920
   },
   {
@@ -1921,7 +2453,7 @@
    ],
    "pkt": "enc/piano_48k_audio_fs10.pkt",
    "trace": "dec/piano_48k_audio_fs10.plain.trace.gz",
-   "pcmSha256": "d04094d39491fefc004c7b44901dc2e64b7e23a6120e179b621121f1500148a1",
+   "pcmSha256": "ebb72882dd26c3624e5c267d458c0ffdfd37e011d760b0e82e1eb6e8be2280d6",
    "pcmBytes": 1153920
   },
   {
@@ -1939,7 +2471,7 @@
    ],
    "pkt": "enc/piano_48k_audio_fs2.5.pkt",
    "trace": "dec/piano_48k_audio_fs2.5.loss10_s3.trace.gz",
-   "pcmSha256": "354b5d527218b53da8c7692f9850cfbd855872bffea9f95a8011ec7a1356da40",
+   "pcmSha256": "65c809d467f510947a4b560d826b4c306824fd6810245c5a4f44d4e7ec4ef230",
    "pcmBytes": 1152480
   },
   {
@@ -1953,7 +2485,7 @@
    ],
    "pkt": "repack/piano_48k_audio_fs2.5.merge8.pkt",
    "trace": "dec/piano_48k_audio_fs2.5.merge8.trace.gz",
-   "pcmSha256": "e171bc7ca3a14bf6031c927122c4d4c78bf2b776cb37223ba37407703f4291f6",
+   "pcmSha256": "6a197150dcfc291d44c2ef39fe52abd4b07d2314cad263d3cccfeba4939fb603",
    "pcmBytes": 1152480
   },
   {
@@ -1967,7 +2499,7 @@
    ],
    "pkt": "enc/piano_48k_audio_fs2.5.pkt",
    "trace": "dec/piano_48k_audio_fs2.5.plain.trace.gz",
-   "pcmSha256": "e171bc7ca3a14bf6031c927122c4d4c78bf2b776cb37223ba37407703f4291f6",
+   "pcmSha256": "6a197150dcfc291d44c2ef39fe52abd4b07d2314cad263d3cccfeba4939fb603",
    "pcmBytes": 1152480
   },
   {
@@ -1985,7 +2517,7 @@
    ],
    "pkt": "enc/piano_48k_audio_fs20.pkt",
    "trace": "dec/piano_48k_audio_fs20.loss10_s3.trace.gz",
-   "pcmSha256": "8ba4b6b4bb2649e8dc0060483495830c868a9f6e1ad7b08f75b55493fec8e6e3",
+   "pcmSha256": "c0ca8be480a9b61027f0314728a2a53c079dfd8e82f0c5dfb9853b4d5dc4fe17",
    "pcmBytes": 1155840
   },
   {
@@ -1999,7 +2531,7 @@
    ],
    "pkt": "repack/piano_48k_audio_fs20.merge3.pkt",
    "trace": "dec/piano_48k_audio_fs20.merge3.trace.gz",
-   "pcmSha256": "8a48a50d98cd7d6b698f02f49d796b440f74ba53a97590b334dc19e599050b78",
+   "pcmSha256": "a2dd9c466597704c4da67a51ca7b941cc6ee6170dc9e26960b129dbb83272ece",
    "pcmBytes": 1155840
   },
   {
@@ -2013,7 +2545,7 @@
    ],
    "pkt": "enc/piano_48k_audio_fs20.pkt",
    "trace": "dec/piano_48k_audio_fs20.plain.trace.gz",
-   "pcmSha256": "8a48a50d98cd7d6b698f02f49d796b440f74ba53a97590b334dc19e599050b78",
+   "pcmSha256": "a2dd9c466597704c4da67a51ca7b941cc6ee6170dc9e26960b129dbb83272ece",
    "pcmBytes": 1155840
   },
   {
@@ -2031,7 +2563,7 @@
    ],
    "pkt": "enc/piano_48k_audio_fs40.pkt",
    "trace": "dec/piano_48k_audio_fs40.loss10_s3.trace.gz",
-   "pcmSha256": "34381530504609435be8775e27b2ca42390c848cb4ace587ce5fe39a7ab58cb2",
+   "pcmSha256": "ba447e7fc13762fc531741ca2682f2aee12b2692643357ff80df18ec6aa3822c",
    "pcmBytes": 1159680
   },
   {
@@ -2045,7 +2577,7 @@
    ],
    "pkt": "enc/piano_48k_audio_fs40.pkt",
    "trace": "dec/piano_48k_audio_fs40.plain.trace.gz",
-   "pcmSha256": "d3e2ce70f3d151386914fa8220a52227e0c3c92a4a5c0474c4c7de08ad3ac43c",
+   "pcmSha256": "1c136f85971dc9604b111daf5d54134ac16b589fcf4d0407eaf15280d9de27c9",
    "pcmBytes": 1159680
   },
   {
@@ -2059,7 +2591,7 @@
    ],
    "pkt": "repack/piano_48k_audio_fs40.split.pkt",
    "trace": "dec/piano_48k_audio_fs40.split.trace.gz",
-   "pcmSha256": "d3e2ce70f3d151386914fa8220a52227e0c3c92a4a5c0474c4c7de08ad3ac43c",
+   "pcmSha256": "1c136f85971dc9604b111daf5d54134ac16b589fcf4d0407eaf15280d9de27c9",
    "pcmBytes": 1159680
   },
   {
@@ -2077,7 +2609,7 @@
    ],
    "pkt": "enc/piano_48k_audio_fs5.pkt",
    "trace": "dec/piano_48k_audio_fs5.loss10_s3.trace.gz",
-   "pcmSha256": "529c26838cf8581bdb0c9c05a46d4f5fe5a66c9ae1263297f413974f6597e88f",
+   "pcmSha256": "78dbc336d688f7038ae8ab4e65b32cf6c60948f7f3d5078726dde16ed9257e51",
    "pcmBytes": 1152960
   },
   {
@@ -2091,7 +2623,7 @@
    ],
    "pkt": "enc/piano_48k_audio_fs5.pkt",
    "trace": "dec/piano_48k_audio_fs5.plain.trace.gz",
-   "pcmSha256": "30a732a9bb95e5fdfac464edf605d6219461d77626b0571ca4d2848760a9450b",
+   "pcmSha256": "72526ee50c601cbf74224a37288412054dfad1fb0a0c69a9c53a2d600efd9218",
    "pcmBytes": 1152960
   },
   {
@@ -2109,7 +2641,7 @@
    ],
    "pkt": "enc/piano_48k_audio_fs60.pkt",
    "trace": "dec/piano_48k_audio_fs60.loss10_s3.trace.gz",
-   "pcmSha256": "deabacf00c58d8765a392f76e0222ad696ede346d425c9c76fe266fccaeb84f5",
+   "pcmSha256": "2401d20e37558682b82e1719ce41c1248d412c74aafab810c836ba9e4303f4c1",
    "pcmBytes": 1163520
   },
   {
@@ -2123,7 +2655,7 @@
    ],
    "pkt": "enc/piano_48k_audio_fs60.pkt",
    "trace": "dec/piano_48k_audio_fs60.plain.trace.gz",
-   "pcmSha256": "7298db39f71d94f4eab8219379a0aa1131146c3d0d06fa69764359f954ac9480",
+   "pcmSha256": "3f934f482184a06c0d854d9534e37c30b75af251c1e78b31906efb1fb20e2b82",
    "pcmBytes": 1163520
   },
   {
@@ -2137,7 +2669,7 @@
    ],
    "pkt": "repack/piano_48k_audio_fs60.split.pkt",
    "trace": "dec/piano_48k_audio_fs60.split.trace.gz",
-   "pcmSha256": "7298db39f71d94f4eab8219379a0aa1131146c3d0d06fa69764359f954ac9480",
+   "pcmSha256": "3f934f482184a06c0d854d9534e37c30b75af251c1e78b31906efb1fb20e2b82",
    "pcmBytes": 1163520
   },
   {
@@ -2151,7 +2683,7 @@
    ],
    "pkt": "enc/piano_48k_audio_lsb24.pkt",
    "trace": "dec/piano_48k_audio_lsb24.plain.trace.gz",
-   "pcmSha256": "8a48a50d98cd7d6b698f02f49d796b440f74ba53a97590b334dc19e599050b78",
+   "pcmSha256": "a2dd9c466597704c4da67a51ca7b941cc6ee6170dc9e26960b129dbb83272ece",
    "pcmBytes": 1155840
   },
   {
@@ -2165,7 +2697,7 @@
    ],
    "pkt": "enc/piano_48k_audio_lsb8.pkt",
    "trace": "dec/piano_48k_audio_lsb8.plain.trace.gz",
-   "pcmSha256": "8a48a50d98cd7d6b698f02f49d796b440f74ba53a97590b334dc19e599050b78",
+   "pcmSha256": "a5a57ee125a218f8108e89d4c8f582ee95ab79245929d9c84d74f39e7f2fa413",
    "pcmBytes": 1155840
   },
   {
@@ -2179,7 +2711,7 @@
    ],
    "pkt": "enc/piano_48k_audio_max.pkt",
    "trace": "dec/piano_48k_audio_max.plain.trace.gz",
-   "pcmSha256": "625ff9d07dc73fe2f5431ac8bb847741e7b3c0e4a6805f28d6e52f97eabe9ccd",
+   "pcmSha256": "3087a64bff18e72b13dcab3c4eece8353a71e43b855be3611c9edd02e15f902f",
    "pcmBytes": 1155840
   },
   {
@@ -2193,7 +2725,7 @@
    ],
    "pkt": "enc/piano_48k_audio_mono_32k_fs10.pkt",
    "trace": "dec/piano_48k_audio_mono_32k_fs10.plain.trace.gz",
-   "pcmSha256": "3222c5b853bca25c1adf8eeda7cf1d9103dda3ff0f03f7ee3d012401cca15e3a",
+   "pcmSha256": "473b3df1b2e17bee1c6a0360c3ec5d127e84b804b13a1266ef36c7bc62e1fb13",
    "pcmBytes": 576960
   },
   {
@@ -2207,7 +2739,7 @@
    ],
    "pkt": "enc/piano_48k_audio_mono_64k.pkt",
    "trace": "dec/piano_48k_audio_mono_64k.as2ch.trace.gz",
-   "pcmSha256": "1cdb4793fa5e24a453d40c481a376fbd9fac7bdb99f184df5be4e9250c47f9a9",
+   "pcmSha256": "91746793c1e5870486ace41ffa5d39bcad341a38d548babdd3185695496ece11",
    "pcmBytes": 1155840
   },
   {
@@ -2221,8 +2753,22 @@
    ],
    "pkt": "enc/piano_48k_audio_mono_64k.pkt",
    "trace": "dec/piano_48k_audio_mono_64k.plain.trace.gz",
-   "pcmSha256": "5ed22fc8c04ac41b577afc313eac700a7fdff78aad9cca91f7dac630d931f980",
+   "pcmSha256": "9ac81fbe7d4d7f4e61ff6d12887587cfab88954aa4283bb4c087d62ba146969c",
    "pcmBytes": 577920
+  },
+  {
+   "name": "dec/piano_48k_audio_nopred_fs10.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/piano_48k_audio_nopred_fs10.pkt",
+   "trace": "dec/piano_48k_audio_nopred_fs10.plain.trace.gz",
+   "pcmSha256": "ffd4201b7c5918e371bf214b488a7873a0601c04947aaea464db1e9ceed71ef5",
+   "pcmBytes": 1153920
   },
   {
    "name": "dec/piano_48k_audio_sigvoice.plain",
@@ -2235,7 +2781,7 @@
    ],
    "pkt": "enc/piano_48k_audio_sigvoice.pkt",
    "trace": "dec/piano_48k_audio_sigvoice.plain.trace.gz",
-   "pcmSha256": "3ca81e3fc739b2f78521c111f3768bed84a330b0c4f46284dc1a2ecbda6bc889",
+   "pcmSha256": "610e34de64a5d778436d6aa8fbb5a1ea11fe2ee31510fa9d5f0f7c650385645c",
    "pcmBytes": 1155840
   },
   {
@@ -2249,7 +2795,7 @@
    ],
    "pkt": "enc/piano_48k_lowdelay_64k.pkt",
    "trace": "dec/piano_48k_lowdelay_64k.at16k.trace.gz",
-   "pcmSha256": "0a844eb5e7326adf08907ec73079c334787383a304a3584170e1132a93604b63",
+   "pcmSha256": "29e359caeb0f70f8fb4ab3d7da0fcfe6022beee1ba8a09c2c8fce443bc1a0130",
    "pcmBytes": 385280
   },
   {
@@ -2267,7 +2813,7 @@
    ],
    "pkt": "enc/piano_48k_lowdelay_64k.pkt",
    "trace": "dec/piano_48k_lowdelay_64k.loss10_s7.trace.gz",
-   "pcmSha256": "c15856b42f599c97cbf7e65ab389d8612aa07f8e216a960622f137a233a957e7",
+   "pcmSha256": "71a607abd9bce9b8b2580d5cdd66d03cebb64f844de4e253010b407224b52c57",
    "pcmBytes": 1155840
   },
   {
@@ -2281,7 +2827,7 @@
    ],
    "pkt": "enc/piano_48k_lowdelay_64k.pkt",
    "trace": "dec/piano_48k_lowdelay_64k.plain.trace.gz",
-   "pcmSha256": "f9abe974bfedf8d54d532377e7d82ed0da7912b37f6a436238f573c52180b7f4",
+   "pcmSha256": "59aec66e25ef4b2b170912ed5a8682fe62ff62bccbfe3984813efccde7f42126",
    "pcmBytes": 1155840
   },
   {
@@ -2295,8 +2841,105 @@
    ],
    "pkt": "enc/piano_48k_lowdelay_cbr_fs5.pkt",
    "trace": "dec/piano_48k_lowdelay_cbr_fs5.plain.trace.gz",
-   "pcmSha256": "3babdd9d5ea603b6a46f46809c34aab270ffe46e5612c87195087a1c19b991b9",
+   "pcmSha256": "4ff922d65065c35baab8d77f166a314350bb0c00c1644d49da25f0031a230d89",
    "pcmBytes": 1152960
+  },
+  {
+   "name": "dec/piano_48k_lowdelay_framedur10.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/piano_48k_lowdelay_framedur10.pkt",
+   "trace": "dec/piano_48k_lowdelay_framedur10.plain.trace.gz",
+   "pcmSha256": "4a92c85861df62bfb3ac398ea86cef58a1fc09565c2b28418d7174a9c520fe0f",
+   "pcmBytes": 1148160
+  },
+  {
+   "name": "dec/piano_48k_lowdelay_framedur20.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/piano_48k_lowdelay_framedur20.pkt",
+   "trace": "dec/piano_48k_lowdelay_framedur20.plain.trace.gz",
+   "pcmSha256": "9d880febbbe4278605725ece32850cf7747798316b7655c3fa0c9c4c24595bed",
+   "pcmBytes": 1152000
+  },
+  {
+   "name": "dec/piano_48k_lowdelay_framedur2p5.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/piano_48k_lowdelay_framedur2p5.pkt",
+   "trace": "dec/piano_48k_lowdelay_framedur2p5.plain.trace.gz",
+   "pcmSha256": "15a196120f2fc1127cab42e40c22c5a8c97331ffd9e79933815fca5ee9dca4d4",
+   "pcmBytes": 1145280
+  },
+  {
+   "name": "dec/piano_48k_lowdelay_framedur40.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/piano_48k_lowdelay_framedur40.pkt",
+   "trace": "dec/piano_48k_lowdelay_framedur40.plain.trace.gz",
+   "pcmSha256": "536663a87c811d607077b196fba9fac057cd27cc95db9baebdb9f1042c8e26e4",
+   "pcmBytes": 1159680
+  },
+  {
+   "name": "dec/piano_48k_lowdelay_framedur5.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/piano_48k_lowdelay_framedur5.pkt",
+   "trace": "dec/piano_48k_lowdelay_framedur5.plain.trace.gz",
+   "pcmSha256": "9009f20a2f440b4b528ebe05b42a3ac23a32bff53d0b0c9eba96887f62231048",
+   "pcmBytes": 1146240
+  },
+  {
+   "name": "dec/piano_48k_lowdelay_framedur60.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/piano_48k_lowdelay_framedur60.pkt",
+   "trace": "dec/piano_48k_lowdelay_framedur60.plain.trace.gz",
+   "pcmSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "name": "dec/piano_48k_lowdelay_framedurvariable.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2"
+   ],
+   "pkt": "enc/piano_48k_lowdelay_framedurvariable.pkt",
+   "trace": "dec/piano_48k_lowdelay_framedurvariable.plain.trace.gz",
+   "pcmSha256": "8946ddfbe1067fc6f5b018575f5106a19e084891355050b3d15a4c9971ea2b7f",
+   "pcmBytes": 1149120
   },
   {
    "name": "dec/piano_48k_lowdelay_fs10.plain",
@@ -2309,7 +2952,7 @@
    ],
    "pkt": "enc/piano_48k_lowdelay_fs10.pkt",
    "trace": "dec/piano_48k_lowdelay_fs10.plain.trace.gz",
-   "pcmSha256": "092066ccd7dfab1847721f1c86543fec2eb38749db01d29b6b0de5eb688afede",
+   "pcmSha256": "5e07a9bd3eca2fafa2bcdd57526c4b66e2c64420941d30e50de1fbf57933cb1a",
    "pcmBytes": 1153920
   },
   {
@@ -2323,7 +2966,7 @@
    ],
    "pkt": "enc/piano_48k_lowdelay_fs2.5.pkt",
    "trace": "dec/piano_48k_lowdelay_fs2.5.plain.trace.gz",
-   "pcmSha256": "82fce616828cf29544f93d22b5f75ef6a72e36c9494476183b2af5d99ba43091",
+   "pcmSha256": "9da75bf936d63f2d2587340c132a6f409a99c27e10f9dd2a5b5c5c2457acec3b",
    "pcmBytes": 1152480
   },
   {
@@ -2337,7 +2980,7 @@
    ],
    "pkt": "enc/piano_48k_lowdelay_fs20.pkt",
    "trace": "dec/piano_48k_lowdelay_fs20.plain.trace.gz",
-   "pcmSha256": "154cce3bedf43a3837d3bb07f6c88f008f05c30fa76888a55db5757f96356685",
+   "pcmSha256": "b9831ba8f53e755bf2b960219e3096780be34a2c84cd780e7be8892e3391c6a9",
    "pcmBytes": 1155840
   },
   {
@@ -2351,7 +2994,7 @@
    ],
    "pkt": "enc/piano_48k_lowdelay_fs5.pkt",
    "trace": "dec/piano_48k_lowdelay_fs5.plain.trace.gz",
-   "pcmSha256": "1f6b6a72adbd273538690cbc063d4f57d9c6a84e203a2c9fff82f97e1d329e2b",
+   "pcmSha256": "3212395d32e61127723291a5311ca2282e8eef95abd85818c371006d3dd833bd",
    "pcmBytes": 1152960
   },
   {
@@ -2365,7 +3008,7 @@
    ],
    "pkt": "enc/piano_48k_modelist_celt_96k.pkt",
    "trace": "dec/piano_48k_modelist_celt_96k.plain.trace.gz",
-   "pcmSha256": "3865b3c65b1ca88fcdadd159c1f56a299b5456fd1bc88c4909d4ed553143791d",
+   "pcmSha256": "f196b641bee06e3cfac52283d4634df01b98969d28db21429c21e27dc81fdf9d",
    "pcmBytes": 1152480
   },
   {
@@ -2379,7 +3022,7 @@
    ],
    "pkt": "enc/piano_48k_modelist_celthq_96k.pkt",
    "trace": "dec/piano_48k_modelist_celthq_96k.plain.trace.gz",
-   "pcmSha256": "209b7f854ce5d50f7bab39bf189c0a7c7dca0f7d2873bdc8d81b666fd041ff9d",
+   "pcmSha256": "84cc4f0d542ee35d06ed8b7c90441f5a7c6fe45b3d4ec49f403c09465d57e3e0",
    "pcmBytes": 1152480
   },
   {
@@ -2393,7 +3036,7 @@
    ],
    "pkt": "enc/piano_48k_modelist_hybrid24_96k.pkt",
    "trace": "dec/piano_48k_modelist_hybrid24_96k.plain.trace.gz",
-   "pcmSha256": "a5053e14a828b953e94d0f3dd00cf37b16bd1e34d43ba489434b44a8a950d884",
+   "pcmSha256": "d2af3a13e8ce628921fe9f4e8bd2aaad22548dd77199d5dd47b38d59fd0f9f13",
    "pcmBytes": 1153920
   },
   {
@@ -2407,7 +3050,7 @@
    ],
    "pkt": "enc/piano_48k_modelist_hybrid48_96k.pkt",
    "trace": "dec/piano_48k_modelist_hybrid48_96k.plain.trace.gz",
-   "pcmSha256": "7c9698f3b51d81063f263a7a3e5ac3fe6685e16dcb5cb4a6390038c20a4d83ea",
+   "pcmSha256": "61525fbf78a73468902b457a03245e0b5e3938ae5a7a114e7783300c971bd45b",
    "pcmBytes": 1153920
   },
   {
@@ -2421,7 +3064,7 @@
    ],
    "pkt": "enc/piano_48k_modelist_silk12_96k.pkt",
    "trace": "dec/piano_48k_modelist_silk12_96k.plain.trace.gz",
-   "pcmSha256": "7677336a20e863dbb21e7c34a79e8d2085aca38c3b8a390114e94e5cf2ca4456",
+   "pcmSha256": "171480980d835f6b368a9b2721836a4b014315f3c7c581b1bda479b4c5b68d35",
    "pcmBytes": 1153920
   },
   {
@@ -2435,7 +3078,7 @@
    ],
    "pkt": "enc/piano_48k_modelist_silk16_96k.pkt",
    "trace": "dec/piano_48k_modelist_silk16_96k.plain.trace.gz",
-   "pcmSha256": "2d3224f148f9277f7b89c706e89a72fa1acbe1e99fa565718abfa8de171e97f8",
+   "pcmSha256": "f0540c2c4cde03af18229e257912a09ff89c89ca58c9c1828ea1514450bb06ec",
    "pcmBytes": 1153920
   },
   {
@@ -2449,7 +3092,7 @@
    ],
    "pkt": "enc/piano_48k_modelist_silk8_96k.pkt",
    "trace": "dec/piano_48k_modelist_silk8_96k.plain.trace.gz",
-   "pcmSha256": "db8e3a4c0559bd3d51594b287c3a49255c8c6025e0599053d7d9362749c46110",
+   "pcmSha256": "7c2600590ceaba00a1cdb4679ba7f5061fa0576d3427cc2c32b2e111064674b1",
    "pcmBytes": 1153920
   },
   {
@@ -2463,7 +3106,7 @@
    ],
    "pkt": "enc/piano_48k_sweep.pkt",
    "trace": "dec/piano_48k_sweep.plain.trace.gz",
-   "pcmSha256": "4d2c5913dc582caecc26f19add55f82171ecb3f338b0eb2006b9acd49154cc14",
+   "pcmSha256": "ac62c7f168aa8c457688195c35a8cd5134be2f9a7e5658a65745d805c507e14f",
    "pcmBytes": 1155840
   },
   {
@@ -2477,7 +3120,7 @@
    ],
    "pkt": "enc/piano_48k_sweep_cbr.pkt",
    "trace": "dec/piano_48k_sweep_cbr.plain.trace.gz",
-   "pcmSha256": "c9483caca7554347ddea4d5167eda43d87ed25295c8329d0be6dd991b97447bc",
+   "pcmSha256": "7584300ad72de8ca8d3cc3ed164973ec595185589c5bd22db2c4969318cff7df",
    "pcmBytes": 1155840
   },
   {
@@ -2491,7 +3134,7 @@
    ],
    "pkt": "enc/piano_48k_voip_32k.pkt",
    "trace": "dec/piano_48k_voip_32k.plain.trace.gz",
-   "pcmSha256": "8e2e99d8c03e7b0c26932e107357f3bc560228b0489658cb077f1e63d5e084ae",
+   "pcmSha256": "5e4c01a95aaac6b7fe79a371fc51226c33f52a60c2bf586d63826b3cd50c841e",
    "pcmBytes": 1155840
   },
   {
@@ -2505,7 +3148,7 @@
    ],
    "pkt": "enc/piano_48k_voip_64k.pkt",
    "trace": "dec/piano_48k_voip_64k.plain.trace.gz",
-   "pcmSha256": "5269e4ff284253fb69ee0f84d32d9f5448a2add63a49bb28fc16627801a85507",
+   "pcmSha256": "9bf71872dfd46c5ea456e5c5931eccefd94dc1f801ba7eb12e2a8355a85ad056",
    "pcmBytes": 1155840
   },
   {
@@ -2519,7 +3162,7 @@
    ],
    "pkt": "enc/piano_8k_audio_16k.pkt",
    "trace": "dec/piano_8k_audio_16k.plain.trace.gz",
-   "pcmSha256": "5999c3f69539f8c62d0762bcc23ae62ec9c4b30862914df0cea5c9c29bce50ba",
+   "pcmSha256": "ca72326251963224c2cc383ccca70a231b49e56607df185d2b580fa86f302564",
    "pcmBytes": 192640
   },
   {
@@ -2533,7 +3176,7 @@
    ],
    "pkt": "enc/piano_8k_lowdelay_24k.pkt",
    "trace": "dec/piano_8k_lowdelay_24k.plain.trace.gz",
-   "pcmSha256": "3f1de6f1767007371bf5e30624a01a854f3c97d67a2dcb065a7f9d1e5ecb0d1b",
+   "pcmSha256": "689b0916aee9abf983a6b991ac8ab55cd3d6317b0f0f4fbc2871fbc146d76298",
    "pcmBytes": 96320
   },
   {
@@ -2551,7 +3194,7 @@
    ],
    "pkt": "enc/speech_a_12k_voip_16k.pkt",
    "trace": "dec/speech_a_12k_voip_16k.loss20_s2.trace.gz",
-   "pcmSha256": "73623771535de24725176e57bad575b73fb5640d492f76e4558451ec414b76c1",
+   "pcmSha256": "ef2af39cc28986f789f7796d9307fcaaa0446f0e722a4c57e6934edf0b5f3fcb",
    "pcmBytes": 144480
   },
   {
@@ -2565,7 +3208,7 @@
    ],
    "pkt": "enc/speech_a_12k_voip_16k.pkt",
    "trace": "dec/speech_a_12k_voip_16k.plain.trace.gz",
-   "pcmSha256": "4f651736d26deeba60856e79e9edf6924cb8191a7f11fb7cae04dc56a88c5b9a",
+   "pcmSha256": "730f23e4866ec654e47b50149d6d4c05569712bc82616949b3bf60ade991dcc9",
    "pcmBytes": 144480
   },
   {
@@ -2579,7 +3222,7 @@
    ],
    "pkt": "enc/speech_a_16k_audio_24k.pkt",
    "trace": "dec/speech_a_16k_audio_24k.plain.trace.gz",
-   "pcmSha256": "57483280c88886a313116f3d92e6a321c1508199ab128f648313f40e49abc5d7",
+   "pcmSha256": "ea4696c748d25c0b484bf0bb0b425edbecef4826015b8738b344c8be8dc51db8",
    "pcmBytes": 192640
   },
   {
@@ -2593,7 +3236,7 @@
    ],
    "pkt": "enc/speech_a_16k_force_celt.pkt",
    "trace": "dec/speech_a_16k_force_celt.plain.trace.gz",
-   "pcmSha256": "6661031ed6e253ab179de3b35de5a732fcce03f08b3b74eb8f8e2b5bfedd97af",
+   "pcmSha256": "de0198084a2dcdb6c5535a5f9d8d80b4f9e44871b2116a59ecb986b9c8c9aaa7",
    "pcmBytes": 192640
   },
   {
@@ -2607,7 +3250,7 @@
    ],
    "pkt": "enc/speech_a_16k_lowdelay_24k.pkt",
    "trace": "dec/speech_a_16k_lowdelay_24k.plain.trace.gz",
-   "pcmSha256": "9033ed2f884d42a339ce0e35c70731d91fbfe9f92c439bf7356bcf084258b54e",
+   "pcmSha256": "9ce2117bd40a55d0744220799ae312495eb39fd291a740e86e234dd7f46f9099",
    "pcmBytes": 192640
   },
   {
@@ -2626,7 +3269,7 @@
    ],
    "pkt": "enc/speech_a_16k_randfec.pkt",
    "trace": "dec/speech_a_16k_randfec.fec_loss20_s19.trace.gz",
-   "pcmSha256": "98cdf42cc6e54d8ed67b461f2196ca0ced08a83fdf02f751d3b66d0a1a58554d",
+   "pcmSha256": "d167518a30849a3f1b416906a58ae0be61ba55042dda25a3b7e4944a01f14a91",
    "pcmBytes": 191360
   },
   {
@@ -2640,7 +3283,7 @@
    ],
    "pkt": "enc/speech_a_16k_randfec.pkt",
    "trace": "dec/speech_a_16k_randfec.plain.trace.gz",
-   "pcmSha256": "ed72acafe2b4ba99cee3074cd9dc124ac25b66b8a9198dc6d238512bef48d426",
+   "pcmSha256": "97388348e308072d8883fd7c88ab2c62337f7662e50f38c7dea17a9d9f10b2d1",
    "pcmBytes": 192640
   },
   {
@@ -2654,7 +3297,7 @@
    ],
    "pkt": "enc/speech_a_16k_sched_cplx.pkt",
    "trace": "dec/speech_a_16k_sched_cplx.plain.trace.gz",
-   "pcmSha256": "0a5ed5537794fdcd43cbd13808fa86824257f2e713138530a041d07913786f26",
+   "pcmSha256": "d5d88f1fe825be09b6ba99665140a211c89e716721b885d6a934c853ab672184",
    "pcmBytes": 192640
   },
   {
@@ -2668,7 +3311,7 @@
    ],
    "pkt": "enc/speech_a_16k_sched_dtx.pkt",
    "trace": "dec/speech_a_16k_sched_dtx.plain.trace.gz",
-   "pcmSha256": "72d3074d49570ef385f4469a95201194a1c99f1f48259a1fdd66963a6992fcca",
+   "pcmSha256": "f60b480e91449d26a73b7936bd97623ae99af5b0f4bcb69c23e05784b1f86f03",
    "pcmBytes": 192640
   },
   {
@@ -2687,7 +3330,7 @@
    ],
    "pkt": "enc/speech_a_16k_sched_fec.pkt",
    "trace": "dec/speech_a_16k_sched_fec.fec_loss20_s14.trace.gz",
-   "pcmSha256": "118c10cd94c93addb258f9c041c835948e2d80e162f2985c4ce3c8c5e782d249",
+   "pcmSha256": "a1b876bce1633c7f02a4ee98e8bd8b4b410b8c71844fe558ec7fe293a669a7b7",
    "pcmBytes": 192000
   },
   {
@@ -2701,7 +3344,7 @@
    ],
    "pkt": "enc/speech_a_16k_sched_fec.pkt",
    "trace": "dec/speech_a_16k_sched_fec.plain.trace.gz",
-   "pcmSha256": "92d9bb9bcef5e33b93fbde4c986f61ea3d9a6f3d7bbccd7fe292ba7dcdf3fb0d",
+   "pcmSha256": "4f4d393889644662dc78919d1293d43fe152f077268034d5a18352c7cea3b0d2",
    "pcmBytes": 192640
   },
   {
@@ -2715,7 +3358,7 @@
    ],
    "pkt": "enc/speech_a_16k_sched_framesize.pkt",
    "trace": "dec/speech_a_16k_sched_framesize.plain.trace.gz",
-   "pcmSha256": "20660e61eb3fbc0c242acdac07a8da8511735d0ce5c4b2a0b46ba54c713730ac",
+   "pcmSha256": "d0e1853ad433aede05a3df1648f8bef684a9fa28bbb32492ab641138d611c1b7",
    "pcmBytes": 192960
   },
   {
@@ -2729,7 +3372,7 @@
    ],
    "pkt": "enc/speech_a_16k_sched_reset.pkt",
    "trace": "dec/speech_a_16k_sched_reset.plain.trace.gz",
-   "pcmSha256": "283890a5781dca49c1417bde9eccb40fa640cf226f79e165ac545bee50a88180",
+   "pcmSha256": "9edc32ef6c0c40939f4416330fd16e5df6e0a677335444a9107ff1b294b5496d",
    "pcmBytes": 192640
   },
   {
@@ -2745,7 +3388,7 @@
    ],
    "pkt": "enc/speech_a_16k_sched_reset.pkt",
    "trace": "dec/speech_a_16k_sched_reset.reset.trace.gz",
-   "pcmSha256": "1d6cf074eef68d914c3bb2eee633d62298d9cb727230d32ef7069b3ba6a89711",
+   "pcmSha256": "03ab983375cac89b8c0eecf9dabceb8bd749df0ea2c22d833cfb950cd1a78180",
    "pcmBytes": 192640
   },
   {
@@ -2764,7 +3407,7 @@
    ],
    "pkt": "enc/speech_a_16k_sched_silk_celt.pkt",
    "trace": "dec/speech_a_16k_sched_silk_celt.fec_loss10_s16.trace.gz",
-   "pcmSha256": "5c6cc4156087e7230fb3b5fc8211b8c71905ac029c403146bdf7c9168e2f3225",
+   "pcmSha256": "c07fda3c1ecba4338a78fb1fd5ad55e1565fc8028f1e47e04071a95d539f0fff",
    "pcmBytes": 192000
   },
   {
@@ -2778,7 +3421,7 @@
    ],
    "pkt": "enc/speech_a_16k_sched_silk_celt.pkt",
    "trace": "dec/speech_a_16k_sched_silk_celt.plain.trace.gz",
-   "pcmSha256": "b86a3a891d34bfd6e682259d343cd951efa8f32c2362e7a7c16b17747e7402d4",
+   "pcmSha256": "12e0b6c8932d263037d11c4d2194eaa9dbc05739c9ad851640e1ade1c37918bc",
    "pcmBytes": 192640
   },
   {
@@ -2792,7 +3435,7 @@
    ],
    "pkt": "enc/speech_a_16k_sched_vbr.pkt",
    "trace": "dec/speech_a_16k_sched_vbr.plain.trace.gz",
-   "pcmSha256": "500a4cf826077c5888e96991e25f56771b59ed17d703d450f1dd44b083d73513",
+   "pcmSha256": "ece7d8595f4fbcc24bee8d2a86963bdc119e300b3927a7fdc2ec275917278e58",
    "pcmBytes": 192640
   },
   {
@@ -2806,7 +3449,7 @@
    ],
    "pkt": "enc/speech_a_16k_sweep.pkt",
    "trace": "dec/speech_a_16k_sweep.plain.trace.gz",
-   "pcmSha256": "4e0fb41c571203eea47a484cbd270bc463770fa0b6e712aeb425e75e6c2086ca",
+   "pcmSha256": "b69d38cff5436140c9b9836ce469573d02c439a2aa5328109899a81ed781614f",
    "pcmBytes": 192640
   },
   {
@@ -2820,7 +3463,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_24k.pkt",
    "trace": "dec/speech_a_16k_voip_24k.at48k.trace.gz",
-   "pcmSha256": "927198f7463ec5e615249ea1035a53d431ed3c25f2ea189fc1728688d5d7e01e",
+   "pcmSha256": "fc4b34739d5bb7285e5a0c7e8c85b07cdd0c829f706a4ea7e3251bce818a4891",
    "pcmBytes": 577920
   },
   {
@@ -2834,7 +3477,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_24k.pkt",
    "trace": "dec/speech_a_16k_voip_24k.at8k.trace.gz",
-   "pcmSha256": "85389dbf03fb8d99c293d72afab59882d49c0b9b188270ee6222802a8864a7f7",
+   "pcmSha256": "55b9ca7071feb547d9040083def1cd9cae2c8355126a9ab585a78ec8b2c69f31",
    "pcmBytes": 96320
   },
   {
@@ -2849,7 +3492,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_24k.pkt",
    "trace": "dec/speech_a_16k_voip_24k.float.trace.gz",
-   "pcmSha256": "ed72acafe2b4ba99cee3074cd9dc124ac25b66b8a9198dc6d238512bef48d426",
+   "pcmSha256": "97388348e308072d8883fd7c88ab2c62337f7662e50f38c7dea17a9d9f10b2d1",
    "pcmBytes": 192640
   },
   {
@@ -2867,7 +3510,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_24k.pkt",
    "trace": "dec/speech_a_16k_voip_24k.loss10_s1.trace.gz",
-   "pcmSha256": "ed1e5b8202d6f777d4e609a33c3b8e0f344f826cb40079d0de56469b10c66b4f",
+   "pcmSha256": "1f41adb3e0739086df4b70632f101bfd5affa4436f6cb6546a23ef36f8044125",
    "pcmBytes": 192640
   },
   {
@@ -2885,7 +3528,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_24k.pkt",
    "trace": "dec/speech_a_16k_voip_24k.loss40_s9.trace.gz",
-   "pcmSha256": "aac450b992cc92a73b22e4719cff536474cb33888dcdf76ff3c5a4fd41f8698a",
+   "pcmSha256": "aa44ebd50c57de791af09990a6f6b7df3a8b3fe4bfe1c4b020e975154cf2dce1",
    "pcmBytes": 192640
   },
   {
@@ -2899,7 +3542,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_24k.pkt",
    "trace": "dec/speech_a_16k_voip_24k.plain.trace.gz",
-   "pcmSha256": "ed72acafe2b4ba99cee3074cd9dc124ac25b66b8a9198dc6d238512bef48d426",
+   "pcmSha256": "97388348e308072d8883fd7c88ab2c62337f7662e50f38c7dea17a9d9f10b2d1",
    "pcmBytes": 192640
   },
   {
@@ -2915,7 +3558,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_24k.pkt",
    "trace": "dec/speech_a_16k_voip_24k.reset.trace.gz",
-   "pcmSha256": "2fe5a13a71f99240eefdf502b0ce83ead711deb88746968b737b0105987f288b",
+   "pcmSha256": "83d8fb46d79513d7fde3eb7829cf44d982cb9107c3a87db9e715ff6942209c15",
    "pcmBytes": 192640
   },
   {
@@ -2929,7 +3572,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_6k.pkt",
    "trace": "dec/speech_a_16k_voip_6k.plain.trace.gz",
-   "pcmSha256": "745442ec0c560bcbc316da9a51cc5ddaaed175220c789891a079f505da01f40c",
+   "pcmSha256": "a70ff8e0d888d1190c24dd16ec86fc6ec9915fa55ab908b3585c0dd3f2e77642",
    "pcmBytes": 192640
   },
   {
@@ -2943,7 +3586,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_cbr.pkt",
    "trace": "dec/speech_a_16k_voip_cbr.plain.trace.gz",
-   "pcmSha256": "d67b085d2fb030b8173ef00728511a0054e0eee452db206a1e7dab20f07100ab",
+   "pcmSha256": "6e63090430fff33a6dcd5f9bdf6c68b33c70af6a825bca2926cb7eeb5f763141",
    "pcmBytes": 192640
   },
   {
@@ -2957,7 +3600,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_cplx0.pkt",
    "trace": "dec/speech_a_16k_voip_cplx0.plain.trace.gz",
-   "pcmSha256": "60ae5a433c7fa2e2c104e6a2f4ae340f9680a68fb9b3462311217849a3c5e779",
+   "pcmSha256": "7b2be7f783868bbedac2d68fdbe9f0de3f1f8cd7b83e7eee614706cda1c88c38",
    "pcmBytes": 192640
   },
   {
@@ -2971,7 +3614,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_cplx2.pkt",
    "trace": "dec/speech_a_16k_voip_cplx2.plain.trace.gz",
-   "pcmSha256": "fdb2339d7c7c3d9905cbcf9233182e79d570735f0b19f4e53c0af1fe922c6d6b",
+   "pcmSha256": "147de961a7d452496a6d0a6fc7f23fd514322955fe6eee651b4ee1af1d749f07",
    "pcmBytes": 192640
   },
   {
@@ -2985,7 +3628,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_cplx5.pkt",
    "trace": "dec/speech_a_16k_voip_cplx5.plain.trace.gz",
-   "pcmSha256": "695ec5923d5677f19e4f34d6baa176fb4e39060b502634eba911a34ed5454b77",
+   "pcmSha256": "c52928f73e33ba017bd55ed64e22d4b3ba4c025e45e78b846aab3222b0bc02ee",
    "pcmBytes": 192640
   },
   {
@@ -2999,7 +3642,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_cplx8.pkt",
    "trace": "dec/speech_a_16k_voip_cplx8.plain.trace.gz",
-   "pcmSha256": "ed72acafe2b4ba99cee3074cd9dc124ac25b66b8a9198dc6d238512bef48d426",
+   "pcmSha256": "97388348e308072d8883fd7c88ab2c62337f7662e50f38c7dea17a9d9f10b2d1",
    "pcmBytes": 192640
   },
   {
@@ -3013,7 +3656,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_cvbr.pkt",
    "trace": "dec/speech_a_16k_voip_cvbr.plain.trace.gz",
-   "pcmSha256": "ed72acafe2b4ba99cee3074cd9dc124ac25b66b8a9198dc6d238512bef48d426",
+   "pcmSha256": "97388348e308072d8883fd7c88ab2c62337f7662e50f38c7dea17a9d9f10b2d1",
    "pcmBytes": 192640
   },
   {
@@ -3031,7 +3674,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_dtx.pkt",
    "trace": "dec/speech_a_16k_voip_dtx.loss10_s6.trace.gz",
-   "pcmSha256": "71cb6ecd21dd7eb34dd74bc334ba4a8c0b9d29cc9aeb87632d46f6fd8f04a696",
+   "pcmSha256": "bc39dfb8ad33d2e6084c34db0231505aa70a56d9337722adcf9a22d5cc8d9ac4",
    "pcmBytes": 192640
   },
   {
@@ -3045,7 +3688,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_dtx.pkt",
    "trace": "dec/speech_a_16k_voip_dtx.plain.trace.gz",
-   "pcmSha256": "7dd3213c703071a349082b115f9cf69223fe9ace23327d232752f8db67306cc8",
+   "pcmSha256": "ef8a299bcd077a6efb546f9933a6dac41e6bf787832b170f9c29c322d8b54b11",
    "pcmBytes": 192640
   },
   {
@@ -3064,7 +3707,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_fec_loss10.pkt",
    "trace": "dec/speech_a_16k_voip_fec_loss10.fec_loss10_s1.trace.gz",
-   "pcmSha256": "ae35a6162a26e904cecb9a8755827aa03da3412bab5e85bb5f407cb0dc727740",
+   "pcmSha256": "815f5447ac9abf850f11b7543cd2c0dfdab78e1c6c84da0de352d1b3e1a5b1e2",
    "pcmBytes": 192000
   },
   {
@@ -3083,7 +3726,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_fec_loss10.pkt",
    "trace": "dec/speech_a_16k_voip_fec_loss10.fec_loss30_s2.trace.gz",
-   "pcmSha256": "c8cb23e680d0d3108a4e3ab75a78a8339c59e6cef49c4c02dca50116526214d1",
+   "pcmSha256": "117b9cbce8c45f5e191b979843deb6ac43d6d92e2551773b109fa608c18a2053",
    "pcmBytes": 192000
   },
   {
@@ -3101,7 +3744,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_fec_loss10.pkt",
    "trace": "dec/speech_a_16k_voip_fec_loss10.loss10_s1.trace.gz",
-   "pcmSha256": "df63527641d95305055ec9ebef6966c3e0e882478cc511f245dc729a4b445387",
+   "pcmSha256": "3cbadab771e6df05c7d0606a80a5c9497365b9c2d647961d0a23f88c22fdde24",
    "pcmBytes": 192640
   },
   {
@@ -3115,7 +3758,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_fec_loss10.pkt",
    "trace": "dec/speech_a_16k_voip_fec_loss10.plain.trace.gz",
-   "pcmSha256": "2edc9b85d6eb2cc19bab08b5a2b808d467bd757d7de302e5c7b86305f8f6cdd8",
+   "pcmSha256": "7d562b06a6572b5534f1859578e80b7c834f3be392c707c07938c56a6dc41abd",
    "pcmBytes": 192640
   },
   {
@@ -3134,7 +3777,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_fec_loss30.pkt",
    "trace": "dec/speech_a_16k_voip_fec_loss30.fec_loss30_s3.trace.gz",
-   "pcmSha256": "d6c635540159f14c88f0898474e19fef3950a23fee0ff329741ac9f3dc386569",
+   "pcmSha256": "1028788a71d7bb016823f69dd7a96fb4d92c338648e1a8d33bef58c1662cc20c",
    "pcmBytes": 192000
   },
   {
@@ -3148,8 +3791,106 @@
    ],
    "pkt": "enc/speech_a_16k_voip_fec_loss30.pkt",
    "trace": "dec/speech_a_16k_voip_fec_loss30.plain.trace.gz",
-   "pcmSha256": "aad192f41484aa6540951fa448688e8446602132328383b75bcf81e17ad77008",
+   "pcmSha256": "1a4a74f4c081939b57885ee8f6d2f22f5053073f001f2343cea7d0cc501a6513",
    "pcmBytes": 192640
+  },
+  {
+   "name": "dec/speech_a_16k_voip_framedur10.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1"
+   ],
+   "pkt": "enc/speech_a_16k_voip_framedur10.pkt",
+   "trace": "dec/speech_a_16k_voip_framedur10.plain.trace.gz",
+   "pcmSha256": "f465db1440bb7341f4d2b82a2748568e09063ed91214b4dee6886c5543f5a7f3",
+   "pcmBytes": 190720
+  },
+  {
+   "name": "dec/speech_a_16k_voip_framedur20.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1"
+   ],
+   "pkt": "enc/speech_a_16k_voip_framedur20.pkt",
+   "trace": "dec/speech_a_16k_voip_framedur20.plain.trace.gz",
+   "pcmSha256": "55e0b98c5c2c767acd0d391693a15bb7a509f35fbf89af975fdeef64759182ae",
+   "pcmBytes": 191360
+  },
+  {
+   "name": "dec/speech_a_16k_voip_framedur2p5.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1"
+   ],
+   "pkt": "enc/speech_a_16k_voip_framedur2p5.pkt",
+   "trace": "dec/speech_a_16k_voip_framedur2p5.plain.trace.gz",
+   "pcmSha256": "ca03719fe9c1a64c4c6d144fcef93611901c263d3c1bdd2d1e230155449af7a1",
+   "pcmBytes": 190240
+  },
+  {
+   "name": "dec/speech_a_16k_voip_framedur40.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1"
+   ],
+   "pkt": "enc/speech_a_16k_voip_framedur40.pkt",
+   "trace": "dec/speech_a_16k_voip_framedur40.plain.trace.gz",
+   "pcmSha256": "01562c879c66c917814fc7c69f54e09959c283dcc12f6f6ae12d42318f9fcb05",
+   "pcmBytes": 192000
+  },
+  {
+   "name": "dec/speech_a_16k_voip_framedur5.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1"
+   ],
+   "pkt": "enc/speech_a_16k_voip_framedur5.pkt",
+   "trace": "dec/speech_a_16k_voip_framedur5.plain.trace.gz",
+   "pcmSha256": "7559af46da0df806b67eb93e7f40a5f8dba1a004ab68ea590b35c0caa611a186",
+   "pcmBytes": 190400
+  },
+  {
+   "name": "dec/speech_a_16k_voip_framedur60.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1"
+   ],
+   "pkt": "enc/speech_a_16k_voip_framedur60.pkt",
+   "trace": "dec/speech_a_16k_voip_framedur60.plain.trace.gz",
+   "pcmSha256": "2e706065dd1a3d0bf6c3b5c07b62ef5f3b12a8dad1b269f07b43ce6b92dba844",
+   "pcmBytes": 193920
+  },
+  {
+   "name": "dec/speech_a_16k_voip_framedurvariable.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1"
+   ],
+   "pkt": "enc/speech_a_16k_voip_framedurvariable.pkt",
+   "trace": "dec/speech_a_16k_voip_framedurvariable.plain.trace.gz",
+   "pcmSha256": "55e0b98c5c2c767acd0d391693a15bb7a509f35fbf89af975fdeef64759182ae",
+   "pcmBytes": 191360
   },
   {
    "name": "dec/speech_a_16k_voip_fs10.loss10_s5",
@@ -3166,7 +3907,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_fs10.pkt",
    "trace": "dec/speech_a_16k_voip_fs10.loss10_s5.trace.gz",
-   "pcmSha256": "fb65c3695a7d11031887fbb1e042b509b70b39c1a71c875c630b27e6df1a9c20",
+   "pcmSha256": "41c6fba4a6512d9fe6da843972decbc6410b43cb81b2e3a5b995a2560d99272d",
    "pcmBytes": 192320
   },
   {
@@ -3180,7 +3921,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_fs10.pkt",
    "trace": "dec/speech_a_16k_voip_fs10.plain.trace.gz",
-   "pcmSha256": "878e3393202c525dc7491151524cefa758971f9e701f1b62a50e32f23bc054fa",
+   "pcmSha256": "e431bb10f9287aae5b48b2eaf8b69f062abb885c64bc7a7aad5a73465753333b",
    "pcmBytes": 192320
   },
   {
@@ -3194,7 +3935,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_fs2.5.pkt",
    "trace": "dec/speech_a_16k_voip_fs2.5.plain.trace.gz",
-   "pcmSha256": "43e23eb225a36f833811a8e6b94c1865d0b1e33edf27958bcdcd97700024def7",
+   "pcmSha256": "43b12f680d2ed234c0c3c57c4eb042a07d188c3f833d88c751506e71cbd584d8",
    "pcmBytes": 192080
   },
   {
@@ -3212,7 +3953,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_fs40.pkt",
    "trace": "dec/speech_a_16k_voip_fs40.loss10_s5.trace.gz",
-   "pcmSha256": "b04b667c3ad58880bfa079616b732860dc312ad27bcd1ec7e98364530b08c277",
+   "pcmSha256": "8bba2ee06424bb20bff5936630f114a726456a2c973f013c8bd725b4c327b586",
    "pcmBytes": 193280
   },
   {
@@ -3226,7 +3967,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_fs40.pkt",
    "trace": "dec/speech_a_16k_voip_fs40.plain.trace.gz",
-   "pcmSha256": "47f16e72dcffd7df28b60e3acb1fdc3bc297cec61a9e93b976b39072dd3e866f",
+   "pcmSha256": "7f2b7b0d9b2f3c19abd7f61f52cc3bdb23455b11892d2a84133916e632e98319",
    "pcmBytes": 193280
   },
   {
@@ -3240,7 +3981,7 @@
    ],
    "pkt": "repack/speech_a_16k_voip_fs40.split.pkt",
    "trace": "dec/speech_a_16k_voip_fs40.split.trace.gz",
-   "pcmSha256": "47f16e72dcffd7df28b60e3acb1fdc3bc297cec61a9e93b976b39072dd3e866f",
+   "pcmSha256": "7f2b7b0d9b2f3c19abd7f61f52cc3bdb23455b11892d2a84133916e632e98319",
    "pcmBytes": 193280
   },
   {
@@ -3254,7 +3995,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_fs5.pkt",
    "trace": "dec/speech_a_16k_voip_fs5.plain.trace.gz",
-   "pcmSha256": "d4931681d90a633ece3ab2f91b180dbba706b2df5e09ed67b3c3635d0b24639e",
+   "pcmSha256": "4d7e504b696867fa04924e567f2676e1a8f737174307707268d31073eaf96c8b",
    "pcmBytes": 192160
   },
   {
@@ -3272,7 +4013,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_fs60.pkt",
    "trace": "dec/speech_a_16k_voip_fs60.loss10_s5.trace.gz",
-   "pcmSha256": "73273c7b7396b7e6c0e73ac06d2bcadebb89aa5aea294bf83e972b2c035da518",
+   "pcmSha256": "6b1226b42dcd49c8f39ea43828e8f23cc70928be80c92d76cc470171d39571ac",
    "pcmBytes": 193920
   },
   {
@@ -3286,7 +4027,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_fs60.pkt",
    "trace": "dec/speech_a_16k_voip_fs60.plain.trace.gz",
-   "pcmSha256": "d6dd4eb79b9382b0a79ecfa0324c31b8bb02471e719aabd46c6a8d3d5d785766",
+   "pcmSha256": "2e706065dd1a3d0bf6c3b5c07b62ef5f3b12a8dad1b269f07b43ce6b92dba844",
    "pcmBytes": 193920
   },
   {
@@ -3300,7 +4041,7 @@
    ],
    "pkt": "repack/speech_a_16k_voip_fs60.split.pkt",
    "trace": "dec/speech_a_16k_voip_fs60.split.trace.gz",
-   "pcmSha256": "d6dd4eb79b9382b0a79ecfa0324c31b8bb02471e719aabd46c6a8d3d5d785766",
+   "pcmSha256": "2e706065dd1a3d0bf6c3b5c07b62ef5f3b12a8dad1b269f07b43ce6b92dba844",
    "pcmBytes": 193920
   },
   {
@@ -3314,7 +4055,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_lsb24.pkt",
    "trace": "dec/speech_a_16k_voip_lsb24.plain.trace.gz",
-   "pcmSha256": "ed72acafe2b4ba99cee3074cd9dc124ac25b66b8a9198dc6d238512bef48d426",
+   "pcmSha256": "97388348e308072d8883fd7c88ab2c62337f7662e50f38c7dea17a9d9f10b2d1",
    "pcmBytes": 192640
   },
   {
@@ -3328,7 +4069,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_lsb8.pkt",
    "trace": "dec/speech_a_16k_voip_lsb8.plain.trace.gz",
-   "pcmSha256": "ed72acafe2b4ba99cee3074cd9dc124ac25b66b8a9198dc6d238512bef48d426",
+   "pcmSha256": "97388348e308072d8883fd7c88ab2c62337f7662e50f38c7dea17a9d9f10b2d1",
    "pcmBytes": 192640
   },
   {
@@ -3342,7 +4083,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_max.pkt",
    "trace": "dec/speech_a_16k_voip_max.plain.trace.gz",
-   "pcmSha256": "b8195255c911634e76e483d581c3648c488e73b81a5e007af7f7cd0171925072",
+   "pcmSha256": "dd36991c30553cf300c910e1ac814497b2ef25bcd36a3b754acc706d25ab251c",
    "pcmBytes": 192640
   },
   {
@@ -3356,8 +4097,92 @@
    ],
    "pkt": "enc/speech_a_16k_voip_maxpayload60.pkt",
    "trace": "dec/speech_a_16k_voip_maxpayload60.plain.trace.gz",
-   "pcmSha256": "824046656dff9de31d59997311000f08ac21b8833ddfc9627dd6f5a2f62bfc2c",
+   "pcmSha256": "6bc8d25696d99cfe801a3aec26e5dcc34d3ca1811f34109738b657d968c47131",
    "pcmBytes": 192640
+  },
+  {
+   "name": "dec/speech_a_16k_voip_nopred.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1"
+   ],
+   "pkt": "enc/speech_a_16k_voip_nopred.pkt",
+   "trace": "dec/speech_a_16k_voip_nopred.plain.trace.gz",
+   "pcmSha256": "84c6f415876a9518411e0b02569a6c08e11811f198decda7d7732bfa6d99710a",
+   "pcmBytes": 192640
+  },
+  {
+   "name": "dec/speech_a_16k_voip_pad_fs40.merge3",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1"
+   ],
+   "pkt": "repack/speech_a_16k_voip_pad_fs40.merge3.pkt",
+   "trace": "dec/speech_a_16k_voip_pad_fs40.merge3.trace.gz",
+   "pcmSha256": "7f2b7b0d9b2f3c19abd7f61f52cc3bdb23455b11892d2a84133916e632e98319",
+   "pcmBytes": 193280
+  },
+  {
+   "name": "dec/speech_a_16k_voip_pad_fs40.pad2",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1"
+   ],
+   "pkt": "repack/speech_a_16k_voip_pad_fs40.pad2.pkt",
+   "trace": "dec/speech_a_16k_voip_pad_fs40.pad2.trace.gz",
+   "pcmSha256": "7f2b7b0d9b2f3c19abd7f61f52cc3bdb23455b11892d2a84133916e632e98319",
+   "pcmBytes": 193280
+  },
+  {
+   "name": "dec/speech_a_16k_voip_pad_fs40.pad260",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1"
+   ],
+   "pkt": "repack/speech_a_16k_voip_pad_fs40.pad260.pkt",
+   "trace": "dec/speech_a_16k_voip_pad_fs40.pad260.trace.gz",
+   "pcmSha256": "7f2b7b0d9b2f3c19abd7f61f52cc3bdb23455b11892d2a84133916e632e98319",
+   "pcmBytes": 193280
+  },
+  {
+   "name": "dec/speech_a_16k_voip_pad_fs40.plain",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1"
+   ],
+   "pkt": "enc/speech_a_16k_voip_pad_fs40.pkt",
+   "trace": "dec/speech_a_16k_voip_pad_fs40.plain.trace.gz",
+   "pcmSha256": "7f2b7b0d9b2f3c19abd7f61f52cc3bdb23455b11892d2a84133916e632e98319",
+   "pcmBytes": 193280
+  },
+  {
+   "name": "dec/speech_a_16k_voip_pad_fs40.split",
+   "kind": "dec",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1"
+   ],
+   "pkt": "repack/speech_a_16k_voip_pad_fs40.split.pkt",
+   "trace": "dec/speech_a_16k_voip_pad_fs40.split.trace.gz",
+   "pcmSha256": "7f2b7b0d9b2f3c19abd7f61f52cc3bdb23455b11892d2a84133916e632e98319",
+   "pcmBytes": 193280
   },
   {
    "name": "dec/speech_a_16k_voip_voiceratio0.plain",
@@ -3370,7 +4195,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_voiceratio0.pkt",
    "trace": "dec/speech_a_16k_voip_voiceratio0.plain.trace.gz",
-   "pcmSha256": "6661031ed6e253ab179de3b35de5a732fcce03f08b3b74eb8f8e2b5bfedd97af",
+   "pcmSha256": "97388348e308072d8883fd7c88ab2c62337f7662e50f38c7dea17a9d9f10b2d1",
    "pcmBytes": 192640
   },
   {
@@ -3384,7 +4209,7 @@
    ],
    "pkt": "enc/speech_a_16k_voip_voiceratio100.pkt",
    "trace": "dec/speech_a_16k_voip_voiceratio100.plain.trace.gz",
-   "pcmSha256": "ed72acafe2b4ba99cee3074cd9dc124ac25b66b8a9198dc6d238512bef48d426",
+   "pcmSha256": "97388348e308072d8883fd7c88ab2c62337f7662e50f38c7dea17a9d9f10b2d1",
    "pcmBytes": 192640
   },
   {
@@ -3398,7 +4223,7 @@
    ],
    "pkt": "enc/speech_a_24k_voip_32k.pkt",
    "trace": "dec/speech_a_24k_voip_32k.at16k.trace.gz",
-   "pcmSha256": "60b6e12dcda73f1cdaaf994d6d902fdcb6a7511144125532a205d9a81e691bdc",
+   "pcmSha256": "29c9c16dce3a3153f56626d190857e161b963959a92f31bb6ee6ce6352eaaa8d",
    "pcmBytes": 192640
   },
   {
@@ -3416,7 +4241,7 @@
    ],
    "pkt": "enc/speech_a_24k_voip_32k.pkt",
    "trace": "dec/speech_a_24k_voip_32k.loss10_s3.trace.gz",
-   "pcmSha256": "d31e45ea9a6ed7fd0e643b9db2aef82fd8bdd6f0df6bddc8072bda002a9af2e4",
+   "pcmSha256": "2aa75213aca074ebf05dee11a3be98cf13ec15022abfb298a043d8c0b70cb4cf",
    "pcmBytes": 288960
   },
   {
@@ -3430,7 +4255,7 @@
    ],
    "pkt": "enc/speech_a_24k_voip_32k.pkt",
    "trace": "dec/speech_a_24k_voip_32k.plain.trace.gz",
-   "pcmSha256": "3192aefc2a88500391d0150acebf178ef9fe3b9aef305e28f0aeac05cc70ab31",
+   "pcmSha256": "bfcec8fa3cbbb0c906b9ef9999d0969a2cb09a5960ce617374efaf1476c12bfc",
    "pcmBytes": 288960
   },
   {
@@ -3444,7 +4269,7 @@
    ],
    "pkt": "enc/speech_a_24k_voip_cbr.pkt",
    "trace": "dec/speech_a_24k_voip_cbr.plain.trace.gz",
-   "pcmSha256": "bc340fd33fcd77842249505adc4b6c634ec63e79a7681bb8c7a103b9c55a6c8a",
+   "pcmSha256": "57fef4b6969e35d6630666289c2d6d1959d5c87db8a9b8b6dfecdba02b2373f6",
    "pcmBytes": 288960
   },
   {
@@ -3458,7 +4283,7 @@
    ],
    "pkt": "enc/speech_a_48k_audio_maxpayload100.pkt",
    "trace": "dec/speech_a_48k_audio_maxpayload100.plain.trace.gz",
-   "pcmSha256": "731ebdf9b026e9e5342cf9d807f64570205618cacf291d58af2de55a54900441",
+   "pcmSha256": "ebd302b2aa804cb894742f281a829177de0ba3bb3f6ead6c26b0d4a3193f77a2",
    "pcmBytes": 577920
   },
   {
@@ -3472,7 +4297,7 @@
    ],
    "pkt": "enc/speech_a_48k_audio_sigvoice.pkt",
    "trace": "dec/speech_a_48k_audio_sigvoice.plain.trace.gz",
-   "pcmSha256": "872bb9565763b7e9a44af8e38654530e4ca822d7ccac56a49b5be679a6646ffb",
+   "pcmSha256": "0c743dcf7007c350198b8a05e38c7a1ec5631713cb13b9ffd3f7a1ca4f1fc67d",
    "pcmBytes": 577920
   },
   {
@@ -3491,7 +4316,7 @@
    ],
    "pkt": "enc/speech_a_48k_force_hybrid_fec.pkt",
    "trace": "dec/speech_a_48k_force_hybrid_fec.fec_loss10_s10.trace.gz",
-   "pcmSha256": "696ed8ab185110296b33a5d8f50059ae781ce984599c36e833d3370e3a977096",
+   "pcmSha256": "4698b0c364720eda8c2de0799e1fc1b259f86e24d6ab89d2305bda9464c8c9f3",
    "pcmBytes": 576000
   },
   {
@@ -3505,7 +4330,7 @@
    ],
    "pkt": "enc/speech_a_48k_force_hybrid_fec.pkt",
    "trace": "dec/speech_a_48k_force_hybrid_fec.plain.trace.gz",
-   "pcmSha256": "7690fc938e747a0dcb1622daa3da21966eb53be5a5ba1b27a80bbbf1502599c4",
+   "pcmSha256": "57686ad4d4f28d33aaa04e5c2a845dff311bbaae1bd045d672406de89df2c4c7",
    "pcmBytes": 577920
   },
   {
@@ -3519,7 +4344,7 @@
    ],
    "pkt": "enc/speech_a_48k_lowdelay_mono_32k.pkt",
    "trace": "dec/speech_a_48k_lowdelay_mono_32k.plain.trace.gz",
-   "pcmSha256": "98dff901c725f36dbdb1acd9c214adc951ba0534bdd37535226a96b88a29da3f",
+   "pcmSha256": "8f7fc2a78dce8028c927b816e4e7e9ab25c906314a34dea74705df5eae88f65d",
    "pcmBytes": 577920
   },
   {
@@ -3538,7 +4363,7 @@
    ],
    "pkt": "enc/speech_a_48k_randfs_randfec.pkt",
    "trace": "dec/speech_a_48k_randfs_randfec.fec_loss10_s18.trace.gz",
-   "pcmSha256": "ec9b8a7b4511811094ffdc8416288f290c470ce642429c7883482885eafbb85b",
+   "pcmSha256": "3d2be339a9647eee44e98b3d328946efe795a8a374e791792e776f8d4a8cda1c",
    "pcmBytes": 573120
   },
   {
@@ -3552,7 +4377,7 @@
    ],
    "pkt": "enc/speech_a_48k_randfs_randfec.pkt",
    "trace": "dec/speech_a_48k_randfs_randfec.plain.trace.gz",
-   "pcmSha256": "85d3c4eb844679b1919499b1ec8c9ed3ce9e2b1133adfb2c70816d9615a0087c",
+   "pcmSha256": "4cb9c5cc4edfe3a830d8f0fcc7558a6dc04dbf47afd2bf140a684fabdabcddf7",
    "pcmBytes": 580800
   },
   {
@@ -3566,7 +4391,7 @@
    ],
    "pkt": "enc/speech_a_48k_sched_bitrate.pkt",
    "trace": "dec/speech_a_48k_sched_bitrate.plain.trace.gz",
-   "pcmSha256": "70d589b568366ead53690e052fc4394f3a2728746a9e64b32060801dfc155c5b",
+   "pcmSha256": "d3b664ec9e88797bef20946b1b08f6b410fc2b5a599db62850e5b6f9704c1186",
    "pcmBytes": 577920
   },
   {
@@ -3580,7 +4405,7 @@
    ],
    "pkt": "enc/speech_a_48k_sched_silk_hybrid.pkt",
    "trace": "dec/speech_a_48k_sched_silk_hybrid.plain.trace.gz",
-   "pcmSha256": "c8f465410824bbb29cbfa010de974ae7ee3588d5da446c6f1a5320a3107ee79c",
+   "pcmSha256": "022c6e6b7d81a92a57ca28d5c8f898927b1a80da98744e878358499de1bc17c8",
    "pcmBytes": 577920
   },
   {
@@ -3594,7 +4419,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_40k.pkt",
    "trace": "dec/speech_a_48k_voip_40k.at12k.trace.gz",
-   "pcmSha256": "ca2827d6e89bdf4288654c968062121e5592f1eef0972c33da67cb0162b23f14",
+   "pcmSha256": "4151773ee1901c2b73a852317961981d1facd3ed56627130d578909292c760e8",
    "pcmBytes": 144480
   },
   {
@@ -3608,7 +4433,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_40k.pkt",
    "trace": "dec/speech_a_48k_voip_40k.at16k.trace.gz",
-   "pcmSha256": "263d29a1c6bd56dd275118de82cb2979489c3c6e048e20b6073f15cb1ba6e3c5",
+   "pcmSha256": "e8c525c410a7282fa0793e53cd19eba85ea4c47101b6d2733a587620c30351e4",
    "pcmBytes": 192640
   },
   {
@@ -3622,7 +4447,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_40k.pkt",
    "trace": "dec/speech_a_48k_voip_40k.at24k.trace.gz",
-   "pcmSha256": "a1229fdff8addf78cd42dcfe63aa9dbdc44a3b338c2515f2a04e242dd0751d56",
+   "pcmSha256": "4016bf4318a79345fe7b33ce31763764f9ae28fc158498f27849bfa603abc04f",
    "pcmBytes": 288960
   },
   {
@@ -3636,7 +4461,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_40k.pkt",
    "trace": "dec/speech_a_48k_voip_40k.at8k.trace.gz",
-   "pcmSha256": "d30f034ba8033930525236a8ec3d19939cd508336d6d47a97fac09b9f1ad47cc",
+   "pcmSha256": "e5e2315eee7056327f2d2469660ddc410d23988494c86c5590655b493ada50b5",
    "pcmBytes": 96320
   },
   {
@@ -3652,7 +4477,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_40k.pkt",
    "trace": "dec/speech_a_48k_voip_40k.gain.trace.gz",
-   "pcmSha256": "1a697194e30addab00060baf0d45e1f1de38e92d5e5cbfb17d69a72cf8c4e69b",
+   "pcmSha256": "2fd1fc487327661d04b8c49ce49efe15bddf7c1fe575fb47ed3db478f25bf458",
    "pcmBytes": 577920
   },
   {
@@ -3670,7 +4495,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_40k.pkt",
    "trace": "dec/speech_a_48k_voip_40k.loss10_s4.trace.gz",
-   "pcmSha256": "e08eb383275bbc02d39bf5733a6557cd74a09f2db98747a9a5d5e67d93b7ed6a",
+   "pcmSha256": "3efedd771bc2fe311584c26b8752d585c56a401ef29246a7e88b363dd82b1073",
    "pcmBytes": 577920
   },
   {
@@ -3684,7 +4509,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_40k.pkt",
    "trace": "dec/speech_a_48k_voip_40k.plain.trace.gz",
-   "pcmSha256": "08845ee002c86ad4a130c24b845099fc425e48cfd0e23c8ed2868fb8b263e5f0",
+   "pcmSha256": "591fbd5952e0b0caadcd0d779353448be08e4aea4d911b93c8d4c21008778c85",
    "pcmBytes": 577920
   },
   {
@@ -3698,7 +4523,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_bwFB.pkt",
    "trace": "dec/speech_a_48k_voip_bwFB.plain.trace.gz",
-   "pcmSha256": "5b4ec37296632f999bd8c5894e21ed14005ae2891daff3d114246e68298d3dd5",
+   "pcmSha256": "03c9503f327dffce9c9698b4fd9eff33e090f2dcc8d7e12116d647248d3f33af",
    "pcmBytes": 577920
   },
   {
@@ -3712,7 +4537,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_bwMB.pkt",
    "trace": "dec/speech_a_48k_voip_bwMB.plain.trace.gz",
-   "pcmSha256": "b6a2f1ef531fad1572ecb72c136a847b35f78b9e7604978947603c334ba4eeac",
+   "pcmSha256": "f5aeba6e2b90d14b87a3156549416762b3e97e2813b82d5660c8ad30027e8543",
    "pcmBytes": 577920
   },
   {
@@ -3726,7 +4551,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_bwNB.pkt",
    "trace": "dec/speech_a_48k_voip_bwNB.plain.trace.gz",
-   "pcmSha256": "01d6eab541a539209d82cd46752d63e88d3b6787e5b13ff243b5d4f337e0b6f4",
+   "pcmSha256": "f7560f84f473b4273bbbcfcbf59933cc06b3df49a7e374f765540f45f2a607c2",
    "pcmBytes": 577920
   },
   {
@@ -3740,7 +4565,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_bwSWB.pkt",
    "trace": "dec/speech_a_48k_voip_bwSWB.plain.trace.gz",
-   "pcmSha256": "f50c32898aa661a6a87659981aef1e3dbffdc2a5667e876297ab65313c8b0b34",
+   "pcmSha256": "2b12ea99c3ffeedd0b78caea5488dc4241f9406b9cbff7ac0615aa25585a8487",
    "pcmBytes": 577920
   },
   {
@@ -3754,7 +4579,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_bwWB.pkt",
    "trace": "dec/speech_a_48k_voip_bwWB.plain.trace.gz",
-   "pcmSha256": "73fd86f0c3e5ee91a2b042b53237e11793d6f4cda05143dafbf927cad96c7add",
+   "pcmSha256": "d6db50ca56b978581462d2294a8970282b8ecd718d00de7dbb585d819e6e63df",
    "pcmBytes": 577920
   },
   {
@@ -3768,7 +4593,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_max.pkt",
    "trace": "dec/speech_a_48k_voip_max.plain.trace.gz",
-   "pcmSha256": "32118baf84150b1e4791cbf8405b2e11bed17a35417f54d21287c9cbd4ed35a4",
+   "pcmSha256": "c35994a74a7b26e1a25338b86fbcba4785a8f2598f5ef6439f67d4a490b6f8c0",
    "pcmBytes": 577920
   },
   {
@@ -3782,7 +4607,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_maxbwNB.pkt",
    "trace": "dec/speech_a_48k_voip_maxbwNB.plain.trace.gz",
-   "pcmSha256": "9e1fc51dc4c890327de8f009c128461b602272a7b4ec9bce40386cfd44369091",
+   "pcmSha256": "751cdd4560d48d305aae039f4402db7aa7c6651a321c80b81571d010430b6059",
    "pcmBytes": 577920
   },
   {
@@ -3796,7 +4621,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_maxbwWB.pkt",
    "trace": "dec/speech_a_48k_voip_maxbwWB.plain.trace.gz",
-   "pcmSha256": "3307e0b1e3370d6a093c86912cd6275a243d507afc1f489d8418d8cc7c1e3652",
+   "pcmSha256": "265d0300a6a8a601d9bb15e35b72990bc14db463565021462cda588045209ddf",
    "pcmBytes": 577920
   },
   {
@@ -3810,7 +4635,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_sigmusic.pkt",
    "trace": "dec/speech_a_48k_voip_sigmusic.plain.trace.gz",
-   "pcmSha256": "b62284427941c14b169ccf3bbd83e5d28e86bee9cf159f6c8d8dd46ce9331a0e",
+   "pcmSha256": "bd540c1d65901a47da50b1a11e44c4abea937b3b2f8b01da090f7c3b85ea2d61",
    "pcmBytes": 577920
   },
   {
@@ -3824,7 +4649,7 @@
    ],
    "pkt": "enc/speech_a_48k_voip_sigvoice.pkt",
    "trace": "dec/speech_a_48k_voip_sigvoice.plain.trace.gz",
-   "pcmSha256": "5b4ec37296632f999bd8c5894e21ed14005ae2891daff3d114246e68298d3dd5",
+   "pcmSha256": "2b12ea99c3ffeedd0b78caea5488dc4241f9406b9cbff7ac0615aa25585a8487",
    "pcmBytes": 577920
   },
   {
@@ -3838,7 +4663,7 @@
    ],
    "pkt": "enc/speech_a_8k_voip_12k.pkt",
    "trace": "dec/speech_a_8k_voip_12k.as2ch.trace.gz",
-   "pcmSha256": "2a66b34a8abc047bfa46691542f37ee9610fb6626aef94469e7101df98c4811d",
+   "pcmSha256": "5b2ba0eb19ad6caf3ba590dc3edf53ef04c4b975ec0adf8af7bb443d858ee18e",
    "pcmBytes": 192640
   },
   {
@@ -3852,7 +4677,7 @@
    ],
    "pkt": "enc/speech_a_8k_voip_12k.pkt",
    "trace": "dec/speech_a_8k_voip_12k.at48k.trace.gz",
-   "pcmSha256": "42e712dc8e56024a0e2c73af65c1c05a8d47ce283c1ec2755cec2512837e08aa",
+   "pcmSha256": "db6d42f46ca79c5902b9bf790c33d6baf7adc9959284e05329463e5d4bc30dad",
    "pcmBytes": 577920
   },
   {
@@ -3870,7 +4695,7 @@
    ],
    "pkt": "enc/speech_a_8k_voip_12k.pkt",
    "trace": "dec/speech_a_8k_voip_12k.loss10_s1.trace.gz",
-   "pcmSha256": "e74140f0f166b4765df39e698bba8c335373b8de3ed70bf1755ee856edb5c4d9",
+   "pcmSha256": "87208957a19e48d8bf4142dd60100751af3c90769cd1b89827af2b3ce22aceea",
    "pcmBytes": 96320
   },
   {
@@ -3884,7 +4709,7 @@
    ],
    "pkt": "enc/speech_a_8k_voip_12k.pkt",
    "trace": "dec/speech_a_8k_voip_12k.plain.trace.gz",
-   "pcmSha256": "3dfa04cb784c42494362e5bc5277ea0ef6b7ed6a63c7b03b3dbfc13b570ba6df",
+   "pcmSha256": "abc342dd23607c3cdfeb21d95e1efc597e5e8da7d85152fce9373783a3a6cbe1",
    "pcmBytes": 96320
   },
   {
@@ -3902,7 +4727,7 @@
    ],
    "pkt": "enc/speech_b_12k_voip_16k.pkt",
    "trace": "dec/speech_b_12k_voip_16k.loss20_s2.trace.gz",
-   "pcmSha256": "9b8c1d7cad48614fe30e91b529334c3115001ad93d5f0e4fd88965b87842d56d",
+   "pcmSha256": "36176a9dd30a6576c5cde040c83091b531299cfa61d3c0524e91a6f8f8484993",
    "pcmBytes": 144480
   },
   {
@@ -3916,7 +4741,7 @@
    ],
    "pkt": "enc/speech_b_12k_voip_16k.pkt",
    "trace": "dec/speech_b_12k_voip_16k.plain.trace.gz",
-   "pcmSha256": "a72ac9efb0cad31b483de48e13435c5c4998aaefd140f2512f54b737b61be997",
+   "pcmSha256": "116f32848d751f0f76036059b2c24cba30e1be7cff8aad514ca95d7c482e11d1",
    "pcmBytes": 144480
   },
   {
@@ -3930,7 +4755,7 @@
    ],
    "pkt": "enc/speech_b_16k_voip_24k.pkt",
    "trace": "dec/speech_b_16k_voip_24k.at48k.trace.gz",
-   "pcmSha256": "23988fde3974c0d6262e96e5de16cccf6f64cc1551a159f9f8a040d014103418",
+   "pcmSha256": "ff97f0b06b6fe1ed7b951d48f9e9ca69f4d3c67ad05d6681cc22513266e1b86a",
    "pcmBytes": 577920
   },
   {
@@ -3944,7 +4769,7 @@
    ],
    "pkt": "enc/speech_b_16k_voip_24k.pkt",
    "trace": "dec/speech_b_16k_voip_24k.at8k.trace.gz",
-   "pcmSha256": "8bd3892e62b81e5adb22398f786b8b78c78b1384203ffbcee812e9e196e165c6",
+   "pcmSha256": "97aacf540e5bf015688c24e46be1469414a54ade99116577ad1908839fd941fc",
    "pcmBytes": 96320
   },
   {
@@ -3959,7 +4784,7 @@
    ],
    "pkt": "enc/speech_b_16k_voip_24k.pkt",
    "trace": "dec/speech_b_16k_voip_24k.float.trace.gz",
-   "pcmSha256": "e5fe74a6c0dc95264acdfea16e524d6900ab60095997d95b6606e167c0b6ea5c",
+   "pcmSha256": "59e7fa02883b7376e3cf97407dcf4d8b2cacf5e9038085a212d4640d23c5d315",
    "pcmBytes": 192640
   },
   {
@@ -3977,7 +4802,7 @@
    ],
    "pkt": "enc/speech_b_16k_voip_24k.pkt",
    "trace": "dec/speech_b_16k_voip_24k.loss10_s1.trace.gz",
-   "pcmSha256": "e125c97c8230d7421cd202bdf065a0bebbe89d915e3ad4446e73357b102fec98",
+   "pcmSha256": "600bac6f9f2dfcc5f53e106a3e692f09e7c77057e335a2ae9c7250a7a403f136",
    "pcmBytes": 192640
   },
   {
@@ -3995,7 +4820,7 @@
    ],
    "pkt": "enc/speech_b_16k_voip_24k.pkt",
    "trace": "dec/speech_b_16k_voip_24k.loss40_s9.trace.gz",
-   "pcmSha256": "735f76469844da84f675ad7fe662457e43859381c47657b0da96161fff46083a",
+   "pcmSha256": "3c51a6a0aaffc4acb672a41ee595a33c514f8967eab1e4d26cf33b39816788cd",
    "pcmBytes": 192640
   },
   {
@@ -4009,7 +4834,7 @@
    ],
    "pkt": "enc/speech_b_16k_voip_24k.pkt",
    "trace": "dec/speech_b_16k_voip_24k.plain.trace.gz",
-   "pcmSha256": "e5fe74a6c0dc95264acdfea16e524d6900ab60095997d95b6606e167c0b6ea5c",
+   "pcmSha256": "59e7fa02883b7376e3cf97407dcf4d8b2cacf5e9038085a212d4640d23c5d315",
    "pcmBytes": 192640
   },
   {
@@ -4025,7 +4850,7 @@
    ],
    "pkt": "enc/speech_b_16k_voip_24k.pkt",
    "trace": "dec/speech_b_16k_voip_24k.reset.trace.gz",
-   "pcmSha256": "27f82d83cfa2b681382f76b6020969d9f3c22b74d2580b89c1166e38a225fc1e",
+   "pcmSha256": "7abe5bc52170176fc39e53c04a83043eb1ebeacb9e2bbc62034fe9eb53c41e42",
    "pcmBytes": 192640
   },
   {
@@ -4039,7 +4864,7 @@
    ],
    "pkt": "enc/speech_b_24k_voip_32k.pkt",
    "trace": "dec/speech_b_24k_voip_32k.at16k.trace.gz",
-   "pcmSha256": "77a2a52938e63bc3708aa6830332c2f482ebd9de6130a3d42b573971492f939e",
+   "pcmSha256": "a1dce5d906c4fcc4bc7c862b54fe184f4f9fc773a11700f28330db322df519fe",
    "pcmBytes": 192640
   },
   {
@@ -4057,7 +4882,7 @@
    ],
    "pkt": "enc/speech_b_24k_voip_32k.pkt",
    "trace": "dec/speech_b_24k_voip_32k.loss10_s3.trace.gz",
-   "pcmSha256": "df3e93c3831f340b0a47cf44e8b134b939b8280210b2dfba422998da93f2ef32",
+   "pcmSha256": "a92a49d266c5a27d7fc99e6ac8bcc9bf8c9a4ccd3f5043742fb5656da4a61eae",
    "pcmBytes": 288960
   },
   {
@@ -4071,7 +4896,7 @@
    ],
    "pkt": "enc/speech_b_24k_voip_32k.pkt",
    "trace": "dec/speech_b_24k_voip_32k.plain.trace.gz",
-   "pcmSha256": "edd6e14083308a315993e88f0f226f09aa33e2fe492ffb2ca034d166f31ffa75",
+   "pcmSha256": "805de953ee5254d7cd86d6cd9a31a3b8b2b67c44a407373dc3322743f93d4fb9",
    "pcmBytes": 288960
   },
   {
@@ -4090,7 +4915,7 @@
    ],
    "pkt": "enc/speech_b_24k_voip_fec_loss20.pkt",
    "trace": "dec/speech_b_24k_voip_fec_loss20.fec_loss20_s4.trace.gz",
-   "pcmSha256": "a67bff2a9286ca61a7e3eddd62b2307757361ba3f1def7959c01d0759ec70656",
+   "pcmSha256": "b2db576251fbf278986cd754fd9c6d5f2c9f21fe344ceae3028b12b59f98a842",
    "pcmBytes": 288000
   },
   {
@@ -4104,7 +4929,7 @@
    ],
    "pkt": "enc/speech_b_24k_voip_fec_loss20.pkt",
    "trace": "dec/speech_b_24k_voip_fec_loss20.plain.trace.gz",
-   "pcmSha256": "dc1e9752f19e2300872cd5449ab1da2ad5a467d4c44e9bea1ff48c694c6a3a1c",
+   "pcmSha256": "8e5700a458ebfa013905d8744ee5460316e39cc0825766441a1e468242ae50d5",
    "pcmBytes": 288960
   },
   {
@@ -4118,7 +4943,7 @@
    ],
    "pkt": "enc/speech_b_48k_voip_40k.pkt",
    "trace": "dec/speech_b_48k_voip_40k.at12k.trace.gz",
-   "pcmSha256": "0a6bfe69b4ca39dc5434a63c2d8a781d0e4a2cbecc175479fe52f078e68a3186",
+   "pcmSha256": "91aa4b0f4a33d72a6a977d96758e7e02353a04db13e15d803476ab4628c99e08",
    "pcmBytes": 144480
   },
   {
@@ -4132,7 +4957,7 @@
    ],
    "pkt": "enc/speech_b_48k_voip_40k.pkt",
    "trace": "dec/speech_b_48k_voip_40k.at16k.trace.gz",
-   "pcmSha256": "b090bada66e9a2b9cb67b638a1e42e3426b29cd7987a7a9f6e120bb2a0d37a25",
+   "pcmSha256": "e3e39249f4449b244f3c475384c5ba5b8c85afa46634cad79d0f9af6d0d4c465",
    "pcmBytes": 192640
   },
   {
@@ -4146,7 +4971,7 @@
    ],
    "pkt": "enc/speech_b_48k_voip_40k.pkt",
    "trace": "dec/speech_b_48k_voip_40k.at24k.trace.gz",
-   "pcmSha256": "07529256fc86eda5f5f4fa73115c71590bd78208a05702ed06ac32bc1c01b19e",
+   "pcmSha256": "d6eef96c9ca4013ac7e8793f06c46fde010c148e893f4fff24f65e90430b08b8",
    "pcmBytes": 288960
   },
   {
@@ -4160,7 +4985,7 @@
    ],
    "pkt": "enc/speech_b_48k_voip_40k.pkt",
    "trace": "dec/speech_b_48k_voip_40k.at8k.trace.gz",
-   "pcmSha256": "074f7fbaf81bd0b7c1f983575d6f7db385a5387fdb25ae6aa060d372c04ac8f8",
+   "pcmSha256": "9bfaae7f2a2b67d6496df221464476f9c9e19cd75d509780e7c32bee98bb5277",
    "pcmBytes": 96320
   },
   {
@@ -4176,7 +5001,7 @@
    ],
    "pkt": "enc/speech_b_48k_voip_40k.pkt",
    "trace": "dec/speech_b_48k_voip_40k.gain.trace.gz",
-   "pcmSha256": "8b02dd3fa00da4a58ce854d5a64554cee05be25973c4b0aab6676be3f1992f9d",
+   "pcmSha256": "65ef9fee101fc52480f4f87acdf100bec1590eeab4fb9f298990bd7740988480",
    "pcmBytes": 577920
   },
   {
@@ -4194,7 +5019,7 @@
    ],
    "pkt": "enc/speech_b_48k_voip_40k.pkt",
    "trace": "dec/speech_b_48k_voip_40k.loss10_s4.trace.gz",
-   "pcmSha256": "62dd827b3a55bbe6419fc2d94dcc5dd4759d1612caeb51303b24bd69f3ec3efb",
+   "pcmSha256": "a0e26f3f04acc13b656a2ad6152fd95627f8104a252902866108a2dbc112e23b",
    "pcmBytes": 577920
   },
   {
@@ -4208,7 +5033,7 @@
    ],
    "pkt": "enc/speech_b_48k_voip_40k.pkt",
    "trace": "dec/speech_b_48k_voip_40k.plain.trace.gz",
-   "pcmSha256": "c574059e8e7588ec5978b0ce63df76b1c4745cb4e6ee2aa26887ca6e801e4f2b",
+   "pcmSha256": "74caf04a0e463bddb99e42e6e37a9efbe9b9aee999838908fb4ddc9e10847e17",
    "pcmBytes": 577920
   },
   {
@@ -4227,7 +5052,7 @@
    ],
    "pkt": "enc/speech_b_48k_voip_fec_loss10.pkt",
    "trace": "dec/speech_b_48k_voip_fec_loss10.fec_loss10_s5.trace.gz",
-   "pcmSha256": "72b0e58241f4a312e350f244f43034530f17303f43a6d0994bc240945fca3692",
+   "pcmSha256": "02278076c1fb46eca81ebe953191446db1504b5b70ce56da2022dd4743b208d3",
    "pcmBytes": 576000
   },
   {
@@ -4241,7 +5066,7 @@
    ],
    "pkt": "enc/speech_b_48k_voip_fec_loss10.pkt",
    "trace": "dec/speech_b_48k_voip_fec_loss10.plain.trace.gz",
-   "pcmSha256": "9949f4a85c6635a236745db617ea71fbc24165318da6a8161787f7436f4094d4",
+   "pcmSha256": "84f8fa54cacccc6a2b5cf3b1c2cb07f9cd33e59bb45f17bfc06aedf6bca00715",
    "pcmBytes": 577920
   },
   {
@@ -4255,7 +5080,7 @@
    ],
    "pkt": "enc/speech_b_8k_audio_12k.pkt",
    "trace": "dec/speech_b_8k_audio_12k.plain.trace.gz",
-   "pcmSha256": "3f935dc988ad94ca0d97cad07c336fbdf7cda0620d8fa47c1bd33548bd1b6794",
+   "pcmSha256": "d4316214ae259bbfc7e9c26df0e2e2423fd157094c1750b89b24535a4b7767a5",
    "pcmBytes": 96320
   },
   {
@@ -4269,7 +5094,7 @@
    ],
    "pkt": "enc/speech_b_8k_voip_12k.pkt",
    "trace": "dec/speech_b_8k_voip_12k.as2ch.trace.gz",
-   "pcmSha256": "a6cc197ba20ffbb6f40e6a7631daf26c3274cb371615c271403b99b824298cb3",
+   "pcmSha256": "497f3d2335905dcbbdd9e3a9671e29c1d2f70da82e5b9fea8b61ad4e91b8e79c",
    "pcmBytes": 192640
   },
   {
@@ -4283,7 +5108,7 @@
    ],
    "pkt": "enc/speech_b_8k_voip_12k.pkt",
    "trace": "dec/speech_b_8k_voip_12k.at48k.trace.gz",
-   "pcmSha256": "134c02c0ae97af64a6f271849fd17d65f0c950c95968b1ab7c9e28467a7a9a49",
+   "pcmSha256": "788e28c31db381b292df0a68dcd90d36ce87d652b0d75b9fcdc963be7922ca44",
    "pcmBytes": 577920
   },
   {
@@ -4301,7 +5126,7 @@
    ],
    "pkt": "enc/speech_b_8k_voip_12k.pkt",
    "trace": "dec/speech_b_8k_voip_12k.loss10_s1.trace.gz",
-   "pcmSha256": "9fb2f3d6f55fc61cdb7f7fcad55ffc278bbdc2fb635c243b2ed48f55398446e8",
+   "pcmSha256": "09303cc8dacfb8c665a668e00ecaab16ffc2a1c814dd505c68668f415861a14c",
    "pcmBytes": 96320
   },
   {
@@ -4315,7 +5140,7 @@
    ],
    "pkt": "enc/speech_b_8k_voip_12k.pkt",
    "trace": "dec/speech_b_8k_voip_12k.plain.trace.gz",
-   "pcmSha256": "dd8c58f2c0efffc4b750d2088516a67559aeef075c7eef44b0619af8c129991d",
+   "pcmSha256": "776201f82479bca421f3934f804731bbfbaa993facf3b760586644c1c37d09a6",
    "pcmBytes": 96320
   },
   {
@@ -4329,7 +5154,7 @@
    ],
    "pkt": "enc/speech_b_8k_voip_cplx0.pkt",
    "trace": "dec/speech_b_8k_voip_cplx0.plain.trace.gz",
-   "pcmSha256": "082ae6f4d4e2080b938205ca91bb610bc8334c850704538e0639b6f605a6e00b",
+   "pcmSha256": "9f249a223bb84a8824fa8762b05401c8336d579c8400e2fdf7b26aea33525d68",
    "pcmBytes": 96320
   },
   {
@@ -4343,7 +5168,7 @@
    ],
    "pkt": "enc/speech_b_8k_voip_cplx5.pkt",
    "trace": "dec/speech_b_8k_voip_cplx5.plain.trace.gz",
-   "pcmSha256": "6d907ce9372d944dc6ceeda24b0471828003bfbb081d092c8a0a4498176deaca",
+   "pcmSha256": "6f973c8fa861420476eaaaecddf0b15a54edcea74c6e64587367c8acea8ef0f1",
    "pcmBytes": 96320
   },
   {
@@ -4357,7 +5182,7 @@
    ],
    "pkt": "enc/speech_b_8k_voip_dtx.pkt",
    "trace": "dec/speech_b_8k_voip_dtx.plain.trace.gz",
-   "pcmSha256": "94a0a47554cbc54a5930e68209a40f4d11d57540ef379c22a6de264a881e2422",
+   "pcmSha256": "75d109af7e1a93398f87659d19118d4a02802207921085275e8329d5e2feb6d4",
    "pcmBytes": 96320
   },
   {
@@ -4377,7 +5202,7 @@
    ],
    "pkt": "enc/surround_fam0_mono.pkt",
    "trace": "dec/surround_fam0_mono.plain.trace.gz",
-   "pcmSha256": "cf5196448298a55341e9cb7e9f1cc037d3db16a9d710ee7bc748ffcfb0336982",
+   "pcmSha256": "2704867edf3f3bc6963e04216396190c2cbc487c9a6e2c760523b7188cf8c020",
    "pcmBytes": 193920
   },
   {
@@ -4397,7 +5222,7 @@
    ],
    "pkt": "enc/surround_fam0_stereo.pkt",
    "trace": "dec/surround_fam0_stereo.plain.trace.gz",
-   "pcmSha256": "b4700bf50c94bbcd6e435995382314743f07a2221c15a38b56be6a648d79fe60",
+   "pcmSha256": "a6253d3b17480209fed1226e597c1499b8fcbd4e8c2f423868da6b79ed5aa32e",
    "pcmBytes": 387840
   },
   {
@@ -4421,7 +5246,7 @@
    ],
    "pkt": "enc/surround_fam1_1ch.pkt",
    "trace": "dec/surround_fam1_1ch.loss10_s41.trace.gz",
-   "pcmSha256": "8be367eeb17c4c717d2ac4761658e2320f3da029ca36891231e370521efea4d6",
+   "pcmSha256": "d4afb3b82bf9676e2388830f65a2ee1fa7049a61a1c38206f69e85c9bd87af72",
    "pcmBytes": 193920
   },
   {
@@ -4441,7 +5266,7 @@
    ],
    "pkt": "enc/surround_fam1_1ch.pkt",
    "trace": "dec/surround_fam1_1ch.plain.trace.gz",
-   "pcmSha256": "187884fe4dc212848740d20cb241b984ac94940a59b0d7099ea311f56e848602",
+   "pcmSha256": "0ef1f4b2e2d4be9876bf48902aacd702e84d0b81e3d437991c236f0e08c9ae69",
    "pcmBytes": 193920
   },
   {
@@ -4465,7 +5290,7 @@
    ],
    "pkt": "enc/surround_fam1_2ch.pkt",
    "trace": "dec/surround_fam1_2ch.loss10_s42.trace.gz",
-   "pcmSha256": "5975c05ffdfcd060dc91019b1ebecdf1c1e9e54927040b484f5597d7a798298c",
+   "pcmSha256": "d8fa745e02f5c80e84ef12cb47952a037352e3a6877dd4eae84266b1efbb0c24",
    "pcmBytes": 387840
   },
   {
@@ -4485,7 +5310,7 @@
    ],
    "pkt": "enc/surround_fam1_2ch.pkt",
    "trace": "dec/surround_fam1_2ch.plain.trace.gz",
-   "pcmSha256": "cc386bca5ace7723e2a9f979486c622bae7a4aefe346d2b22c12aa5f20cf3be6",
+   "pcmSha256": "4b8b738cb70dc61384ede0560816f95984e724192bc7cea3fcd9c25cbe817d68",
    "pcmBytes": 387840
   },
   {
@@ -4509,7 +5334,7 @@
    ],
    "pkt": "enc/surround_fam1_3ch.pkt",
    "trace": "dec/surround_fam1_3ch.loss10_s43.trace.gz",
-   "pcmSha256": "b3067047a9ed07d966fd9ddd5799645509cd1be802b403f422fc30fd7ebe693c",
+   "pcmSha256": "b9540f2b3e61b24689b7c1c212900e1d5562738ea84add79efd9eec08ef4feb8",
    "pcmBytes": 437760
   },
   {
@@ -4529,7 +5354,7 @@
    ],
    "pkt": "enc/surround_fam1_3ch.pkt",
    "trace": "dec/surround_fam1_3ch.plain.trace.gz",
-   "pcmSha256": "44ee5b762084519133c0fb410c4fd25fa6446115a790d675680ab6db0f5828e7",
+   "pcmSha256": "5d48d6ea0ad7b5d907238364663674ee2ef829cea532ac1b9031c8fa19ff0e1c",
    "pcmBytes": 437760
   },
   {
@@ -4553,7 +5378,7 @@
    ],
    "pkt": "enc/surround_fam1_4ch.pkt",
    "trace": "dec/surround_fam1_4ch.loss10_s44.trace.gz",
-   "pcmSha256": "e1c5ae50e73d8d21e7e37e031b99cbd66ffe87ee5c7646855a39904e932b66ab",
+   "pcmSha256": "26b36ccb4b682da895082cdf6f2d46cc6ac239834bf04fb3d9c46538ed3230cc",
    "pcmBytes": 583680
   },
   {
@@ -4573,7 +5398,7 @@
    ],
    "pkt": "enc/surround_fam1_4ch.pkt",
    "trace": "dec/surround_fam1_4ch.plain.trace.gz",
-   "pcmSha256": "65f13b4adcc15468931c2f4c447d992b21b3733862c1e0df3a54fd3cd8cf4e7a",
+   "pcmSha256": "754e1cee872c65691e8c829cbebf66615a9236b82de1f10a1def9768cbadc1f3",
    "pcmBytes": 583680
   },
   {
@@ -4597,7 +5422,7 @@
    ],
    "pkt": "enc/surround_fam1_5ch.pkt",
    "trace": "dec/surround_fam1_5ch.loss10_s45.trace.gz",
-   "pcmSha256": "4c529f5907f1a1905d93e59bee2f7f7c9424e99318425cd179bbcd16ec502efb",
+   "pcmSha256": "116c10f9f9dfeabc06aa37db103b6693aee8d8ba0a59519d32db23de865f8e36",
    "pcmBytes": 729600
   },
   {
@@ -4617,7 +5442,7 @@
    ],
    "pkt": "enc/surround_fam1_5ch.pkt",
    "trace": "dec/surround_fam1_5ch.plain.trace.gz",
-   "pcmSha256": "44ef0f66297a8c06fa404552bebd4cdc02edf9998b582a2b6f236578c132677f",
+   "pcmSha256": "5d7c7652956de21a2d4999a9c86d1db8337bbe0b27ea5075da8a91e033d39711",
    "pcmBytes": 729600
   },
   {
@@ -4641,7 +5466,7 @@
    ],
    "pkt": "enc/surround_fam1_6ch.pkt",
    "trace": "dec/surround_fam1_6ch.loss10_s46.trace.gz",
-   "pcmSha256": "233bd89093ebf904d46db9a79b2fdf088034f947e52598d8827d7563d7483203",
+   "pcmSha256": "4537de9145d6e127cc6c21f752197fa33f6bd768e30708d68c6c58c7677ceded",
    "pcmBytes": 875520
   },
   {
@@ -4661,7 +5486,7 @@
    ],
    "pkt": "enc/surround_fam1_6ch.pkt",
    "trace": "dec/surround_fam1_6ch.plain.trace.gz",
-   "pcmSha256": "904843277f9dba284102b52cea9c0266d9a9847c0f72a64237f7df6fa99eb763",
+   "pcmSha256": "cde6956c09f0b8bd2655fdb2db40ec4b6bbec08898c10c53b28c6e3150c1f716",
    "pcmBytes": 875520
   },
   {
@@ -4681,7 +5506,7 @@
    ],
    "pkt": "enc/surround_fam1_6ch_16k.pkt",
    "trace": "dec/surround_fam1_6ch_16k.plain.trace.gz",
-   "pcmSha256": "c19e04cb0bbb5ea0e3ca2a1757c82224165b0db354b6072de5c14640b3bb5529",
+   "pcmSha256": "cba060c40a66eb0bfcfff96c51640c36bbd4dc397b10ce8dcbb8dc03f0bb720d",
    "pcmBytes": 291840
   },
   {
@@ -4701,7 +5526,7 @@
    ],
    "pkt": "enc/surround_fam1_6ch_voip_fs40.pkt",
    "trace": "dec/surround_fam1_6ch_voip_fs40.plain.trace.gz",
-   "pcmSha256": "6b1a79afc40225657ae2bfbcced1ae180e17d114248558bcea94d7ecb9d0db39",
+   "pcmSha256": "bb9c23a0fc033f75bd0e239013d4987522574461764ae9c8860ce5d4d7abc097",
    "pcmBytes": 875520
   },
   {
@@ -4725,7 +5550,7 @@
    ],
    "pkt": "enc/surround_fam1_7ch.pkt",
    "trace": "dec/surround_fam1_7ch.loss10_s47.trace.gz",
-   "pcmSha256": "aab59f174c1101955071d3830bd4bc6f9225b54576a6cb3bc8060611219da9dd",
+   "pcmSha256": "3713753fa75cb2000277e9994b213d34d31904d62a5d465aa53c4815e3b5f981",
    "pcmBytes": 1021440
   },
   {
@@ -4745,7 +5570,7 @@
    ],
    "pkt": "enc/surround_fam1_7ch.pkt",
    "trace": "dec/surround_fam1_7ch.plain.trace.gz",
-   "pcmSha256": "1bdfe24a6cd72d0a026d3db818c87a5a291c09bb115a6bd1ba443e4df8d8f17d",
+   "pcmSha256": "a571189e3d28b133540dcd55b1e12f459a7855389133adaac99307c39600a4b5",
    "pcmBytes": 1021440
   },
   {
@@ -4769,7 +5594,7 @@
    ],
    "pkt": "enc/surround_fam1_8ch.pkt",
    "trace": "dec/surround_fam1_8ch.loss10_s48.trace.gz",
-   "pcmSha256": "5eb1eb9901198283aedfe05e700dbe4008421655ae397d14166f0a9111939c45",
+   "pcmSha256": "d161fbfd60dc78ccf018982d291545ea9106e263e5aa8e0d09ed0ec6c0479608",
    "pcmBytes": 1167360
   },
   {
@@ -4789,7 +5614,7 @@
    ],
    "pkt": "enc/surround_fam1_8ch.pkt",
    "trace": "dec/surround_fam1_8ch.plain.trace.gz",
-   "pcmSha256": "d55243253d5f829da5643e2699c7496517b4d3e0a563188e8beb4503e17144ee",
+   "pcmSha256": "c59ea9805a44e3bc9acf2fd469517ac166cba02f71f9676d6018d34c31200a70",
    "pcmBytes": 1167360
   },
   {
@@ -4807,7 +5632,7 @@
    ],
    "pkt": "enc/synth_bursts_16k_voip.pkt",
    "trace": "dec/synth_bursts_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "c017c6f5d3cde6c8503542543b2e5ee252d0fb8d8795068e1304d9ffc61a19b9",
+   "pcmSha256": "546ab538a1c37307363105001b6ecb21d68142cfefb0d5956dcda3ecaf92ea4c",
    "pcmBytes": 64000
   },
   {
@@ -4821,7 +5646,7 @@
    ],
    "pkt": "enc/synth_bursts_16k_voip.pkt",
    "trace": "dec/synth_bursts_16k_voip.plain.trace.gz",
-   "pcmSha256": "1e5feba523cf178904f3a8d77cb98fe9e0d4f2efe8a5c28b3f688c96eca4a395",
+   "pcmSha256": "b492a8136f707b37604da5c9b1fe43b6987b29b7fd1449ae684f5a6de814d751",
    "pcmBytes": 64640
   },
   {
@@ -4835,7 +5660,7 @@
    ],
    "pkt": "enc/synth_bursts_16k_voip_dtx.pkt",
    "trace": "dec/synth_bursts_16k_voip_dtx.plain.trace.gz",
-   "pcmSha256": "1e5feba523cf178904f3a8d77cb98fe9e0d4f2efe8a5c28b3f688c96eca4a395",
+   "pcmSha256": "b492a8136f707b37604da5c9b1fe43b6987b29b7fd1449ae684f5a6de814d751",
    "pcmBytes": 64640
   },
   {
@@ -4849,7 +5674,7 @@
    ],
    "pkt": "enc/synth_bursts_48k_audio_dtx.pkt",
    "trace": "dec/synth_bursts_48k_audio_dtx.plain.trace.gz",
-   "pcmSha256": "353acc7df559b2a28e2865091cc865f8332246f430861c7675c625abcf4231fa",
+   "pcmSha256": "f32dd915ca040c5a0b931d45a178bc17a18d421f431d2365b328060ea598306c",
    "pcmBytes": 387840
   },
   {
@@ -4863,7 +5688,7 @@
    ],
    "pkt": "enc/synth_bursts_48k_audio_mono.pkt",
    "trace": "dec/synth_bursts_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "52726657f1a02dab3b363b806d84fa66bec59d415e3053920f2ca88dc3d39cac",
+   "pcmSha256": "5c8939e1e76f9f76d5831bedd6bfcb08e659730bdd91d076c82042d92933d505",
    "pcmBytes": 193920
   },
   {
@@ -4881,7 +5706,7 @@
    ],
    "pkt": "enc/synth_bursts_48k_audio_st.pkt",
    "trace": "dec/synth_bursts_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "bb422ac4e84d89da8fe4138ddfe9d6348cc7c70961ef4bb43986c74bd38b70f8",
+   "pcmSha256": "84c4ae37821c7feb8dd18c04a64a263efb339dcea8d7a13683e420ff651dcecb",
    "pcmBytes": 384000
   },
   {
@@ -4895,7 +5720,7 @@
    ],
    "pkt": "enc/synth_bursts_48k_audio_st.pkt",
    "trace": "dec/synth_bursts_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "cc386bca5ace7723e2a9f979486c622bae7a4aefe346d2b22c12aa5f20cf3be6",
+   "pcmSha256": "4b8b738cb70dc61384ede0560816f95984e724192bc7cea3fcd9c25cbe817d68",
    "pcmBytes": 387840
   },
   {
@@ -4914,7 +5739,7 @@
    ],
    "pkt": "enc/synth_bursts_48k_voip_dtx_fec.pkt",
    "trace": "dec/synth_bursts_48k_voip_dtx_fec.fec_loss20_s22.trace.gz",
-   "pcmSha256": "e6e81753b9ba24d6f83762bad6e0af3d69c4306de40c7fd0c6c501cfa2080739",
+   "pcmSha256": "5c7b653962bc7e06ba61ce95299a0f845d7bc1bd17ed6c104e9f80bb3128ca63",
    "pcmBytes": 190080
   },
   {
@@ -4928,7 +5753,7 @@
    ],
    "pkt": "enc/synth_bursts_48k_voip_dtx_fec.pkt",
    "trace": "dec/synth_bursts_48k_voip_dtx_fec.plain.trace.gz",
-   "pcmSha256": "9befe2a80e335ab3f02c06a422dd7ef41d4c51d8c330ac441ffcb85222df34b1",
+   "pcmSha256": "027c3f213d62b86dd1378506ec578fbab6a05ecc95ae725d93dbf442a4856601",
    "pcmBytes": 193920
   },
   {
@@ -4942,7 +5767,7 @@
    ],
    "pkt": "enc/synth_bursts_8k_voip_dtx.pkt",
    "trace": "dec/synth_bursts_8k_voip_dtx.plain.trace.gz",
-   "pcmSha256": "00256d320cca82711d730b7e467e7caf12b1c21dca46c6c2dc10a55fddf03406",
+   "pcmSha256": "7a6b33f67cdce9b9de96f9401e5c13fbb67b46bfe49f15b090f88d8a371845f1",
    "pcmBytes": 32320
   },
   {
@@ -4960,7 +5785,7 @@
    ],
    "pkt": "enc/synth_clip_16k_voip.pkt",
    "trace": "dec/synth_clip_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "45faa727c9597cb29f151e21089fe172542324996fc94f373851c6647b063747",
+   "pcmSha256": "027d2c71d7d3da099c417a7c9f1068bf557a3308288b829863f91e270821bc92",
    "pcmBytes": 64000
   },
   {
@@ -4974,7 +5799,7 @@
    ],
    "pkt": "enc/synth_clip_16k_voip.pkt",
    "trace": "dec/synth_clip_16k_voip.plain.trace.gz",
-   "pcmSha256": "6d651128052f025c1593dd2b18132dd9537ac51b170d8b3e5902be9baa2e48ed",
+   "pcmSha256": "1dc5a7c07a157ef5d57c0ba38e46532ceb34c1b2dfa553244961e09257841bde",
    "pcmBytes": 64640
   },
   {
@@ -4988,7 +5813,7 @@
    ],
    "pkt": "enc/synth_clip_48k_audio_mono.pkt",
    "trace": "dec/synth_clip_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "0f7295486e5a4b5f42b66cb89053605c5391282342db522da13b435e78ac6c2e",
+   "pcmSha256": "3e656ddb0dddf9b6dddce316a44576994d2ca8c0a96331365295da073cc50c3f",
    "pcmBytes": 193920
   },
   {
@@ -5006,7 +5831,7 @@
    ],
    "pkt": "enc/synth_clip_48k_audio_st.pkt",
    "trace": "dec/synth_clip_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "f76595b6ba0346de5a43c8aa9cca39bcd449fca2ee6cd85f795811b84215399c",
+   "pcmSha256": "33f81b2b74e9296c9d355f670d8d9f90edc9c9c62d543c9c830a8d7a34ccf2e3",
    "pcmBytes": 384000
   },
   {
@@ -5020,7 +5845,7 @@
    ],
    "pkt": "enc/synth_clip_48k_audio_st.pkt",
    "trace": "dec/synth_clip_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "ffcc4d2c00621dc872e4a118c63487764f5d6a3f6d1190edc6180f4984dfb647",
+   "pcmSha256": "73cdbfb5772bd3f094aa4e5ea1c4df137a89c861a16a9d86cfef95c722b8ad57",
    "pcmBytes": 387840
   },
   {
@@ -5034,7 +5859,7 @@
    ],
    "pkt": "enc/synth_clip_48k_voip.pkt",
    "trace": "dec/synth_clip_48k_voip.plain.trace.gz",
-   "pcmSha256": "e35810a8b33115224efff200878d335e1b2e2cd8c3e341fe1e55a91c6bab327c",
+   "pcmSha256": "6448e0c5acd43d74e355a35b30bdd4770342cf39f2973ac6afe6079f1ff77e3e",
    "pcmBytes": 387840
   },
   {
@@ -5048,7 +5873,7 @@
    ],
    "pkt": "enc/synth_clip_8k_voip.pkt",
    "trace": "dec/synth_clip_8k_voip.plain.trace.gz",
-   "pcmSha256": "7fde83bce1aa4db9af3c1e282e16d35894fbffa7b1b8520fe4d9ed7b6c9f37b5",
+   "pcmSha256": "fd2119bb8fc4e6a34181d7afbf6ed087bcb399a751aa4b811ee76c313d88735d",
    "pcmBytes": 32320
   },
   {
@@ -5066,7 +5891,7 @@
    ],
    "pkt": "enc/synth_dc_16k_voip.pkt",
    "trace": "dec/synth_dc_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "74b6b3150fa56536d694c6aeada457bb4653b50bbc0fe5d6e1e25f17cb4cc757",
+   "pcmSha256": "62b7bdc1dcda62173c5746aa2313f767f65cb5c8ffac275d8a7770512dec8e20",
    "pcmBytes": 64000
   },
   {
@@ -5080,7 +5905,7 @@
    ],
    "pkt": "enc/synth_dc_16k_voip.pkt",
    "trace": "dec/synth_dc_16k_voip.plain.trace.gz",
-   "pcmSha256": "c4266a532b5c5569f67d6d1aab70039801fe3f3859cd57983151eb37574b8bdc",
+   "pcmSha256": "85fdf75542963a5c44c70f624c28b5926059d8c7258addb0c46ec7c93b7009eb",
    "pcmBytes": 64640
   },
   {
@@ -5094,7 +5919,7 @@
    ],
    "pkt": "enc/synth_dc_48k_audio_mono.pkt",
    "trace": "dec/synth_dc_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "0f5b471ef2565e21f92191fde58e8b45a47c0d2e6c36513373cd9253c7a488d0",
+   "pcmSha256": "26f5bd95aaa4fd602bf4762d29be2d52e9e657a1b5fa55d7ac65d7414953b8dc",
    "pcmBytes": 193920
   },
   {
@@ -5112,7 +5937,7 @@
    ],
    "pkt": "enc/synth_dc_48k_audio_st.pkt",
    "trace": "dec/synth_dc_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "427b44eaf16a054a057a2fb1bf5dd207a271cf5f407e89b5d98238000fb975b0",
+   "pcmSha256": "d14fd7471af5b17606cb86e1f7df2b32548298d35d50fca58d21aeb61e6f5448",
    "pcmBytes": 384000
   },
   {
@@ -5126,7 +5951,7 @@
    ],
    "pkt": "enc/synth_dc_48k_audio_st.pkt",
    "trace": "dec/synth_dc_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "c1d729d4cc72fb61d45cf3086f64b23142bd3257836604c6e8ec279bcfac3489",
+   "pcmSha256": "29c3b37e990ae6772fb5ddec19e3e69ef3ff1c12e4ee1846e342e836df04c099",
    "pcmBytes": 387840
   },
   {
@@ -5144,7 +5969,7 @@
    ],
    "pkt": "enc/synth_fade_16k_voip.pkt",
    "trace": "dec/synth_fade_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "2e6df6098874d19ad14347871bc2bd448cce8d0b6695deefcd0304d943aa18bf",
+   "pcmSha256": "c29dcfd9abcf1e927901258d289e35a9f50979cd13afec3069497bb57b2f20f7",
    "pcmBytes": 64000
   },
   {
@@ -5158,7 +5983,7 @@
    ],
    "pkt": "enc/synth_fade_16k_voip.pkt",
    "trace": "dec/synth_fade_16k_voip.plain.trace.gz",
-   "pcmSha256": "730ea262e292032d6df7967c12f118f4714bce95e1c66ae9f6bb2a25a53feac4",
+   "pcmSha256": "b2dd1d9d0afa82e513ce62c6bf8a7247c90cf667323713caacf53a4fc8cfe247",
    "pcmBytes": 64640
   },
   {
@@ -5172,7 +5997,7 @@
    ],
    "pkt": "enc/synth_fade_16k_voip_dtx.pkt",
    "trace": "dec/synth_fade_16k_voip_dtx.plain.trace.gz",
-   "pcmSha256": "00ee26cbdf03ace9f61593554a1bf2c913710cef12f6f0f1ce0c9334b72270a5",
+   "pcmSha256": "ea18be70c2c578e11a2033a394ed24f8a572a4e60897e68168d7a5558461a844",
    "pcmBytes": 64640
   },
   {
@@ -5186,7 +6011,7 @@
    ],
    "pkt": "enc/synth_fade_48k_audio_dtx.pkt",
    "trace": "dec/synth_fade_48k_audio_dtx.plain.trace.gz",
-   "pcmSha256": "e01c80cf82996eba72a0a347378a113dfac1dd0b5dd4ca5e582453941466329f",
+   "pcmSha256": "adf4b7431dc5e02044271bd866cc374f7a661899db6108dbf405b83ee5b84abf",
    "pcmBytes": 387840
   },
   {
@@ -5200,7 +6025,7 @@
    ],
    "pkt": "enc/synth_fade_48k_audio_mono.pkt",
    "trace": "dec/synth_fade_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "e4c1f5ba44dced581ed847d69a52cb729f1e94fa9e2bce6becc4ecf67e86c5bc",
+   "pcmSha256": "dae14f41b5aec82362a16af53916fb1e45538655ca447ccf6b6c9bdc98ba5f09",
    "pcmBytes": 193920
   },
   {
@@ -5218,7 +6043,7 @@
    ],
    "pkt": "enc/synth_fade_48k_audio_st.pkt",
    "trace": "dec/synth_fade_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "a032bae8cb145c0e1cad710c3c1ada4de932cf725cc0365ea0d2805c6885f18e",
+   "pcmSha256": "906778bcab8c716aa3ee217f89186264128858ddfb86f1b0fe7a7361ba31c192",
    "pcmBytes": 384000
   },
   {
@@ -5232,7 +6057,7 @@
    ],
    "pkt": "enc/synth_fade_48k_audio_st.pkt",
    "trace": "dec/synth_fade_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "5b39677fba35db9016f0e72702b5a950e839d0243c2096238c3be7dd66d5003b",
+   "pcmSha256": "21d69430f424c295208c4ca9e7b92a3e5fbc27a2acf73a60d1c1a2600b99a273",
    "pcmBytes": 387840
   },
   {
@@ -5251,7 +6076,7 @@
    ],
    "pkt": "enc/synth_fade_48k_voip_dtx_fec.pkt",
    "trace": "dec/synth_fade_48k_voip_dtx_fec.fec_loss20_s22.trace.gz",
-   "pcmSha256": "c02ca844ee5bb77953acedfb59b0737561b93679c1f41913751609daab3bcfa4",
+   "pcmSha256": "69d8d8adf6282214093697e797095a1aa179d7c7d8c4da7ccfc7f03683fdc963",
    "pcmBytes": 190080
   },
   {
@@ -5265,7 +6090,7 @@
    ],
    "pkt": "enc/synth_fade_48k_voip_dtx_fec.pkt",
    "trace": "dec/synth_fade_48k_voip_dtx_fec.plain.trace.gz",
-   "pcmSha256": "fddecade7ddd1d8bbcd81eb89a4316c62fbec57e82b2e6edc4919bee4fcd3496",
+   "pcmSha256": "d593f2b4ff6b71af036a951e7106f3f94768a5f9b34cc41547f746f1e865b43a",
    "pcmBytes": 193920
   },
   {
@@ -5279,7 +6104,7 @@
    ],
    "pkt": "enc/synth_fade_8k_voip_dtx.pkt",
    "trace": "dec/synth_fade_8k_voip_dtx.plain.trace.gz",
-   "pcmSha256": "8ee9fbed1253ffade598d14d7b26d06d574cf97d4359d74182fd5e92e84f217e",
+   "pcmSha256": "22a76ed690784e1e4286e20b9837a44a2a6471e231a1f72368fd5e8f59ea6c92",
    "pcmBytes": 32320
   },
   {
@@ -5297,7 +6122,7 @@
    ],
    "pkt": "enc/synth_impulses40_16k_voip.pkt",
    "trace": "dec/synth_impulses40_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "711f290e1487dc9eb8822753ed9d3e42662b47d222874e2b773ed8bcf42fb1c3",
+   "pcmSha256": "9320126803cf073d93920b4d3857c89da75bfbe40cd3f67bb98e9411b8d2759c",
    "pcmBytes": 64000
   },
   {
@@ -5311,7 +6136,7 @@
    ],
    "pkt": "enc/synth_impulses40_16k_voip.pkt",
    "trace": "dec/synth_impulses40_16k_voip.plain.trace.gz",
-   "pcmSha256": "93bc7e438f9de66a8a9904909f2ba12d35409bd8cb775d452f110776db52243f",
+   "pcmSha256": "f8ff8bf8336adcc0fa04720087f1488212663df425f36121799243cbccfef431",
    "pcmBytes": 64640
   },
   {
@@ -5325,7 +6150,7 @@
    ],
    "pkt": "enc/synth_impulses40_48k_audio_mono.pkt",
    "trace": "dec/synth_impulses40_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "0b4b77a6448310ab5198bec4a55ed15099b040b40c0583810db79d238ea1a078",
+   "pcmSha256": "8aa833be6882a15aa97ed593c7831a9058d6bc1e59c2a7db3a1b18d8af8eea49",
    "pcmBytes": 193920
   },
   {
@@ -5343,7 +6168,7 @@
    ],
    "pkt": "enc/synth_impulses40_48k_audio_st.pkt",
    "trace": "dec/synth_impulses40_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "4993389294033caefd54d46901eee55fca7d6ddaedfa6fabc80a1482a728e248",
+   "pcmSha256": "6c29200d0100b71b7bd28551b38c71f44702997b5615b2e5804792eb5df6ebde",
    "pcmBytes": 384000
   },
   {
@@ -5357,7 +6182,7 @@
    ],
    "pkt": "enc/synth_impulses40_48k_audio_st.pkt",
    "trace": "dec/synth_impulses40_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "2bd2a0c8514ceaab88e8522be5c93b4f6a077a05ea0bad85860e938624c8ac20",
+   "pcmSha256": "d5cf13866c040856697a779cd8d2cf8c69c5cce73d4f4bebbcd1db6eb1964639",
    "pcmBytes": 387840
   },
   {
@@ -5375,7 +6200,7 @@
    ],
    "pkt": "enc/synth_impulses_16k_voip.pkt",
    "trace": "dec/synth_impulses_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "d962703e1cb0f0369eec2e385e444200e369981d5852296162a7a2551897e5fa",
+   "pcmSha256": "30f33edfe7406a7b61845898d62b938b7ba03ad16576f08f2e99c7a9b5b574e9",
    "pcmBytes": 64000
   },
   {
@@ -5389,7 +6214,7 @@
    ],
    "pkt": "enc/synth_impulses_16k_voip.pkt",
    "trace": "dec/synth_impulses_16k_voip.plain.trace.gz",
-   "pcmSha256": "d6a26915eec97dbcc2c0402227f2479f1bd1560bbbdfe4bda61d6d208836a1dc",
+   "pcmSha256": "70651144711e0476db62a97ea76fa303bbc4523b771a0540139883f8665fd680",
    "pcmBytes": 64640
   },
   {
@@ -5403,7 +6228,7 @@
    ],
    "pkt": "enc/synth_impulses_48k_audio_mono.pkt",
    "trace": "dec/synth_impulses_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "658ad7edfc3e21ec1d0f1977e23efc11939f121f084b776c5a338b816de7dd8e",
+   "pcmSha256": "6ba7c343e47b328cc85d9a896e200ced2006ad5a0f3879bb2584d1af223966c3",
    "pcmBytes": 193920
   },
   {
@@ -5421,7 +6246,7 @@
    ],
    "pkt": "enc/synth_impulses_48k_audio_st.pkt",
    "trace": "dec/synth_impulses_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "86ae68bc492572633b24ed3f543334e246c894a704ef21fc6562778802786300",
+   "pcmSha256": "6202a43b490993713879643719e98d1b634cc7be946bfe0a671d4417e883d6b1",
    "pcmBytes": 384000
   },
   {
@@ -5435,7 +6260,7 @@
    ],
    "pkt": "enc/synth_impulses_48k_audio_st.pkt",
    "trace": "dec/synth_impulses_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "d5621b91837680a97f8cdfc5fe6ca5b8aac4107dfcbb08b855e774d91363ca59",
+   "pcmSha256": "bc69b0d57c6d6fab063d78c144947a3ddd858286641f1765b2e5c4b28d65aab3",
    "pcmBytes": 387840
   },
   {
@@ -5449,7 +6274,7 @@
    ],
    "pkt": "enc/synth_impulses_48k_lowdelay_fs2p5.pkt",
    "trace": "dec/synth_impulses_48k_lowdelay_fs2p5.plain.trace.gz",
-   "pcmSha256": "5acf253c2b10d7e84263badc452099901d8cfa04f07795d731954418614362db",
+   "pcmSha256": "0f3bdbaf20f68ced942f4ebdc48a092938af5b13d1b063cf8268ae2b121f3be0",
    "pcmBytes": 384480
   },
   {
@@ -5467,7 +6292,7 @@
    ],
    "pkt": "enc/synth_lowlevel_16k_voip.pkt",
    "trace": "dec/synth_lowlevel_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "7ad9b11c98ddb79d6c00b24de64c60585c0a46cce9c93daee6aa6c1d25f9eeac",
+   "pcmSha256": "e7f001704e036efa00df41eab5fdf3209fc7aefdd393724a229aecd3526ebeed",
    "pcmBytes": 64000
   },
   {
@@ -5481,7 +6306,7 @@
    ],
    "pkt": "enc/synth_lowlevel_16k_voip.pkt",
    "trace": "dec/synth_lowlevel_16k_voip.plain.trace.gz",
-   "pcmSha256": "4e5d784fc6cf0e1d1ca081c56fdd3ca8e05eac682b49710bb3cd6b0de5237270",
+   "pcmSha256": "c6bf94bb6afd1592f10a700ba68bb38ccc5bbb0158696e4b5182f88ab932f520",
    "pcmBytes": 64640
   },
   {
@@ -5495,7 +6320,7 @@
    ],
    "pkt": "enc/synth_lowlevel_16k_voip_dtx.pkt",
    "trace": "dec/synth_lowlevel_16k_voip_dtx.plain.trace.gz",
-   "pcmSha256": "5c315ce5c954deb92fe1672c31cf73ab2f3e5580dfeec6c6f1e89274ab32ab8f",
+   "pcmSha256": "ad44bdb604a962302990e4612a7e6b2cfc88bf8838447a6e4eadd66e45e03c0b",
    "pcmBytes": 64640
   },
   {
@@ -5509,7 +6334,7 @@
    ],
    "pkt": "enc/synth_lowlevel_48k_audio_dtx.pkt",
    "trace": "dec/synth_lowlevel_48k_audio_dtx.plain.trace.gz",
-   "pcmSha256": "dda14b2925f3c8e2134ebcafab2811c4cc0db4af4c16cd04e7ae7d50053b44d5",
+   "pcmSha256": "350e61bc9102c9576d556b84c14b1305fc5a0ad43d31e53b05a2d751babadefb",
    "pcmBytes": 387840
   },
   {
@@ -5523,7 +6348,7 @@
    ],
    "pkt": "enc/synth_lowlevel_48k_audio_mono.pkt",
    "trace": "dec/synth_lowlevel_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "18558b6efc93946b79c71875f6c3708824bd069f89892b24e8bae4eb128d5701",
+   "pcmSha256": "930a0f14c4ac9b3ab9c7c8e5008713281d748fbae12a044c8a55cd97f6df2202",
    "pcmBytes": 193920
   },
   {
@@ -5541,7 +6366,7 @@
    ],
    "pkt": "enc/synth_lowlevel_48k_audio_st.pkt",
    "trace": "dec/synth_lowlevel_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "ada1306c7ee88909b25be760732007f51ded9af24447505e6b9ac18ebb6927ca",
+   "pcmSha256": "2267c3fc729ab4d90874338d893b38aeecc37033e8f275800db9884cddca8b33",
    "pcmBytes": 384000
   },
   {
@@ -5555,7 +6380,7 @@
    ],
    "pkt": "enc/synth_lowlevel_48k_audio_st.pkt",
    "trace": "dec/synth_lowlevel_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "c53b0a5a5309f9ae31aebdf0398157db8f1249f5679c4350e0afc6a340db7d55",
+   "pcmSha256": "f04e599eb1b9c3b9c6d4ab9289ea4a7c8edab8d65ceca3463760064bcf2abe17",
    "pcmBytes": 387840
   },
   {
@@ -5574,7 +6399,7 @@
    ],
    "pkt": "enc/synth_lowlevel_48k_voip_dtx_fec.pkt",
    "trace": "dec/synth_lowlevel_48k_voip_dtx_fec.fec_loss20_s22.trace.gz",
-   "pcmSha256": "ce83ee2c0a18cbe526e308ba46338cbe2df014a920cbe6958c8dad53958f81ab",
+   "pcmSha256": "ab1006cdd5424b9a8e0eb6614889da23222c56c6c58f4fb38db0dba41cbd9ca1",
    "pcmBytes": 190080
   },
   {
@@ -5588,7 +6413,7 @@
    ],
    "pkt": "enc/synth_lowlevel_48k_voip_dtx_fec.pkt",
    "trace": "dec/synth_lowlevel_48k_voip_dtx_fec.plain.trace.gz",
-   "pcmSha256": "fd75ee402ca5a5404cbbe0bb36c28c968fefde00094e98a27f5696fd906e1d4c",
+   "pcmSha256": "c279584bf6f935572336a9b6a8180f7755ed36fd6eff2b64d824c59758865ed0",
    "pcmBytes": 193920
   },
   {
@@ -5602,7 +6427,7 @@
    ],
    "pkt": "enc/synth_lowlevel_8k_voip_dtx.pkt",
    "trace": "dec/synth_lowlevel_8k_voip_dtx.plain.trace.gz",
-   "pcmSha256": "7db2df4dd051d5aad06248fffa97ece7da6a431be2a2660089f469cc62cb4104",
+   "pcmSha256": "8192ef70d38a71826e3ae806452c9d145c208e73c39e09f48fafe1deb8c38f03",
    "pcmBytes": 32320
   },
   {
@@ -5620,7 +6445,7 @@
    ],
    "pkt": "enc/synth_multitone_16k_voip.pkt",
    "trace": "dec/synth_multitone_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "0ecdbe1ada8ee3b46d46787892f771a556c283fc86cb23eabde5f0a8afa6562a",
+   "pcmSha256": "528aa45c092415bb31f94cd303c5233b46217ff26cbe032221b6a7ad4c50c7ff",
    "pcmBytes": 64000
   },
   {
@@ -5634,7 +6459,7 @@
    ],
    "pkt": "enc/synth_multitone_16k_voip.pkt",
    "trace": "dec/synth_multitone_16k_voip.plain.trace.gz",
-   "pcmSha256": "2992937bc183e1c6ab6d3c26155c940a4c965f40079ec8b1f77c851374a63105",
+   "pcmSha256": "2505f5c3cc6c63776ad177084ada4fa04e1016234ad71816b99d967362091c7c",
    "pcmBytes": 64640
   },
   {
@@ -5648,7 +6473,7 @@
    ],
    "pkt": "enc/synth_multitone_48k_audio_mono.pkt",
    "trace": "dec/synth_multitone_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "f65887ce40907e61ed76374633586eea71afea2b3dfa6c22ed35b02fdabcf736",
+   "pcmSha256": "3a115f49b9ce9d91cecb773961852e839981a1a99c875c59abdbfdb4c92df36a",
    "pcmBytes": 193920
   },
   {
@@ -5666,7 +6491,7 @@
    ],
    "pkt": "enc/synth_multitone_48k_audio_st.pkt",
    "trace": "dec/synth_multitone_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "ef740ccd308e1906d631d8dfae68781177110a019d1f883fe176659ac6d5408f",
+   "pcmSha256": "defef77b39cbbc91b0b230fbda94940ede0fed5d278fd533317641bcf7a5b34c",
    "pcmBytes": 384000
   },
   {
@@ -5680,7 +6505,7 @@
    ],
    "pkt": "enc/synth_multitone_48k_audio_st.pkt",
    "trace": "dec/synth_multitone_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "b4700bf50c94bbcd6e435995382314743f07a2221c15a38b56be6a648d79fe60",
+   "pcmSha256": "a6253d3b17480209fed1226e597c1499b8fcbd4e8c2f423868da6b79ed5aa32e",
    "pcmBytes": 387840
   },
   {
@@ -5698,7 +6523,7 @@
    ],
    "pkt": "enc/synth_noise_16k_voip.pkt",
    "trace": "dec/synth_noise_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "2451fb4eb5350f6579d1c7aab8f2825c636bb78f5cdb66bdb6288e324d712192",
+   "pcmSha256": "a670cf28cb217cd8c425c3079774bfc3788c05a670d990155fcd75fc32c439ce",
    "pcmBytes": 64000
   },
   {
@@ -5712,7 +6537,7 @@
    ],
    "pkt": "enc/synth_noise_16k_voip.pkt",
    "trace": "dec/synth_noise_16k_voip.plain.trace.gz",
-   "pcmSha256": "32777d724cce9806f95923f7c842a1737c4d817c208d87eb5f8c006b6a15f1da",
+   "pcmSha256": "b5d5d5636bfd084b55121b104cb5199b7476ce079a7a0ee0d5a65098cbe4786c",
    "pcmBytes": 64640
   },
   {
@@ -5726,7 +6551,7 @@
    ],
    "pkt": "enc/synth_noise_48k_audio_cbr_6k.pkt",
    "trace": "dec/synth_noise_48k_audio_cbr_6k.plain.trace.gz",
-   "pcmSha256": "38f3f9e63ee2bed8ac110c2676ce4d2e24385c9ee6ed950ea44971774a5472f5",
+   "pcmSha256": "327769004761bb86760be379af0c4dca6d9d1947cfac676ec4a31ec5bfae025d",
    "pcmBytes": 387840
   },
   {
@@ -5740,7 +6565,7 @@
    ],
    "pkt": "enc/synth_noise_48k_audio_mono.pkt",
    "trace": "dec/synth_noise_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "847e798c9d23d6d0adc3063b1c2dfca5320b0f97b634a73eb13258c061a629c6",
+   "pcmSha256": "219538f71b218f5192199def7707917aaba283affe2b8e05644471e6fdef43f2",
    "pcmBytes": 193920
   },
   {
@@ -5758,7 +6583,7 @@
    ],
    "pkt": "enc/synth_noise_48k_audio_st.pkt",
    "trace": "dec/synth_noise_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "bf9007b8d5109e784b3e14472a482999f1f1a7922ca87115e50266053c85b534",
+   "pcmSha256": "1f3397664709a4b1ec935230a28c601fb4b583e5c7d019e3f671ce941f9a17de",
    "pcmBytes": 384000
   },
   {
@@ -5772,7 +6597,7 @@
    ],
    "pkt": "enc/synth_noise_48k_audio_st.pkt",
    "trace": "dec/synth_noise_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "36a785fbc4e9d8b1a4967fec7c6a1c770f3ca802b5d08b61cce508c736aad5a4",
+   "pcmSha256": "50ce43fd5bcbc034e52f5e3821628a793364f622f00555f0fc24f89e73be5616",
    "pcmBytes": 387840
   },
   {
@@ -5790,7 +6615,7 @@
    ],
    "pkt": "enc/synth_pink_16k_voip.pkt",
    "trace": "dec/synth_pink_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "e11eccf6900da5824a0657388a2080291716be4eab29022f66126409f949f527",
+   "pcmSha256": "1295d8a4330629e71af90ced1fd3befe7afa7b1a458046854b84db2073d05f5e",
    "pcmBytes": 64000
   },
   {
@@ -5804,7 +6629,7 @@
    ],
    "pkt": "enc/synth_pink_16k_voip.pkt",
    "trace": "dec/synth_pink_16k_voip.plain.trace.gz",
-   "pcmSha256": "d05ec4fe9555ad5d18a5d6130498ffa3668721e60ae6f218570553e51012ae43",
+   "pcmSha256": "542f1991447afa0f66006cf76ebcfd344d528ceb9d8434eb779e3234f93caf4e",
    "pcmBytes": 64640
   },
   {
@@ -5818,7 +6643,7 @@
    ],
    "pkt": "enc/synth_pink_48k_audio_mono.pkt",
    "trace": "dec/synth_pink_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "518cf52a8e113ae39c5554b7b2ddeebb4a0e31deb8862796a7b92552a0732690",
+   "pcmSha256": "535edd6279bc1c84ff4b0757d39d6e46e0b723e5fb80d8158b9e3106f81a8fb1",
    "pcmBytes": 193920
   },
   {
@@ -5836,7 +6661,7 @@
    ],
    "pkt": "enc/synth_pink_48k_audio_st.pkt",
    "trace": "dec/synth_pink_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "1ee00004a51a45738ad4a3d570980cf79f3b600e0705a6c930c40f1cf93fb00b",
+   "pcmSha256": "936665a3d0cd7af89d86c15fe88e936ce7249d1dffa82c8fc0be45d3bdda94d0",
    "pcmBytes": 384000
   },
   {
@@ -5850,7 +6675,7 @@
    ],
    "pkt": "enc/synth_pink_48k_audio_st.pkt",
    "trace": "dec/synth_pink_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "a03dadd12521429b12d9388c564a759115622df136f93a69bc51bed40b9d424f",
+   "pcmSha256": "6b052e0e856ae27c41e62ad0c7727e7205bbe51f9b2082a616b2ffedcbc1e1ae",
    "pcmBytes": 387840
   },
   {
@@ -5896,7 +6721,7 @@
    ],
    "pkt": "enc/synth_silence_16k_voip_dtx.pkt",
    "trace": "dec/synth_silence_16k_voip_dtx.plain.trace.gz",
-   "pcmSha256": "2f5200fdd9d8f8399e7c913bb5cbd5fd62a1dfa5e146963f7a9e96d54fbce6e5",
+   "pcmSha256": "9755497f2ba0b495c77339848bab9ce4929a6c348430d17ab599cf15a7c4f39c",
    "pcmBytes": 64640
   },
   {
@@ -5975,7 +6800,7 @@
    ],
    "pkt": "enc/synth_silence_48k_voip_dtx_fec.pkt",
    "trace": "dec/synth_silence_48k_voip_dtx_fec.fec_loss20_s22.trace.gz",
-   "pcmSha256": "8eb98279eb8656da2eaec1dc7161f5190b7ec8a4b1a11e312f832d7486c23be3",
+   "pcmSha256": "8de0300403c9e926bb1627f3310b4d1e658fd422a63c0f2a31894c0e7b6a7651",
    "pcmBytes": 190080
   },
   {
@@ -5989,7 +6814,7 @@
    ],
    "pkt": "enc/synth_silence_48k_voip_dtx_fec.pkt",
    "trace": "dec/synth_silence_48k_voip_dtx_fec.plain.trace.gz",
-   "pcmSha256": "1fdace932d0ba222d26f165473b19a4fa823375930851611f9913da8e0ff0841",
+   "pcmSha256": "86d5cd489715db5df48f53b1a93c1b7f389a0c2a5a9170b542c4b6bf6757dbf0",
    "pcmBytes": 193920
   },
   {
@@ -6021,7 +6846,7 @@
    ],
    "pkt": "enc/synth_sine19000_16k_voip.pkt",
    "trace": "dec/synth_sine19000_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "0290cd27f9c3df6574fe5da3414a8fad86a13c6ff3959e471fb59768a7da60df",
+   "pcmSha256": "b9eaa588e9d7ec893ebec86bca6e209765da8c3478be9c6c742000e3b61621ff",
    "pcmBytes": 64000
   },
   {
@@ -6035,7 +6860,7 @@
    ],
    "pkt": "enc/synth_sine19000_16k_voip.pkt",
    "trace": "dec/synth_sine19000_16k_voip.plain.trace.gz",
-   "pcmSha256": "5d9c0641b7da2bd1b64e8fd9bb036d5fd787bb814235ea285a0e8e96e0c2e6ae",
+   "pcmSha256": "2851605568b49d1e46f191cdaa5b7aebda30105151709b200369671a1d5d8916",
    "pcmBytes": 64640
   },
   {
@@ -6049,7 +6874,7 @@
    ],
    "pkt": "enc/synth_sine19000_48k_audio_mono.pkt",
    "trace": "dec/synth_sine19000_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "40c4e02832d8e74364fe9f86ce57c55098924aaa2c8822922bff507aa0057975",
+   "pcmSha256": "401e59712b79131d5d3022cd09003a45b608ac8d156c0b47f072691d8297793a",
    "pcmBytes": 193920
   },
   {
@@ -6067,7 +6892,7 @@
    ],
    "pkt": "enc/synth_sine19000_48k_audio_st.pkt",
    "trace": "dec/synth_sine19000_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "7766bc4c12a4b8e6bda7b7e7dbb685d3d41622484db9946e671f944a84b30705",
+   "pcmSha256": "1ca36802f62f2897e2276b33b6a95ac0e161b2abdf649cbad3cadf9db219c8e0",
    "pcmBytes": 384000
   },
   {
@@ -6081,7 +6906,7 @@
    ],
    "pkt": "enc/synth_sine19000_48k_audio_st.pkt",
    "trace": "dec/synth_sine19000_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "a5005f1abbc0ff6301876206a6fc979928356e4c8583805091b80ece80ac946d",
+   "pcmSha256": "9a557185736f9001a66488fd7bd496f36315dcbf1164e2fe8bb52ff83295acab",
    "pcmBytes": 387840
   },
   {
@@ -6099,7 +6924,7 @@
    ],
    "pkt": "enc/synth_sine50_16k_voip.pkt",
    "trace": "dec/synth_sine50_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "28c6ec135780844fa8b154a17bf20a0aa0191e57b1ad524790e403a1868cfc51",
+   "pcmSha256": "db1de779c3ae560e77740697d38a516f8382ef5f0b681419619ccae5804463af",
    "pcmBytes": 64000
   },
   {
@@ -6113,7 +6938,7 @@
    ],
    "pkt": "enc/synth_sine50_16k_voip.pkt",
    "trace": "dec/synth_sine50_16k_voip.plain.trace.gz",
-   "pcmSha256": "8f7aa278f15edf7c3d458a8c7c22300a090c252447050e3bb8e16ce4842e0d4a",
+   "pcmSha256": "288744d55b30d57a7fa2b0a0d8ce7131e122b1d3af0c6800f4c945dcdd7b4907",
    "pcmBytes": 64640
   },
   {
@@ -6127,7 +6952,7 @@
    ],
    "pkt": "enc/synth_sine50_48k_audio_mono.pkt",
    "trace": "dec/synth_sine50_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "b0838f19fffdb28568a30f0c9ba6ded3d4f8c0b1570de6a3993215165a68de49",
+   "pcmSha256": "def4dcf4a41d477f030f572e4fcb071c259e5ebf904b2c735f03e3ada190456b",
    "pcmBytes": 193920
   },
   {
@@ -6145,7 +6970,7 @@
    ],
    "pkt": "enc/synth_sine50_48k_audio_st.pkt",
    "trace": "dec/synth_sine50_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "6cf8804ba4f9e4f40826821bb74ad9e9595d4d0ed9da4d225c1f9c708861cf31",
+   "pcmSha256": "0d9d00852ada4695886e447f4061306a29ff27874172ec7f75d68b3fbbe239c1",
    "pcmBytes": 384000
   },
   {
@@ -6159,7 +6984,7 @@
    ],
    "pkt": "enc/synth_sine50_48k_audio_st.pkt",
    "trace": "dec/synth_sine50_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "6da1b639e3f204ada9e3f9c40d57ee8689428d26938ee0315d811c47e8a52429",
+   "pcmSha256": "66c6fff3efc63b023718344b006b6ccb125e50535b28b33d823ad333f3da3052",
    "pcmBytes": 387840
   },
   {
@@ -6177,7 +7002,7 @@
    ],
    "pkt": "enc/synth_sine_16k_voip.pkt",
    "trace": "dec/synth_sine_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "ef3d2acd8f72c315c35cf767ec8d72cfb8f2ea62d0f150c703cf3881991c7ada",
+   "pcmSha256": "48d72d9024def78c991971d982e5af4da746b2f8c7e4576902cdcc93483660b2",
    "pcmBytes": 64000
   },
   {
@@ -6191,7 +7016,7 @@
    ],
    "pkt": "enc/synth_sine_16k_voip.pkt",
    "trace": "dec/synth_sine_16k_voip.plain.trace.gz",
-   "pcmSha256": "5741b9743c260b8ae9a874da572ac0faa8b3f6b9a89c448c11ab874f69dbbe5b",
+   "pcmSha256": "acd79bcaaf49f26f5f38cb2eaf466accfd9ec4944788e3c38268b05e7b14d364",
    "pcmBytes": 64640
   },
   {
@@ -6205,7 +7030,7 @@
    ],
    "pkt": "enc/synth_sine_48k_audio_mono.pkt",
    "trace": "dec/synth_sine_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "411c326de821de889cac2b1e4ff68409986c3317538c173fff533e11ee046aa0",
+   "pcmSha256": "0298f6b93b2163b41f34f63679b01a7c2e2e7e012fafe530ec116bc5e89364e6",
    "pcmBytes": 193920
   },
   {
@@ -6223,7 +7048,7 @@
    ],
    "pkt": "enc/synth_sine_48k_audio_st.pkt",
    "trace": "dec/synth_sine_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "b9c055584d329d1d44e2b394d31f9d23611c43638da44f2e78c68a824c7387cf",
+   "pcmSha256": "60b26aa5b9b942869164cf8666b273111f4ce7fed5c9affece5196f35a136e37",
    "pcmBytes": 384000
   },
   {
@@ -6237,7 +7062,7 @@
    ],
    "pkt": "enc/synth_sine_48k_audio_st.pkt",
    "trace": "dec/synth_sine_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "5fd0b7a8617f1aef3f59a23431d0129f653d4ee4dc82fb4e985d718be3429f03",
+   "pcmSha256": "8e318b80b783fe89df3ddef3e6bb94a24f6d16ff1186767a27e6e31766573e4c",
    "pcmBytes": 387840
   },
   {
@@ -6255,7 +7080,7 @@
    ],
    "pkt": "enc/synth_square_16k_voip.pkt",
    "trace": "dec/synth_square_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "67a14e1961c4739236770f30b84b81d4f896ef1d9b4afd75f238024a569241dc",
+   "pcmSha256": "7e7fd2e2b887e9a4415fb0f5192e45e373f4e12b594968305f98aef3f3d8fb8f",
    "pcmBytes": 64000
   },
   {
@@ -6269,7 +7094,7 @@
    ],
    "pkt": "enc/synth_square_16k_voip.pkt",
    "trace": "dec/synth_square_16k_voip.plain.trace.gz",
-   "pcmSha256": "1538403471eec86fe3e23948fd6382c08e8005259c37cb2d74303378141d9f77",
+   "pcmSha256": "40e9bd2a6935464645ea32f6f0636aa45318876bc6ba57f87d2d58a49e2f016a",
    "pcmBytes": 64640
   },
   {
@@ -6283,7 +7108,7 @@
    ],
    "pkt": "enc/synth_square_48k_audio_mono.pkt",
    "trace": "dec/synth_square_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "fdfacdd993c229d3baff69ff9af1e7593884d31f6a0a28a0756d8a6c9f533625",
+   "pcmSha256": "abc73e1e71b628fa073cd8a92fe676b350a35bb5653fe66a47b87d58aac80887",
    "pcmBytes": 193920
   },
   {
@@ -6301,7 +7126,7 @@
    ],
    "pkt": "enc/synth_square_48k_audio_st.pkt",
    "trace": "dec/synth_square_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "561b4752ba419f1b6906976a5f879633832ce378a6fd0467ba0bf4a578b8531d",
+   "pcmSha256": "827ebeb1844254c5202f277547e41a425d80a26cef7bd8820ea675870aa0c777",
    "pcmBytes": 384000
   },
   {
@@ -6315,7 +7140,7 @@
    ],
    "pkt": "enc/synth_square_48k_audio_st.pkt",
    "trace": "dec/synth_square_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "bf8fe066cc1691a9369e1716934a6436674cad5bdca5517bb05f9a88d17d8354",
+   "pcmSha256": "32535f98fdb5e7f4c58128d42fa26468a1dc308b63196f91a555203dd6829b19",
    "pcmBytes": 387840
   },
   {
@@ -6333,7 +7158,7 @@
    ],
    "pkt": "enc/synth_sweep_16k_voip.pkt",
    "trace": "dec/synth_sweep_16k_voip.loss10_s21.trace.gz",
-   "pcmSha256": "76ad7ca9150b9e5e80c218f7cdb89df9c58f514e49bcbee30a7bfc4670b71d1a",
+   "pcmSha256": "dfeb96eb7439c1b136bc3db7b62139bfcd247a8ca23a7a5b4e1379ce02d48760",
    "pcmBytes": 64000
   },
   {
@@ -6347,7 +7172,7 @@
    ],
    "pkt": "enc/synth_sweep_16k_voip.pkt",
    "trace": "dec/synth_sweep_16k_voip.plain.trace.gz",
-   "pcmSha256": "ef9b1384469af41ce35829180291d0b26349e902426f01205d91b956872a39d0",
+   "pcmSha256": "56591ee469e5aedc306eef1a92c0e2716cd399788e657a2f6b617277f4dc035b",
    "pcmBytes": 64640
   },
   {
@@ -6361,7 +7186,7 @@
    ],
    "pkt": "enc/synth_sweep_48k_audio_max.pkt",
    "trace": "dec/synth_sweep_48k_audio_max.plain.trace.gz",
-   "pcmSha256": "c0c529528d1e84c9fd22db5ff8cd477f06000fe02dd8a5972d6dfa4959905b37",
+   "pcmSha256": "2af43ea55b234080d9479c49f6f21a0b3b98172214f039791851e8a970b5211f",
    "pcmBytes": 387840
   },
   {
@@ -6375,7 +7200,7 @@
    ],
    "pkt": "enc/synth_sweep_48k_audio_mono.pkt",
    "trace": "dec/synth_sweep_48k_audio_mono.plain.trace.gz",
-   "pcmSha256": "dede5cfad99f0638e0de06b6e50223ca0c93b4923ee1d3b02835f5c6ebcea7ce",
+   "pcmSha256": "47607ddde22fa077dd966ef3dee17cdaa4960f2e30c0d4d85e09962de4e0276d",
    "pcmBytes": 193920
   },
   {
@@ -6393,7 +7218,7 @@
    ],
    "pkt": "enc/synth_sweep_48k_audio_st.pkt",
    "trace": "dec/synth_sweep_48k_audio_st.loss10_s20.trace.gz",
-   "pcmSha256": "39d8a4118d8e3cb4ab858e91feed2bc554bf91864dac8e3d899f4e0cc1517bfa",
+   "pcmSha256": "b808c51ffe432cf9af4660400198f9a14fe7f9a1b1e5804fdfdee4d4ba4cb600",
    "pcmBytes": 384000
   },
   {
@@ -6407,7 +7232,7 @@
    ],
    "pkt": "enc/synth_sweep_48k_audio_st.pkt",
    "trace": "dec/synth_sweep_48k_audio_st.plain.trace.gz",
-   "pcmSha256": "24abe061ed7a0633b8662a39da8cd71cb5691e99916b0427a75295b512dff36d",
+   "pcmSha256": "1812f294811323406fa9db99098cb854154d79edb25ad09de584eaba9f004cb6",
    "pcmBytes": 387840
   },
   {
@@ -6570,6 +7395,229 @@
    "trace": "enc/mix_48k_audio_forcestereo_mono.trace.gz"
   },
   {
+   "name": "enc/mix_48k_audio_framedur10",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "64000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "10"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_audio_framedur10.pkt",
+   "trace": "enc/mix_48k_audio_framedur10.trace.gz"
+  },
+  {
+   "name": "enc/mix_48k_audio_framedur20",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "64000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "20"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_audio_framedur20.pkt",
+   "trace": "enc/mix_48k_audio_framedur20.trace.gz"
+  },
+  {
+   "name": "enc/mix_48k_audio_framedur2p5",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "64000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "2.5"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_audio_framedur2p5.pkt",
+   "trace": "enc/mix_48k_audio_framedur2p5.trace.gz"
+  },
+  {
+   "name": "enc/mix_48k_audio_framedur40",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "64000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "40"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_audio_framedur40.pkt",
+   "trace": "enc/mix_48k_audio_framedur40.trace.gz"
+  },
+  {
+   "name": "enc/mix_48k_audio_framedur5",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "64000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "5"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_audio_framedur5.pkt",
+   "trace": "enc/mix_48k_audio_framedur5.trace.gz"
+  },
+  {
+   "name": "enc/mix_48k_audio_framedur60",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "64000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "60"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_audio_framedur60.pkt",
+   "trace": "enc/mix_48k_audio_framedur60.trace.gz"
+  },
+  {
+   "name": "enc/mix_48k_audio_framedur_variable_fs20",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "48000",
+    "--framesize",
+    "20",
+    "--framedur",
+    "variable"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_audio_framedur_variable_fs20.pkt",
+   "trace": "enc/mix_48k_audio_framedur_variable_fs20.trace.gz"
+  },
+  {
+   "name": "enc/mix_48k_audio_framedurvariable",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "64000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "variable"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_audio_framedurvariable.pkt",
+   "trace": "enc/mix_48k_audio_framedurvariable.trace.gz"
+  },
+  {
+   "name": "enc/mix_48k_audio_nopred",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "64000",
+    "--nopred"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_audio_nopred.pkt",
+   "trace": "enc/mix_48k_audio_nopred.trace.gz"
+  },
+  {
+   "name": "enc/mix_48k_audio_pad",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "48000"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_audio_pad.pkt",
+   "trace": "enc/mix_48k_audio_pad.trace.gz"
+  },
+  {
+   "name": "enc/mix_48k_audio_pad_fs10_cbr",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "64000",
+    "--framesize",
+    "10",
+    "--cbr"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_audio_pad_fs10_cbr.pkt",
+   "trace": "enc/mix_48k_audio_pad_fs10_cbr.trace.gz"
+  },
+  {
    "name": "enc/mix_48k_force_celt",
    "kind": "enc",
    "args": [
@@ -6625,6 +7673,24 @@
    "in": "in/clip_mix_48000_2ch_6s.s16",
    "outPkt": "enc/mix_48k_force_silk.pkt",
    "trace": "enc/mix_48k_force_silk.trace.gz"
+  },
+  {
+   "name": "enc/mix_48k_lowdelay_nopred",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "lowdelay",
+    "--bitrate",
+    "64000",
+    "--nopred"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_lowdelay_nopred.pkt",
+   "trace": "enc/mix_48k_lowdelay_nopred.trace.gz"
   },
   {
    "name": "enc/mix_48k_modelist_celt_32k",
@@ -7108,6 +8174,27 @@
    "trace": "enc/mix_48k_sched_forcech_voip.trace.gz"
   },
   {
+   "name": "enc/mix_48k_sched_framedur",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "64000",
+    "--framesize",
+    "60",
+    "--sched",
+    "f=10:framedur=10,f=30:framedur=variable,f=60:framedur=60,f=80:framedur=2.5,f=100:framedur=arg,f=120:framedur=40,f=140:framedur=variable"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_sched_framedur.pkt",
+   "trace": "enc/mix_48k_sched_framedur.trace.gz"
+  },
+  {
    "name": "enc/mix_48k_sched_framesize",
    "kind": "enc",
    "args": [
@@ -7203,6 +8290,25 @@
    "in": "in/clip_mix_48000_2ch_6s.s16",
    "outPkt": "enc/mix_48k_sched_modes_fs10.pkt",
    "trace": "enc/mix_48k_sched_modes_fs10.trace.gz"
+  },
+  {
+   "name": "enc/mix_48k_sched_pred",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "48000",
+    "--sched",
+    "f=20:pred=1,f=50:pred=0,f=80:pred=1,f=110:mode=silk,f=140:pred=0"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_sched_pred.pkt",
+   "trace": "enc/mix_48k_sched_pred.trace.gz"
   },
   {
    "name": "enc/mix_48k_sched_reset",
@@ -7314,6 +8420,29 @@
    "in": "in/clip_mix_48000_2ch_6s.s16",
    "outPkt": "enc/mix_48k_voip_48k_fec.pkt",
    "trace": "enc/mix_48k_voip_48k_fec.trace.gz"
+  },
+  {
+   "name": "enc/mix_48k_voip_framedur_variable_cplx5",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "voip",
+    "--bitrate",
+    "32000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "variable",
+    "--complexity",
+    "5"
+   ],
+   "in": "in/clip_mix_48000_2ch_6s.s16",
+   "outPkt": "enc/mix_48k_voip_framedur_variable_cplx5.pkt",
+   "trace": "enc/mix_48k_voip_framedur_variable_cplx5.trace.gz"
   },
   {
    "name": "enc/mix_8k_voip_14k",
@@ -8026,6 +9155,28 @@
    "trace": "enc/piano_48k_audio_forcemono.trace.gz"
   },
   {
+   "name": "enc/piano_48k_audio_framedur_variable_cbr",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "64000",
+    "--cbr",
+    "--framesize",
+    "60",
+    "--framedur",
+    "variable"
+   ],
+   "in": "in/clip_piano_48000_2ch_6s.s16",
+   "outPkt": "enc/piano_48k_audio_framedur_variable_cbr.pkt",
+   "trace": "enc/piano_48k_audio_framedur_variable_cbr.trace.gz"
+  },
+  {
    "name": "enc/piano_48k_audio_fs10",
    "kind": "enc",
    "args": [
@@ -8231,6 +9382,26 @@
    "trace": "enc/piano_48k_audio_mono_64k.trace.gz"
   },
   {
+   "name": "enc/piano_48k_audio_nopred_fs10",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "audio",
+    "--bitrate",
+    "96000",
+    "--framesize",
+    "10",
+    "--nopred"
+   ],
+   "in": "in/clip_piano_48000_2ch_6s.s16",
+   "outPkt": "enc/piano_48k_audio_nopred_fs10.pkt",
+   "trace": "enc/piano_48k_audio_nopred_fs10.trace.gz"
+  },
+  {
    "name": "enc/piano_48k_audio_sigvoice",
    "kind": "enc",
    "args": [
@@ -8285,6 +9456,153 @@
    "in": "in/clip_piano_48000_2ch_6s.s16",
    "outPkt": "enc/piano_48k_lowdelay_cbr_fs5.pkt",
    "trace": "enc/piano_48k_lowdelay_cbr_fs5.trace.gz"
+  },
+  {
+   "name": "enc/piano_48k_lowdelay_framedur10",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "lowdelay",
+    "--bitrate",
+    "96000",
+    "--framesize",
+    "40",
+    "--framedur",
+    "10"
+   ],
+   "in": "in/clip_piano_48000_2ch_6s.s16",
+   "outPkt": "enc/piano_48k_lowdelay_framedur10.pkt",
+   "trace": "enc/piano_48k_lowdelay_framedur10.trace.gz"
+  },
+  {
+   "name": "enc/piano_48k_lowdelay_framedur20",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "lowdelay",
+    "--bitrate",
+    "96000",
+    "--framesize",
+    "40",
+    "--framedur",
+    "20"
+   ],
+   "in": "in/clip_piano_48000_2ch_6s.s16",
+   "outPkt": "enc/piano_48k_lowdelay_framedur20.pkt",
+   "trace": "enc/piano_48k_lowdelay_framedur20.trace.gz"
+  },
+  {
+   "name": "enc/piano_48k_lowdelay_framedur2p5",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "lowdelay",
+    "--bitrate",
+    "96000",
+    "--framesize",
+    "40",
+    "--framedur",
+    "2.5"
+   ],
+   "in": "in/clip_piano_48000_2ch_6s.s16",
+   "outPkt": "enc/piano_48k_lowdelay_framedur2p5.pkt",
+   "trace": "enc/piano_48k_lowdelay_framedur2p5.trace.gz"
+  },
+  {
+   "name": "enc/piano_48k_lowdelay_framedur40",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "lowdelay",
+    "--bitrate",
+    "96000",
+    "--framesize",
+    "40",
+    "--framedur",
+    "40"
+   ],
+   "in": "in/clip_piano_48000_2ch_6s.s16",
+   "outPkt": "enc/piano_48k_lowdelay_framedur40.pkt",
+   "trace": "enc/piano_48k_lowdelay_framedur40.trace.gz"
+  },
+  {
+   "name": "enc/piano_48k_lowdelay_framedur5",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "lowdelay",
+    "--bitrate",
+    "96000",
+    "--framesize",
+    "40",
+    "--framedur",
+    "5"
+   ],
+   "in": "in/clip_piano_48000_2ch_6s.s16",
+   "outPkt": "enc/piano_48k_lowdelay_framedur5.pkt",
+   "trace": "enc/piano_48k_lowdelay_framedur5.trace.gz"
+  },
+  {
+   "name": "enc/piano_48k_lowdelay_framedur60",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "lowdelay",
+    "--bitrate",
+    "96000",
+    "--framesize",
+    "40",
+    "--framedur",
+    "60"
+   ],
+   "in": "in/clip_piano_48000_2ch_6s.s16",
+   "outPkt": "enc/piano_48k_lowdelay_framedur60.pkt",
+   "trace": "enc/piano_48k_lowdelay_framedur60.trace.gz"
+  },
+  {
+   "name": "enc/piano_48k_lowdelay_framedurvariable",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "48000",
+    "--ch",
+    "2",
+    "--app",
+    "lowdelay",
+    "--bitrate",
+    "96000",
+    "--framesize",
+    "40",
+    "--framedur",
+    "variable"
+   ],
+   "in": "in/clip_piano_48000_2ch_6s.s16",
+   "outPkt": "enc/piano_48k_lowdelay_framedurvariable.pkt",
+   "trace": "enc/piano_48k_lowdelay_framedurvariable.trace.gz"
   },
   {
    "name": "enc/piano_48k_lowdelay_fs10",
@@ -9058,6 +10376,153 @@
    "trace": "enc/speech_a_16k_voip_fec_loss30.trace.gz"
   },
   {
+   "name": "enc/speech_a_16k_voip_framedur10",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1",
+    "--app",
+    "voip",
+    "--bitrate",
+    "24000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "10"
+   ],
+   "in": "in/clip_speech_a_16000_1ch_6s.s16",
+   "outPkt": "enc/speech_a_16k_voip_framedur10.pkt",
+   "trace": "enc/speech_a_16k_voip_framedur10.trace.gz"
+  },
+  {
+   "name": "enc/speech_a_16k_voip_framedur20",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1",
+    "--app",
+    "voip",
+    "--bitrate",
+    "24000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "20"
+   ],
+   "in": "in/clip_speech_a_16000_1ch_6s.s16",
+   "outPkt": "enc/speech_a_16k_voip_framedur20.pkt",
+   "trace": "enc/speech_a_16k_voip_framedur20.trace.gz"
+  },
+  {
+   "name": "enc/speech_a_16k_voip_framedur2p5",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1",
+    "--app",
+    "voip",
+    "--bitrate",
+    "24000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "2.5"
+   ],
+   "in": "in/clip_speech_a_16000_1ch_6s.s16",
+   "outPkt": "enc/speech_a_16k_voip_framedur2p5.pkt",
+   "trace": "enc/speech_a_16k_voip_framedur2p5.trace.gz"
+  },
+  {
+   "name": "enc/speech_a_16k_voip_framedur40",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1",
+    "--app",
+    "voip",
+    "--bitrate",
+    "24000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "40"
+   ],
+   "in": "in/clip_speech_a_16000_1ch_6s.s16",
+   "outPkt": "enc/speech_a_16k_voip_framedur40.pkt",
+   "trace": "enc/speech_a_16k_voip_framedur40.trace.gz"
+  },
+  {
+   "name": "enc/speech_a_16k_voip_framedur5",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1",
+    "--app",
+    "voip",
+    "--bitrate",
+    "24000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "5"
+   ],
+   "in": "in/clip_speech_a_16000_1ch_6s.s16",
+   "outPkt": "enc/speech_a_16k_voip_framedur5.pkt",
+   "trace": "enc/speech_a_16k_voip_framedur5.trace.gz"
+  },
+  {
+   "name": "enc/speech_a_16k_voip_framedur60",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1",
+    "--app",
+    "voip",
+    "--bitrate",
+    "24000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "60"
+   ],
+   "in": "in/clip_speech_a_16000_1ch_6s.s16",
+   "outPkt": "enc/speech_a_16k_voip_framedur60.pkt",
+   "trace": "enc/speech_a_16k_voip_framedur60.trace.gz"
+  },
+  {
+   "name": "enc/speech_a_16k_voip_framedurvariable",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1",
+    "--app",
+    "voip",
+    "--bitrate",
+    "24000",
+    "--framesize",
+    "60",
+    "--framedur",
+    "variable"
+   ],
+   "in": "in/clip_speech_a_16000_1ch_6s.s16",
+   "outPkt": "enc/speech_a_16k_voip_framedurvariable.pkt",
+   "trace": "enc/speech_a_16k_voip_framedurvariable.trace.gz"
+  },
+  {
    "name": "enc/speech_a_16k_voip_fs10",
    "kind": "enc",
    "args": [
@@ -9225,6 +10690,43 @@
    "in": "in/clip_speech_a_16000_1ch_6s.s16",
    "outPkt": "enc/speech_a_16k_voip_maxpayload60.pkt",
    "trace": "enc/speech_a_16k_voip_maxpayload60.trace.gz"
+  },
+  {
+   "name": "enc/speech_a_16k_voip_nopred",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1",
+    "--app",
+    "voip",
+    "--bitrate",
+    "24000",
+    "--nopred"
+   ],
+   "in": "in/clip_speech_a_16000_1ch_6s.s16",
+   "outPkt": "enc/speech_a_16k_voip_nopred.pkt",
+   "trace": "enc/speech_a_16k_voip_nopred.trace.gz"
+  },
+  {
+   "name": "enc/speech_a_16k_voip_pad_fs40",
+   "kind": "enc",
+   "args": [
+    "--rate",
+    "16000",
+    "--ch",
+    "1",
+    "--app",
+    "voip",
+    "--bitrate",
+    "24000",
+    "--framesize",
+    "40"
+   ],
+   "in": "in/clip_speech_a_16000_1ch_6s.s16",
+   "outPkt": "enc/speech_a_16k_voip_pad_fs40.pkt",
+   "trace": "enc/speech_a_16k_voip_pad_fs40.trace.gz"
   },
   {
    "name": "enc/speech_a_16k_voip_voiceratio0",
@@ -11371,6 +12873,76 @@
    "trace": "enc/synth_sweep_48k_audio_st.trace.gz"
   },
   {
+   "name": "info/mix_48k_audio_framedur10",
+   "kind": "info",
+   "args": [
+    "--rate",
+    "48000"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur10.pkt",
+   "trace": "info/mix_48k_audio_framedur10.trace.gz"
+  },
+  {
+   "name": "info/mix_48k_audio_framedur20",
+   "kind": "info",
+   "args": [
+    "--rate",
+    "48000"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur20.pkt",
+   "trace": "info/mix_48k_audio_framedur20.trace.gz"
+  },
+  {
+   "name": "info/mix_48k_audio_framedur2p5",
+   "kind": "info",
+   "args": [
+    "--rate",
+    "48000"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur2p5.pkt",
+   "trace": "info/mix_48k_audio_framedur2p5.trace.gz"
+  },
+  {
+   "name": "info/mix_48k_audio_framedur40",
+   "kind": "info",
+   "args": [
+    "--rate",
+    "48000"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur40.pkt",
+   "trace": "info/mix_48k_audio_framedur40.trace.gz"
+  },
+  {
+   "name": "info/mix_48k_audio_framedur5",
+   "kind": "info",
+   "args": [
+    "--rate",
+    "48000"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur5.pkt",
+   "trace": "info/mix_48k_audio_framedur5.trace.gz"
+  },
+  {
+   "name": "info/mix_48k_audio_framedur60",
+   "kind": "info",
+   "args": [
+    "--rate",
+    "48000"
+   ],
+   "pkt": "enc/mix_48k_audio_framedur60.pkt",
+   "trace": "info/mix_48k_audio_framedur60.trace.gz"
+  },
+  {
+   "name": "info/mix_48k_audio_framedurvariable",
+   "kind": "info",
+   "args": [
+    "--rate",
+    "48000"
+   ],
+   "pkt": "enc/mix_48k_audio_framedurvariable.pkt",
+   "trace": "info/mix_48k_audio_framedurvariable.trace.gz"
+  },
+  {
    "name": "info/mix_48k_modelist_celt_32k",
    "kind": "info",
    "args": [
@@ -11751,6 +13323,124 @@
    "trace": "info/surround_fam1_8ch.trace.gz"
   },
   {
+   "name": "repack/mix_48k_audio_pad.pad1",
+   "kind": "repack",
+   "args": [
+    "--pad",
+    "1"
+   ],
+   "pkt": "enc/mix_48k_audio_pad.pkt",
+   "outPkt": "repack/mix_48k_audio_pad.pad1.pkt",
+   "trace": "repack/mix_48k_audio_pad.pad1.trace.gz"
+  },
+  {
+   "name": "repack/mix_48k_audio_pad.pad300",
+   "kind": "repack",
+   "args": [
+    "--pad",
+    "300"
+   ],
+   "pkt": "enc/mix_48k_audio_pad.pkt",
+   "outPkt": "repack/mix_48k_audio_pad.pad300.pkt",
+   "trace": "repack/mix_48k_audio_pad.pad300.trace.gz"
+  },
+  {
+   "name": "repack/mix_48k_audio_pad.pad7",
+   "kind": "repack",
+   "args": [
+    "--pad",
+    "7"
+   ],
+   "pkt": "enc/mix_48k_audio_pad.pkt",
+   "outPkt": "repack/mix_48k_audio_pad.pad7.pkt",
+   "trace": "repack/mix_48k_audio_pad.pad7.trace.gz"
+  },
+  {
+   "name": "repack/mix_48k_audio_pad_fs10_cbr.merge2",
+   "kind": "repack",
+   "args": [
+    "--merge",
+    "2"
+   ],
+   "pkt": "enc/mix_48k_audio_pad_fs10_cbr.pkt",
+   "outPkt": "repack/mix_48k_audio_pad_fs10_cbr.merge2.pkt",
+   "trace": "repack/mix_48k_audio_pad_fs10_cbr.merge2.trace.gz"
+  },
+  {
+   "name": "repack/mix_48k_audio_pad_fs10_cbr.merge6",
+   "kind": "repack",
+   "args": [
+    "--merge",
+    "6"
+   ],
+   "pkt": "enc/mix_48k_audio_pad_fs10_cbr.pkt",
+   "outPkt": "repack/mix_48k_audio_pad_fs10_cbr.merge6.pkt",
+   "trace": "repack/mix_48k_audio_pad_fs10_cbr.merge6.trace.gz"
+  },
+  {
+   "name": "repack/mix_48k_audio_pad_fs10_cbr.pad5",
+   "kind": "repack",
+   "args": [
+    "--pad",
+    "5"
+   ],
+   "pkt": "enc/mix_48k_audio_pad_fs10_cbr.pkt",
+   "outPkt": "repack/mix_48k_audio_pad_fs10_cbr.pad5.pkt",
+   "trace": "repack/mix_48k_audio_pad_fs10_cbr.pad5.trace.gz"
+  },
+  {
+   "name": "repack/ms_3ch_omit.pad40",
+   "kind": "repack",
+   "args": [
+    "--pad",
+    "40",
+    "--streams",
+    "1"
+   ],
+   "pkt": "enc/ms_3ch_omit.pkt",
+   "outPkt": "repack/ms_3ch_omit.pad40.pkt",
+   "trace": "repack/ms_3ch_omit.pad40.trace.gz"
+  },
+  {
+   "name": "repack/ms_51.pad9",
+   "kind": "repack",
+   "args": [
+    "--pad",
+    "9",
+    "--streams",
+    "4"
+   ],
+   "pkt": "enc/ms_51.pkt",
+   "outPkt": "repack/ms_51.pad9.pkt",
+   "trace": "repack/ms_51.pad9.trace.gz"
+  },
+  {
+   "name": "repack/ms_stereo_coupled.pad200",
+   "kind": "repack",
+   "args": [
+    "--pad",
+    "200",
+    "--streams",
+    "1"
+   ],
+   "pkt": "enc/ms_stereo_coupled.pkt",
+   "outPkt": "repack/ms_stereo_coupled.pad200.pkt",
+   "trace": "repack/ms_stereo_coupled.pad200.trace.gz"
+  },
+  {
+   "name": "repack/ms_stereo_coupled.pad3",
+   "kind": "repack",
+   "args": [
+    "--pad",
+    "3",
+    "--streams",
+    "1"
+   ],
+   "pkt": "enc/ms_stereo_coupled.pkt",
+   "outPkt": "repack/ms_stereo_coupled.pad3.pkt",
+   "trace": "repack/ms_stereo_coupled.pad3.trace.gz"
+  },
+  {
    "name": "repack/piano_48k_audio_fs10.merge2",
    "kind": "repack",
    "args": [
@@ -11835,6 +13525,49 @@
    "trace": "repack/speech_a_16k_voip_fs60.split.trace.gz"
   },
   {
+   "name": "repack/speech_a_16k_voip_pad_fs40.merge3",
+   "kind": "repack",
+   "args": [
+    "--merge",
+    "3"
+   ],
+   "pkt": "enc/speech_a_16k_voip_pad_fs40.pkt",
+   "outPkt": "repack/speech_a_16k_voip_pad_fs40.merge3.pkt",
+   "trace": "repack/speech_a_16k_voip_pad_fs40.merge3.trace.gz"
+  },
+  {
+   "name": "repack/speech_a_16k_voip_pad_fs40.pad2",
+   "kind": "repack",
+   "args": [
+    "--pad",
+    "2"
+   ],
+   "pkt": "enc/speech_a_16k_voip_pad_fs40.pkt",
+   "outPkt": "repack/speech_a_16k_voip_pad_fs40.pad2.pkt",
+   "trace": "repack/speech_a_16k_voip_pad_fs40.pad2.trace.gz"
+  },
+  {
+   "name": "repack/speech_a_16k_voip_pad_fs40.pad260",
+   "kind": "repack",
+   "args": [
+    "--pad",
+    "260"
+   ],
+   "pkt": "enc/speech_a_16k_voip_pad_fs40.pkt",
+   "outPkt": "repack/speech_a_16k_voip_pad_fs40.pad260.pkt",
+   "trace": "repack/speech_a_16k_voip_pad_fs40.pad260.trace.gz"
+  },
+  {
+   "name": "repack/speech_a_16k_voip_pad_fs40.split",
+   "kind": "repack",
+   "args": [
+    "--split"
+   ],
+   "pkt": "enc/speech_a_16k_voip_pad_fs40.pkt",
+   "outPkt": "repack/speech_a_16k_voip_pad_fs40.split.pkt",
+   "trace": "repack/speech_a_16k_voip_pad_fs40.split.trace.gz"
+  },
+  {
    "name": "vec/testvector01_16k_1ch",
    "kind": "dec",
    "args": [
@@ -11845,7 +13578,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector01.bit",
    "trace": "vec/testvector01_16k_1ch.trace.gz",
-   "pcmSha256": "88db6c5bd3e130185a2df53d53a46b5356176242e93b6e911444547bbeb8c68f",
+   "pcmSha256": "235e852b5a442fa8b3dcb352ceab2e62d10750550b917ea183af2e2b7975aff1",
    "pcmBytes": 943360
   },
   {
@@ -11859,7 +13592,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector01.bit",
    "trace": "vec/testvector01_48k_1ch.trace.gz",
-   "pcmSha256": "634bdd505645a5e71d46635aa7582686ea4de8fa7c1d8fb0ae2dc5efef195de5",
+   "pcmSha256": "d2e9b3e2caff41bc31d54492b2ceb9789a709cb9c8d0b10e6495397d95b272fd",
    "pcmBytes": 2830080
   },
   {
@@ -11873,7 +13606,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector01.bit",
    "trace": "vec/testvector01_48k_2ch.trace.gz",
-   "pcmSha256": "9afd77e4ef6865c06bdc105a5761c64702ff6a3c5eb1e0ac23e5f6d409529045",
+   "pcmSha256": "119481b212c18000225c62645f6bb40a1b861abc45004f47d0ce0e4c0865147e",
    "pcmBytes": 5660160
   },
   {
@@ -11891,7 +13624,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector01.bit",
    "trace": "vec/testvector01_48k_2ch_loss.trace.gz",
-   "pcmSha256": "0479559efa889cce43f81bc349493d303543b10dc0cde60b5c32fb16f0085010",
+   "pcmSha256": "c52367091cb6b0ac49c3c7abc7c7dd828b30b3b1b8857a455a95039d39687f45",
    "pcmBytes": 5587680
   },
   {
@@ -11905,7 +13638,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector01.bit",
    "trace": "vec/testvector01_8k_2ch.trace.gz",
-   "pcmSha256": "a1dd44e104b328d756e25ae93a72f0ce7f9588bf082cd108fac1cf25c8e8aca6",
+   "pcmSha256": "cfd5bd22794b0a2454b9ea395bf799d54ee93eefde621d8fe63298adf5a0fd51",
    "pcmBytes": 943360
   },
   {
@@ -11975,7 +13708,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector02.bit",
    "trace": "vec/testvector02_48k_2ch_loss.trace.gz",
-   "pcmSha256": "b693c5f5367b7c98a7c191b36cca05b94ff7b76e4ff6cf241d2fc66255acb2d7",
+   "pcmSha256": "e51d75dd79efafdafb13304b3f6296768b701b0fc68dcb47bcf5b0caf3dee6ef",
    "pcmBytes": 4796160
   },
   {
@@ -12059,7 +13792,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector03.bit",
    "trace": "vec/testvector03_48k_2ch_loss.trace.gz",
-   "pcmSha256": "a5c0ce8d30d7e3245c824c967a3abe8d1ef385f5e2eabf1c653b30e86133c804",
+   "pcmSha256": "33fb438b34aae08e97726c046d6bb8ee2a0f2ffeeb35851bd1a9d14082ac59cb",
    "pcmBytes": 4056960
   },
   {
@@ -12143,7 +13876,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector04.bit",
    "trace": "vec/testvector04_48k_2ch_loss.trace.gz",
-   "pcmSha256": "9a0643cfeadf7b6bb22b245c6318767e76a54909b0cd8a18e3b703b61d504bb6",
+   "pcmSha256": "1abb0de675c67dfa6c6d85f5c58f42cbb191099d80dbefb9026f37e133c247d1",
    "pcmBytes": 5120640
   },
   {
@@ -12195,7 +13928,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector05.bit",
    "trace": "vec/testvector05_48k_1ch.trace.gz",
-   "pcmSha256": "b7f7b99c8b1bdcc31e35fd3bebc5438699a54da3ad04141ffd4799bad63b323e",
+   "pcmSha256": "8fd334af7a5e5c4055b1c7f4da9aaa8eb553947b6175982cf9c837f5b5d112cf",
    "pcmBytes": 2608320
   },
   {
@@ -12209,7 +13942,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector05.bit",
    "trace": "vec/testvector05_48k_2ch.trace.gz",
-   "pcmSha256": "b6e9ea7f02969502e4fbeefea822624116a1c0d5401b14363cf41169829ac8c5",
+   "pcmSha256": "9e72b84f12e5b5efaa25c892d84790da1024571b8a71bc3abdb3941b9503e6cf",
    "pcmBytes": 5216640
   },
   {
@@ -12227,7 +13960,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector05.bit",
    "trace": "vec/testvector05_48k_2ch_loss.trace.gz",
-   "pcmSha256": "fed33fff0388e393dc340ea4b6317fe370559319c953941669838cbec41ba7e8",
+   "pcmSha256": "10fa0d1441f55499910f1ec361f6c7471b16e75cbdfa17cee24f933cb479dd1b",
    "pcmBytes": 5216640
   },
   {
@@ -12279,7 +14012,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector06.bit",
    "trace": "vec/testvector06_48k_1ch.trace.gz",
-   "pcmSha256": "f9a300964b13b1473a8b1ceaabd967386777f350ecbbdcee57fd44f65b7a405b",
+   "pcmSha256": "48dbd289b294076293bce4af29625d95d62dfa02bb7b83577e77e4a5e36a3ccf",
    "pcmBytes": 2401920
   },
   {
@@ -12293,7 +14026,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector06.bit",
    "trace": "vec/testvector06_48k_2ch.trace.gz",
-   "pcmSha256": "fcf1c85b252390da46a69f3b1e8535cd9d1b40082c41b4599685a721bb84966a",
+   "pcmSha256": "f643427e28f6fa66d65d591a83469b5ccb4dbd4651662ea4056406cac5cae68b",
    "pcmBytes": 4803840
   },
   {
@@ -12311,7 +14044,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector06.bit",
    "trace": "vec/testvector06_48k_2ch_loss.trace.gz",
-   "pcmSha256": "7c1e956c57c8e4de70c6a9d40db7f5522bf4e0442b354f4b57c6d944dba52dfe",
+   "pcmSha256": "a06e1aef227c059a6626c7ba7356e398fa56b7d5c6f5356b476bc8248691f01c",
    "pcmBytes": 4803840
   },
   {
@@ -12349,7 +14082,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector07.bit",
    "trace": "vec/testvector07_16k_1ch.trace.gz",
-   "pcmSha256": "f97ec1074d3418b5e9a558fc61a58f729ce1b4b885ec9bd9a18a8e1e4cc778cf",
+   "pcmSha256": "ae8ccd80a976a81a5d2071b917bac8b8eb7ddb4d8b1e0e35ea0c9a6cca57e8cf",
    "pcmBytes": 723360
   },
   {
@@ -12363,7 +14096,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector07.bit",
    "trace": "vec/testvector07_48k_1ch.trace.gz",
-   "pcmSha256": "12a2cc214f97e1bafcbc916479ca6ffef14c77b106b0d9b61c7ad2df635d1a3b",
+   "pcmSha256": "2d305985ce39023b2c66e4619cb9f05f3580cb82c3557266c66e1588de97da96",
    "pcmBytes": 2170080
   },
   {
@@ -12377,7 +14110,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector07.bit",
    "trace": "vec/testvector07_48k_2ch.trace.gz",
-   "pcmSha256": "79d5c6b8a552ee4bc68cf8a18c9fc64d37e006ec24b4fef6faacf0e0b456641c",
+   "pcmSha256": "482ef9584003bd4d374dee45c399bba909a70913aa682079beafbf7ae7b8bacc",
    "pcmBytes": 4340160
   },
   {
@@ -12395,7 +14128,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector07.bit",
    "trace": "vec/testvector07_48k_2ch_loss.trace.gz",
-   "pcmSha256": "dba74f24e786363d0b11302bb9e53628b978d842c68740f5009003e4ae4dcfda",
+   "pcmSha256": "50a1ffb9a11eff26c5da425167de7d8213e1e1dcac86d54b032e90548c6dc8c4",
    "pcmBytes": 4336800
   },
   {
@@ -12409,7 +14142,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector07.bit",
    "trace": "vec/testvector07_8k_2ch.trace.gz",
-   "pcmSha256": "8639f51fdb29ed582af9840a15dcafec2e209d281cb5eb5ac657894c5b51306b",
+   "pcmSha256": "06d1f51aaae7c1d9baa6f4c8de47bc1167369e34834d050c930ba083dcf8c7b7",
    "pcmBytes": 723360
   },
   {
@@ -12433,7 +14166,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector08.bit",
    "trace": "vec/testvector08_16k_1ch.trace.gz",
-   "pcmSha256": "d9f4a377df131366b8f60e5074a6f1a5136e8fecc5b1d367dff895123914037f",
+   "pcmSha256": "414c20c7a9cbe8ba3b206b5e432decfabb10dd44323a2bc83a81ed80826d699e",
    "pcmBytes": 873440
   },
   {
@@ -12447,7 +14180,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector08.bit",
    "trace": "vec/testvector08_48k_1ch.trace.gz",
-   "pcmSha256": "d56a6a01188f3930b2183e76170e789eb387b5f06e8e33c55258b9be1e40bb35",
+   "pcmSha256": "6019e379a044254aefec1bdcbd3c7f51021919d5c6b5f24056098e01b5e1463a",
    "pcmBytes": 2620320
   },
   {
@@ -12461,7 +14194,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector08.bit",
    "trace": "vec/testvector08_48k_2ch.trace.gz",
-   "pcmSha256": "aba1e0f8287f9dffd95345031f5241d231ae78c15f3ac956c9290854b42f474a",
+   "pcmSha256": "54b7dc716ff68a28537b4e230c6e090fbef8befa45ef99c99407201f2f428f44",
    "pcmBytes": 5240640
   },
   {
@@ -12479,7 +14212,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector08.bit",
    "trace": "vec/testvector08_48k_2ch_loss.trace.gz",
-   "pcmSha256": "8925bfcf749e27f961b311036f80b8244b09fd6b76a5218f95384def32d0a138",
+   "pcmSha256": "5ec0d196264fea4032202e77472983844e986d60fc8c67b693e6d571ef097bf0",
    "pcmBytes": 5259360
   },
   {
@@ -12493,7 +14226,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector08.bit",
    "trace": "vec/testvector08_8k_2ch.trace.gz",
-   "pcmSha256": "12b3e9ac2612e2bc2bde7cb4c07efe885fa3326de6053baaac3962d23069dbce",
+   "pcmSha256": "63512eed154186566b4d7221511e71645f933137b4b06ef9f637916e17707e3c",
    "pcmBytes": 873440
   },
   {
@@ -12517,7 +14250,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector09.bit",
    "trace": "vec/testvector09_16k_1ch.trace.gz",
-   "pcmSha256": "753156c16528ceeec48c41f2c02b263f4ab285b3358d3d96756a0126e713776b",
+   "pcmSha256": "f55bfbb816ec2474ff981562f9ceb30e4eb41fa68fe97dc4a9886614938cdc9f",
    "pcmBytes": 882400
   },
   {
@@ -12531,7 +14264,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector09.bit",
    "trace": "vec/testvector09_48k_1ch.trace.gz",
-   "pcmSha256": "a493cc463620e10b2c064419dca5c9b31d36cd015b256683494eb99250db2f58",
+   "pcmSha256": "2c7b0f4c6e3701109c806019d996dba62a3c27e277e317a8bd129282795a348a",
    "pcmBytes": 2647200
   },
   {
@@ -12545,7 +14278,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector09.bit",
    "trace": "vec/testvector09_48k_2ch.trace.gz",
-   "pcmSha256": "8c4c795adbaa04f8583f387c505c61f2e4d08dce9b518e4bec406ff3dd1576ca",
+   "pcmSha256": "3dfd399652e8a27dfeee8fc04fe317343540d6650233eea4cfc35a6f11a746d3",
    "pcmBytes": 5294400
   },
   {
@@ -12563,7 +14296,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector09.bit",
    "trace": "vec/testvector09_48k_2ch_loss.trace.gz",
-   "pcmSha256": "8ceff356dbe60911d3378d2eb05a1c51ef696dd51cb5418dcd4d43430ebca516",
+   "pcmSha256": "24434fce27294104afbca47dcc840ffe88f3ef690781f4307785f82fd2c178a9",
    "pcmBytes": 5280000
   },
   {
@@ -12577,7 +14310,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector09.bit",
    "trace": "vec/testvector09_8k_2ch.trace.gz",
-   "pcmSha256": "ebfeb2df2c1eb43d06a3a724d008adeedab3929d86d7f480be69e54602d8869b",
+   "pcmSha256": "7d56e393396374076e40881693b79b01871ba9ddfd151834e1cb0863892544a2",
    "pcmBytes": 882400
   },
   {
@@ -12601,7 +14334,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector10.bit",
    "trace": "vec/testvector10_16k_1ch.trace.gz",
-   "pcmSha256": "2efd1c564485e96cc620ee691f13259136f8ed174660c8febb32c47e323b96d3",
+   "pcmSha256": "bd3b64477194b2114dc50a9fd0504b6203930316dc5987bb0963da9d5cf4530c",
    "pcmBytes": 1024320
   },
   {
@@ -12615,7 +14348,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector10.bit",
    "trace": "vec/testvector10_48k_1ch.trace.gz",
-   "pcmSha256": "b66f9dab47bbc55727072ccf4ff1b463b62fe4475705c3142a2e3c87159e4a43",
+   "pcmSha256": "77b47791bea768ef75c6247132c2b0542421911098d405fba21575d174984f4c",
    "pcmBytes": 3072960
   },
   {
@@ -12629,7 +14362,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector10.bit",
    "trace": "vec/testvector10_48k_2ch.trace.gz",
-   "pcmSha256": "d376fa063b620219f6dfdc796cd35074c836632779dd359851ad23f8732f1d93",
+   "pcmSha256": "5f4b861d0fc92f0c4305c3b6c37e913ab73e81fdedb1c0683d7cc96ef64b665e",
    "pcmBytes": 6145920
   },
   {
@@ -12647,7 +14380,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector10.bit",
    "trace": "vec/testvector10_48k_2ch_loss.trace.gz",
-   "pcmSha256": "26cab81b23dfe74d56ea64d3cd503dee80cc4c1ff40533b6a83d6856b91fbaeb",
+   "pcmSha256": "d9eca2491c0cd3a6342bc7affc96bdd0cafa5a66e17d7f05b264ee37d752a3e0",
    "pcmBytes": 6129600
   },
   {
@@ -12661,7 +14394,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector10.bit",
    "trace": "vec/testvector10_8k_2ch.trace.gz",
-   "pcmSha256": "e91f8545ae70969e0a63fc89b62a0dc29f1ad31f1da28e9721f84b6dac2a1aa1",
+   "pcmSha256": "d3eed2a111f1b2d4c9d85cf983caad403201f2f8bac1945573b2407dd8e90ff0",
    "pcmBytes": 1024320
   },
   {
@@ -12685,7 +14418,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector11.bit",
    "trace": "vec/testvector11_16k_1ch.trace.gz",
-   "pcmSha256": "c20e4be424c19df2377787b69b9edde3481471aafa8c49537673bc9a26239931",
+   "pcmSha256": "fc4cb1102ab2a55e7ce818ed679fa9ef5b7de001d841aad6421f294d9f2e5a1c",
    "pcmBytes": 960640
   },
   {
@@ -12699,7 +14432,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector11.bit",
    "trace": "vec/testvector11_48k_1ch.trace.gz",
-   "pcmSha256": "2989e6d3cfedf574ab3fe986cc6b513784394f543b923bd0109fd43481ebf5a9",
+   "pcmSha256": "1b4efc99b53084047970f652a734873b3b9ccf1ba1ceaae1d433477bc5c225cb",
    "pcmBytes": 2881920
   },
   {
@@ -12713,7 +14446,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector11.bit",
    "trace": "vec/testvector11_48k_2ch.trace.gz",
-   "pcmSha256": "57afdb53a68c9571b9d99d3c78d57d3c7411153bb97b86f90b9ad4948a35c0a9",
+   "pcmSha256": "d50c1b6ba4e22afe93279b7dd68a12ac76e3e7cfe48ba859f16f36bbe5732471",
    "pcmBytes": 5763840
   },
   {
@@ -12731,7 +14464,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector11.bit",
    "trace": "vec/testvector11_48k_2ch_loss.trace.gz",
-   "pcmSha256": "6430baa9020d4c90d4fb3d708b43023ef5bb6b842e03a253e5c8cb77df9804e1",
+   "pcmSha256": "e773f609bb3792ef15629ed31a0fd11f0c4180b8ea72c1d42aa50aea20ea76cb",
    "pcmBytes": 5710080
   },
   {
@@ -12745,7 +14478,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector11.bit",
    "trace": "vec/testvector11_8k_2ch.trace.gz",
-   "pcmSha256": "806dffc226109f70d366254fa6b3f5e68394d751d86526f168842917e74a2ebf",
+   "pcmSha256": "120433a3e5ac6fe27e24bad52cd2677514db60d30e7fa0c72adf60f3b8c6c2eb",
    "pcmBytes": 960640
   },
   {
@@ -12769,7 +14502,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector12.bit",
    "trace": "vec/testvector12_16k_1ch.trace.gz",
-   "pcmSha256": "69b12e1472bed98b2471db2c8a5fb34e98b7ffb3c98cab44d46b91dc9c3a7b9a",
+   "pcmSha256": "f0b6fe85aac18f744611e2bf915d382b4374ce42ec0ab776533f320f2a9b5fca",
    "pcmBytes": 852480
   },
   {
@@ -12783,7 +14516,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector12.bit",
    "trace": "vec/testvector12_48k_1ch.trace.gz",
-   "pcmSha256": "ae3006a8ba067fa5fcdb3e5e260b066eabbfd3c5918bda324b6c17c95c28b57c",
+   "pcmSha256": "483590aec4022c7b358cd40d6aa4839f6425a8fabe3217c99aa42773ea738d75",
    "pcmBytes": 2557440
   },
   {
@@ -12797,7 +14530,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector12.bit",
    "trace": "vec/testvector12_48k_2ch.trace.gz",
-   "pcmSha256": "fe45881e132fa4de8471cdf3807f68b1dba7130036b1bc8c2ca9be797214dd86",
+   "pcmSha256": "06d0a1768d5a6e1bcfe5fffdb5329e41cbc07e3915b771ca17a6bdf168d5a7af",
    "pcmBytes": 5114880
   },
   {
@@ -12815,7 +14548,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector12.bit",
    "trace": "vec/testvector12_48k_2ch_loss.trace.gz",
-   "pcmSha256": "7c091b8b931817aed52432c12e0d42cd5c638aec00c66940ea081d35326412ba",
+   "pcmSha256": "3545b69a0a4d0ba6582deb39d903603f7c323268c058a0b5519778e440a9a339",
    "pcmBytes": 5114880
   },
   {
@@ -12829,7 +14562,7 @@
    ],
    "pkt": "../vectors/rfc6716/testvector12.bit",
    "trace": "vec/testvector12_8k_2ch.trace.gz",
-   "pcmSha256": "7e91b61ec35ba442bc767ad12fddc4a26dd2a482c4facb1488fb88535625a00c",
+   "pcmSha256": "af7cf0c84077275502b2b6b3d596fff49600d17612499671dac8a0692f4e2073",
    "pcmBytes": 852480
   },
   {

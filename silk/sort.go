@@ -6,7 +6,7 @@ package silk
 // Best case:  O(n)   for an already sorted array
 // Worst case: O(n^2) for an inversely sorted array
 //
-// Shell short:    http://en.wikipedia.org/wiki/Shell_sort
+// Shell short:    https://en.wikipedia.org/wiki/Shell_sort
 
 // C: void silk_insertion_sort_increasing(opus_int32 *a, opus_int *idx, const opus_int L, const opus_int K)
 func InsertionSortIncreasing(

@@ -88,28 +88,41 @@ func (e *EcCtx) Rng() uint32 { return e.rng }
 func (e *EcCtx) Tell() int { return e.nbits_total - EC_ILOG(e.rng) }
 
 // TellFrac returns the number of bits scaled by 2**BITRES.
+// This is a faster version of ec_tell_frac() that takes advantage
+// of the low (1/8 bit) resolution to use just a linear function
+// followed by a lookup to determine the exact transition thresholds.
 //
 // C: opus_uint32 ec_tell_frac(ec_ctx *_this)
 func (e *EcCtx) TellFrac() uint32 {
+	var correction = [8]uint32{35733, 38967, 42495, 46340,
+		50535, 55109, 60097, 65535}
 	var nbits uint32
 	var r uint32
 	var l int
-	var i int
-	// To handle the non-integral number of bits still left in the encoder/decoder
-	// state, we compute the worst-case number of bits of val that must be
-	// encoded to ensure that the value is inside the range for any possible
-	// subsequent bits. (See upstream for the full discussion.)
+	var b uint32
 	nbits = uint32(e.nbits_total) << BITRES
 	l = EC_ILOG(e.rng)
 	r = e.rng >> uint(l-16)
-	for i = BITRES; i > 0; i-- {
-		var b int
-		r = r * r >> 15
-		b = int(r >> 16)
-		l = l<<1 | b
-		r >>= uint(b)
+	b = (r >> 12) - 8
+	if r > correction[b] {
+		b++
 	}
+	l = (l << 3) + int(b)
 	return nbits - uint32(l)
+}
+
+// Tested exhaustively for all n and for 1<=d<=256
+//
+// C: static OPUS_INLINE opus_uint32 celt_udiv(opus_uint32 n, opus_uint32 d)
+func Udiv(n, d uint32) uint32 {
+	celt_assert(d > 0)
+	return n / d
+}
+
+// C: static OPUS_INLINE opus_int32 celt_sudiv(opus_int32 n, opus_int32 d)
+func Sudiv(n, d int32) int32 {
+	celt_assert(d > 0)
+	return n / d
 }
 
 // Storage returns the buffer size (the C code reads _this->storage directly,

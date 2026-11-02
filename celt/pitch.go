@@ -47,16 +47,54 @@ func find_best_pitch(xcorr []int32, y []int16, length, max_pitch int, best_pitch
 	}
 }
 
+// C: static void celt_fir5(const opus_val16 *x, const opus_val16 *num, opus_val16 *y, int N, opus_val16 *mem)
+func celt_fir5(x []int16, num []int16, y []int16, N int, mem []int16) {
+	var i int
+	var num0, num1, num2, num3, num4 int16
+	var mem0, mem1, mem2, mem3, mem4 int32
+	num0 = num[0]
+	num1 = num[1]
+	num2 = num[2]
+	num3 = num[3]
+	num4 = num[4]
+	mem0 = int32(mem[0])
+	mem1 = int32(mem[1])
+	mem2 = int32(mem[2])
+	mem3 = int32(mem[3])
+	mem4 = int32(mem[4])
+	for i = 0; i < N; i++ {
+		var sum int32 = SHL32(EXTEND32(x[i]), SIG_SHIFT)
+		sum = MAC16_16(sum, num0, mem0)
+		sum = MAC16_16(sum, num1, mem1)
+		sum = MAC16_16(sum, num2, mem2)
+		sum = MAC16_16(sum, num3, mem3)
+		sum = MAC16_16(sum, num4, mem4)
+		mem4 = mem3
+		mem3 = mem2
+		mem2 = mem1
+		mem1 = mem0
+		mem0 = int32(x[i])
+		y[i] = ROUND16(sum, SIG_SHIFT)
+	}
+	mem[0] = int16(mem0)
+	mem[1] = int16(mem1)
+	mem[2] = int16(mem2)
+	mem[3] = int16(mem3)
+	mem[4] = int16(mem4)
+}
+
 // PitchDownsample downsamples x by 2 (summing channels) into x_lp and applies a
 // 4th-order LPC whitening filter.
 //
-// C: void pitch_downsample(celt_sig * OPUS_RESTRICT x[], opus_val16 * OPUS_RESTRICT x_lp, int len, int C)
-func PitchDownsample(x [][]int32, x_lp []int16, length, C int) {
+// C: void pitch_downsample(celt_sig * OPUS_RESTRICT x[], opus_val16 * OPUS_RESTRICT x_lp, int len, int C, int arch)
+func PitchDownsample(x [][]int32, x_lp []int16, length, C int, arch int) {
 	var i int
 	var ac [5]int32
 	var tmp int16 = Q15ONE
 	var lpc [4]int16
-	var mem = [4]int16{0, 0, 0, 0}
+	var mem = [5]int16{0, 0, 0, 0, 0}
+	var lpc2 [5]int16
+	var c1 int16 = QCONST16(.8, 15)
 	var shift int
 	var maxabs int32 = Maxabs32(x[0], length)
 	if C == 2 {
@@ -84,7 +122,8 @@ func PitchDownsample(x [][]int32, x_lp []int16, length, C int) {
 		x_lp[0] += int16(SHR32(HALF32(HALF32(x[1][1])+x[1][0]), shift))
 	}
 
-	Autocorr(x_lp, ac[:], nil, 0, 4, length>>1)
+	Autocorr(x_lp, ac[:], nil, 0,
+		4, length>>1, arch)
 
 	// Noise floor -40 dB
 	ac[0] += SHR32(ac[0], 13)
@@ -99,19 +138,175 @@ func PitchDownsample(x [][]int32, x_lp []int16, length, C int) {
 		tmp = int16(MULT16_16_Q15(QCONST16(.9, 15), tmp))
 		lpc[i] = int16(MULT16_16_Q15(lpc[i], tmp))
 	}
-	Fir(x_lp, lpc[:], x_lp, length>>1, 4, mem[:])
-
-	mem[0] = 0
-	lpc[0] = QCONST16(.8, 12)
-	Fir(x_lp, lpc[:], x_lp, length>>1, 1, mem[:])
+	// Add a zero
+	lpc2[0] = int16(int32(lpc[0]) + int32(QCONST16(.8, SIG_SHIFT)))
+	lpc2[1] = int16(int32(lpc[1]) + MULT16_16_Q15(c1, lpc[0]))
+	lpc2[2] = int16(int32(lpc[2]) + MULT16_16_Q15(c1, lpc[1]))
+	lpc2[3] = int16(int32(lpc[3]) + MULT16_16_Q15(c1, lpc[2]))
+	lpc2[4] = int16(MULT16_16_Q15(c1, lpc[3]))
+	celt_fir5(x_lp, lpc2[:], x_lp, length>>1, mem[:])
 }
 
-// C: void pitch_search(const opus_val16 * OPUS_RESTRICT x_lp, opus_val16 * OPUS_RESTRICT y, int len, int max_pitch, int *pitch)
-func PitchSearch(x_lp []int16, y []int16, length, max_pitch int, pitch *int) {
+// XcorrKernel is the kernel you really want to optimize. It gets used a lot
+// by the prefilter and by the PLC. sum has 4 entries.
+//
+// C: static OPUS_INLINE void xcorr_kernel_c(const opus_val16 * x, const opus_val16 * y, opus_val32 sum[4], int len)
+// C: #define xcorr_kernel(x, y, sum, len, arch) ((void)(arch),xcorr_kernel_c(x, y, sum, len))
+func XcorrKernel(x, y []int16, sum []int32, len int, arch int) {
+	_ = arch
+	var j int
+	var y_0, y_1, y_2, y_3 int16
+	celt_assert(len >= 3)
+	y_3 = 0 // gcc doesn't realize that y_3 can't be used uninitialized
+	xi, yi := 0, 0
+	y_0 = y[yi]
+	yi++
+	y_1 = y[yi]
+	yi++
+	y_2 = y[yi]
+	yi++
+	for j = 0; j < len-3; j += 4 {
+		var tmp int16
+		tmp = x[xi]
+		xi++
+		y_3 = y[yi]
+		yi++
+		sum[0] = MAC16_16(sum[0], tmp, y_0)
+		sum[1] = MAC16_16(sum[1], tmp, y_1)
+		sum[2] = MAC16_16(sum[2], tmp, y_2)
+		sum[3] = MAC16_16(sum[3], tmp, y_3)
+		tmp = x[xi]
+		xi++
+		y_0 = y[yi]
+		yi++
+		sum[0] = MAC16_16(sum[0], tmp, y_1)
+		sum[1] = MAC16_16(sum[1], tmp, y_2)
+		sum[2] = MAC16_16(sum[2], tmp, y_3)
+		sum[3] = MAC16_16(sum[3], tmp, y_0)
+		tmp = x[xi]
+		xi++
+		y_1 = y[yi]
+		yi++
+		sum[0] = MAC16_16(sum[0], tmp, y_2)
+		sum[1] = MAC16_16(sum[1], tmp, y_3)
+		sum[2] = MAC16_16(sum[2], tmp, y_0)
+		sum[3] = MAC16_16(sum[3], tmp, y_1)
+		tmp = x[xi]
+		xi++
+		y_2 = y[yi]
+		yi++
+		sum[0] = MAC16_16(sum[0], tmp, y_3)
+		sum[1] = MAC16_16(sum[1], tmp, y_0)
+		sum[2] = MAC16_16(sum[2], tmp, y_1)
+		sum[3] = MAC16_16(sum[3], tmp, y_2)
+	}
+	if j < len {
+		j++
+		var tmp int16 = x[xi]
+		xi++
+		y_3 = y[yi]
+		yi++
+		sum[0] = MAC16_16(sum[0], tmp, y_0)
+		sum[1] = MAC16_16(sum[1], tmp, y_1)
+		sum[2] = MAC16_16(sum[2], tmp, y_2)
+		sum[3] = MAC16_16(sum[3], tmp, y_3)
+	} else {
+		j++
+	}
+	if j < len {
+		j++
+		var tmp int16 = x[xi]
+		xi++
+		y_0 = y[yi]
+		yi++
+		sum[0] = MAC16_16(sum[0], tmp, y_1)
+		sum[1] = MAC16_16(sum[1], tmp, y_2)
+		sum[2] = MAC16_16(sum[2], tmp, y_3)
+		sum[3] = MAC16_16(sum[3], tmp, y_0)
+	} else {
+		j++
+	}
+	if j < len {
+		var tmp int16 = x[xi]
+		xi++
+		y_1 = y[yi]
+		yi++
+		sum[0] = MAC16_16(sum[0], tmp, y_2)
+		sum[1] = MAC16_16(sum[1], tmp, y_3)
+		sum[2] = MAC16_16(sum[2], tmp, y_0)
+		sum[3] = MAC16_16(sum[3], tmp, y_1)
+	}
+}
+
+// C: static OPUS_INLINE void dual_inner_prod_c(const opus_val16 *x, const opus_val16 *y01, const opus_val16 *y02, int N, opus_val32 *xy1, opus_val32 *xy2)
+// C: #define dual_inner_prod(x, y01, y02, N, xy1, xy2, arch) ((void)(arch),dual_inner_prod_c(x, y01, y02, N, xy1, xy2))
+func DualInnerProd(x, y01, y02 []int16, N int, xy1, xy2 *int32, arch int) {
+	_ = arch
+	var i int
+	var xy01 int32 = 0
+	var xy02 int32 = 0
+	for i = 0; i < N; i++ {
+		xy01 = MAC16_16(xy01, x[i], y01[i])
+		xy02 = MAC16_16(xy02, x[i], y02[i])
+	}
+	*xy1 = xy01
+	*xy2 = xy02
+}
+
+// We make sure a C version is always available for cases where the overhead of
+// vectorization and passing around an arch flag aren't worth it.
+//
+// C: static OPUS_INLINE opus_val32 celt_inner_prod_c(const opus_val16 *x, const opus_val16 *y, int N)
+// C: #define celt_inner_prod(x, y, N, arch) ((void)(arch),celt_inner_prod_c(x, y, N))
+func InnerProd(x, y []int16, N int, arch int) int32 {
+	_ = arch
+	var i int
+	var xy int32 = 0
+	for i = 0; i < N; i++ {
+		xy = MAC16_16(xy, x[i], y[i])
+	}
+	return xy
+}
+
+// PitchXcorr is the pure C implementation (unrolled version of the pitch
+// correlation). It returns the maximum correlation (fixed-point build).
+//
+// C: opus_val32 celt_pitch_xcorr(const opus_val16 *_x, const opus_val16 *_y, opus_val32 *xcorr, int len, int max_pitch, int arch)
+func PitchXcorr(_x, _y []int16, xcorr []int32, len int, max_pitch int, arch int) int32 {
+	var i int
+	// The EDSP version requires that max_pitch is at least 1, and that _x is
+	// 32-bit aligned.
+	// Since it's hard to put asserts in assembly, put them here.
+	var maxcorr int32 = 1
+	celt_assert(max_pitch > 0)
+	for i = 0; i < max_pitch-3; i += 4 {
+		var sum = [4]int32{0, 0, 0, 0}
+		XcorrKernel(_x, _y[i:], sum[:], len, arch)
+		xcorr[i] = sum[0]
+		xcorr[i+1] = sum[1]
+		xcorr[i+2] = sum[2]
+		xcorr[i+3] = sum[3]
+		sum[0] = MAX32(sum[0], sum[1])
+		sum[2] = MAX32(sum[2], sum[3])
+		sum[0] = MAX32(sum[0], sum[2])
+		maxcorr = MAX32(maxcorr, sum[0])
+	}
+	// In case max_pitch isn't a multiple of 4, do non-unrolled version.
+	for ; i < max_pitch; i++ {
+		var sum int32
+		sum = InnerProd(_x, _y[i:], len, arch)
+		xcorr[i] = sum
+		maxcorr = MAX32(maxcorr, sum)
+	}
+	return maxcorr
+}
+
+// C: void pitch_search(const opus_val16 * OPUS_RESTRICT x_lp, opus_val16 * OPUS_RESTRICT y, int len, int max_pitch, int *pitch, int arch)
+func PitchSearch(x_lp []int16, y []int16, length, max_pitch int, pitch *int, arch int) {
 	var i, j int
 	var lag int
 	var best_pitch = [2]int{0, 0}
-	var maxcorr int32 = 1
+	var maxcorr int32
 	var xmax, ymax int32
 	var shift int = 0
 	var offset int
@@ -150,24 +345,19 @@ func PitchSearch(x_lp []int16, y []int16, length, max_pitch int, pitch *int) {
 
 	// Coarse search with 4x decimation
 
-	for i = 0; i < max_pitch>>2; i++ {
-		var sum int32 = 0
-		for j = 0; j < length>>2; j++ {
-			sum = MAC16_16(sum, x_lp4[j], y_lp4[i+j])
-		}
-		xcorr[i] = MAX32(-1, sum)
-		maxcorr = MAX32(maxcorr, sum)
-	}
+	maxcorr = PitchXcorr(x_lp4, y_lp4, xcorr, length>>2, max_pitch>>2, arch)
+
 	find_best_pitch(xcorr, y_lp4, length>>2, max_pitch>>2, best_pitch[:], 0, maxcorr)
 
 	// Finer search with 2x decimation
 	maxcorr = 1
 	for i = 0; i < max_pitch>>1; i++ {
-		var sum int32 = 0
+		var sum int32
 		xcorr[i] = 0
 		if ABS(i-2*best_pitch[0]) > 2 && ABS(i-2*best_pitch[1]) > 2 {
 			continue
 		}
+		sum = 0
 		for j = 0; j < length>>1; j++ {
 			sum += SHR32(MULT16_16(x_lp[j], y[i+j]), shift)
 		}
@@ -195,18 +385,46 @@ func PitchSearch(x_lp []int16, y []int16, length, max_pitch int, pitch *int) {
 	*pitch = 2*best_pitch[0] - offset
 }
 
+// C: static opus_val16 compute_pitch_gain(opus_val32 xy, opus_val32 xx, opus_val32 yy)
+func compute_pitch_gain(xy, xx, yy int32) int16 {
+	var x2y2 int32
+	var sx, sy, shift int
+	var g int32
+	var den int16
+	if xy == 0 || xx == 0 || yy == 0 {
+		return 0
+	}
+	sx = int(Ilog2(xx)) - 14
+	sy = int(Ilog2(yy)) - 14
+	shift = sx + sy
+	x2y2 = MULT16_16_Q14(VSHR32(xx, sx), VSHR32(yy, sy))
+	if shift&1 != 0 {
+		if x2y2 < 32768 {
+			x2y2 <<= 1
+			shift--
+		} else {
+			x2y2 >>= 1
+			shift++
+		}
+	}
+	den = RsqrtNorm(x2y2)
+	g = MULT16_32_Q15(den, xy)
+	g = VSHR32(g, (shift>>1)-1)
+	return EXTRACT16(MIN32(g, int32(Q15ONE)))
+}
+
 var second_check = [16]int{0, 0, 3, 2, 3, 2, 5, 2, 3, 2, 3, 2, 5, 2, 3, 2}
 
 // RemoveDoubling checks for pitch period doubling/tripling. x is indexed so
 // that x[xOff] is the C `x` pointer (the C code reads x[i-T] for negative
 // offsets up to maxperiod).
 //
-// C: opus_val16 remove_doubling(opus_val16 *x, int maxperiod, int minperiod, int N, int *T0_, int prev_period, opus_val16 prev_gain)
-func RemoveDoubling(x []int16, maxperiod, minperiod int, N int, T0_ *int, prev_period int, prev_gain int16) int16 {
+// C: opus_val16 remove_doubling(opus_val16 *x, int maxperiod, int minperiod, int N, int *T0_, int prev_period, opus_val16 prev_gain, int arch)
+func RemoveDoubling(x []int16, maxperiod, minperiod int, N int, T0_ *int, prev_period int, prev_gain int16, arch int) int16 {
 	var k, i, T, T0 int
 	var g, g0 int16
 	var pg int16
-	var xy, xx, yy int32
+	var xy, xx, yy, xy2 int32
 	var xcorr [3]int32
 	var best_xy, best_yy int32
 	var offset int
@@ -225,31 +443,26 @@ func RemoveDoubling(x []int16, maxperiod, minperiod int, N int, T0_ *int, prev_p
 
 	T = *T0_
 	T0 = T
-	xx = 0
-	xy = 0
-	yy = 0
-	for i = 0; i < N; i++ {
-		xy = MAC16_16(xy, x[xo+i], x[xo+i-T0])
-		xx = MAC16_16(xx, x[xo+i], x[xo+i])
-		yy = MAC16_16(yy, x[xo+i-T0], x[xo+i-T0])
+	yy_lookup := make([]int32, maxperiod+1)
+	DualInnerProd(x[xo:], x[xo:], x[xo-T0:], N, &xx, &xy, arch)
+	yy_lookup[0] = xx
+	yy = xx
+	for i = 1; i <= maxperiod; i++ {
+		yy = yy + MULT16_16(x[xo-i], x[xo-i]) - MULT16_16(x[xo+N-i], x[xo+N-i])
+		yy_lookup[i] = MAX32(0, yy)
 	}
+	yy = yy_lookup[T0]
 	best_xy = xy
 	best_yy = yy
-	{
-		var x2y2 int32
-		var sh, t int
-		x2y2 = 1 + HALF32(MULT32_32_Q31(xx, yy))
-		sh = int(Ilog2(x2y2)) >> 1
-		t = int(VSHR32(x2y2, 2*(sh-7)))
-		g0 = int16(VSHR32(MULT16_32_Q15(RsqrtNorm(int32(t)), xy), sh+1))
-		g = g0
-	}
+	g0 = compute_pitch_gain(xy, xx, yy)
+	g = g0
 	// Look for any pitch at T/k
 	for k = 2; k <= 15; k++ {
 		var T1, T1b int
 		var g1 int16
 		var cont int16 = 0
-		T1 = (2*T0 + k) / (2 * k)
+		var thresh int16
+		T1 = int(Udiv(uint32(2*T0+k), uint32(2*k)))
 		if T1 < minperiod {
 			break
 		}
@@ -261,33 +474,28 @@ func RemoveDoubling(x []int16, maxperiod, minperiod int, N int, T0_ *int, prev_p
 				T1b = T0 + T1
 			}
 		} else {
-			T1b = (2*second_check[k]*T0 + k) / (2 * k)
+			T1b = int(Udiv(uint32(2*second_check[k]*T0+k), uint32(2*k)))
 		}
-		xy = 0
-		yy = 0
-		for i = 0; i < N; i++ {
-			xy = MAC16_16(xy, x[xo+i], x[xo+i-T1])
-			yy = MAC16_16(yy, x[xo+i-T1], x[xo+i-T1])
-
-			xy = MAC16_16(xy, x[xo+i], x[xo+i-T1b])
-			yy = MAC16_16(yy, x[xo+i-T1b], x[xo+i-T1b])
-		}
-		{
-			var x2y2 int32
-			var sh, t int
-			x2y2 = 1 + MULT32_32_Q31(xx, yy)
-			sh = int(Ilog2(x2y2)) >> 1
-			t = int(VSHR32(x2y2, 2*(sh-7)))
-			g1 = int16(VSHR32(MULT16_32_Q15(RsqrtNorm(int32(t)), xy), sh+1))
-		}
+		DualInnerProd(x[xo:], x[xo-T1:], x[xo-T1b:], N, &xy, &xy2, arch)
+		xy = HALF32(xy + xy2)
+		yy = HALF32(yy_lookup[T1] + yy_lookup[T1b])
+		g1 = compute_pitch_gain(xy, xx, yy)
 		if ABS(T1-prev_period) <= 1 {
 			cont = prev_gain
 		} else if ABS(T1-prev_period) <= 2 && 5*k*k < T0 {
-			cont = int16(HALF32(prev_gain))
+			cont = int16(HALF16(prev_gain))
 		} else {
 			cont = 0
 		}
-		if int32(g1) > int32(QCONST16(.3, 15))+MULT16_16_Q15(QCONST16(.4, 15), g0)-int32(cont) {
+		thresh = int16(MAX16(int32(QCONST16(.3, 15)), MULT16_16_Q15(QCONST16(.7, 15), g0)-int32(cont)))
+		// Bias against very high pitch (very short period) to avoid false-positives
+		// due to short-term correlation
+		if T1 < 3*minperiod {
+			thresh = int16(MAX16(int32(QCONST16(.4, 15)), MULT16_16_Q15(QCONST16(.85, 15), g0)-int32(cont)))
+		} else if T1 < 2*minperiod {
+			thresh = int16(MAX16(int32(QCONST16(.5, 15)), MULT16_16_Q15(QCONST16(.9, 15), g0)-int32(cont)))
+		}
+		if g1 > thresh {
 			best_xy = xy
 			best_yy = yy
 			T = T1
@@ -302,12 +510,7 @@ func RemoveDoubling(x []int16, maxperiod, minperiod int, N int, T0_ *int, prev_p
 	}
 
 	for k = 0; k < 3; k++ {
-		T1 := T + k - 1
-		xy = 0
-		for i = 0; i < N; i++ {
-			xy = MAC16_16(xy, x[xo+i], x[xo+i-T1])
-		}
-		xcorr[k] = xy
+		xcorr[k] = InnerProd(x[xo:], x[xo-(T+k-1):], N, arch)
 	}
 	if (xcorr[2] - xcorr[0]) > MULT16_32_Q15(QCONST16(.7, 15), xcorr[1]-xcorr[0]) {
 		offset = 1

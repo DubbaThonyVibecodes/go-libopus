@@ -18,11 +18,11 @@ func NLSFEncode( // O    Returns RD value in Q25
 ) int32 {
 	var i, s, ind1, prob_Q8, bits_q7 int
 	var bestIndex [1]int // C: opus_int bestIndex, passed as the idx[] vector of length 1
-	var W_tmp_Q9 int32
-	var err_Q26 [NLSF_VQ_MAX_VECTORS]int32
-	var RD_Q25 [NLSF_VQ_MAX_SURVIVORS]int32
-	var tempIndices1 [NLSF_VQ_MAX_SURVIVORS]int
-	var tempIndices2 [NLSF_VQ_MAX_SURVIVORS * MAX_LPC_ORDER]int8
+	var W_tmp_Q9, ret int32
+	var err_Q26 []int32
+	var RD_Q25 []int32
+	var tempIndices1 []int
+	var tempIndices2 []int8
 	var res_Q15 [MAX_LPC_ORDER]int16
 	var res_Q10 [MAX_LPC_ORDER]int16
 	var NLSF_tmp_Q15 [MAX_LPC_ORDER]int16
@@ -40,10 +40,15 @@ func NLSFEncode( // O    Returns RD value in Q25
 	NLSFStabilize(pNLSF_Q15, psNLSF_CB.deltaMin_Q15, int(psNLSF_CB.order))
 
 	// First stage: VQ
-	NLSFVQ(err_Q26[:], pNLSF_Q15, psNLSF_CB.CB1_NLSF_Q8, int(psNLSF_CB.nVectors), int(psNLSF_CB.order))
+	err_Q26 = make([]int32, psNLSF_CB.nVectors)
+	NLSFVQ(err_Q26, pNLSF_Q15, psNLSF_CB.CB1_NLSF_Q8, int(psNLSF_CB.nVectors), int(psNLSF_CB.order))
 
 	// Sort the quantization errors
-	InsertionSortIncreasing(err_Q26[:], tempIndices1[:], int(psNLSF_CB.nVectors), nSurvivors)
+	tempIndices1 = make([]int, nSurvivors)
+	InsertionSortIncreasing(err_Q26, tempIndices1, int(psNLSF_CB.nVectors), nSurvivors)
+
+	RD_Q25 = make([]int32, nSurvivors)
+	tempIndices2 = make([]int8, nSurvivors*MAX_LPC_ORDER)
 
 	// Loop over survivors
 	for s = 0; s < nSurvivors; s++ {
@@ -89,7 +94,7 @@ func NLSFEncode( // O    Returns RD value in Q25
 	}
 
 	// Find the lowest rate-distortion error
-	InsertionSortIncreasing(RD_Q25[:], bestIndex[:], nSurvivors, 1)
+	InsertionSortIncreasing(RD_Q25, bestIndex[:], nSurvivors, 1)
 
 	NLSFIndices[0] = int8(tempIndices1[bestIndex[0]])
 	copy(NLSFIndices[1:1+int(psNLSF_CB.order)], tempIndices2[bestIndex[0]*MAX_LPC_ORDER:][:int(psNLSF_CB.order)])
@@ -97,5 +102,6 @@ func NLSFEncode( // O    Returns RD value in Q25
 	// Decode
 	NLSFDecode(pNLSF_Q15, NLSFIndices, psNLSF_CB)
 
-	return RD_Q25[0]
+	ret = RD_Q25[0]
+	return ret
 }

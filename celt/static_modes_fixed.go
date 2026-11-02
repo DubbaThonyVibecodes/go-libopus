@@ -4,35 +4,47 @@ package celt
 // (the numeric tables are in static_modes_fixed_tables.go).
 
 var fft_state48000_960_0 = kiss_fft_state{
-	nfft:     480,
-	shift:    -1,
-	factors:  [2 * MAXFACTORS]int16{4, 120, 4, 30, 2, 15, 3, 5, 5, 1, 0, 0, 0, 0, 0, 0},
-	bitrev:   fft_bitrev480[:],
-	twiddles: fft_twiddles48000_960[:],
+	nfft:        480,
+	scale:       17476,
+	scale_shift: 8,
+	shift:       -1,
+	factors:     [2 * MAXFACTORS]int16{5, 96, 3, 32, 4, 8, 2, 4, 4, 1, 0, 0, 0, 0, 0, 0},
+	bitrev:      fft_bitrev480[:],
+	twiddles:    fft_twiddles48000_960[:],
+	arch_fft:    nil,
 }
 
 var fft_state48000_960_1 = kiss_fft_state{
-	nfft:     240,
-	shift:    1,
-	factors:  [2 * MAXFACTORS]int16{4, 60, 4, 15, 3, 5, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0},
-	bitrev:   fft_bitrev240[:],
-	twiddles: fft_twiddles48000_960[:],
+	nfft:        240,
+	scale:       17476,
+	scale_shift: 7,
+	shift:       1,
+	factors:     [2 * MAXFACTORS]int16{5, 48, 3, 16, 4, 4, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0},
+	bitrev:      fft_bitrev240[:],
+	twiddles:    fft_twiddles48000_960[:],
+	arch_fft:    nil,
 }
 
 var fft_state48000_960_2 = kiss_fft_state{
-	nfft:     120,
-	shift:    2,
-	factors:  [2 * MAXFACTORS]int16{4, 30, 2, 15, 3, 5, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0},
-	bitrev:   fft_bitrev120[:],
-	twiddles: fft_twiddles48000_960[:],
+	nfft:        120,
+	scale:       17476,
+	scale_shift: 6,
+	shift:       2,
+	factors:     [2 * MAXFACTORS]int16{5, 24, 3, 8, 2, 4, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0},
+	bitrev:      fft_bitrev120[:],
+	twiddles:    fft_twiddles48000_960[:],
+	arch_fft:    nil,
 }
 
 var fft_state48000_960_3 = kiss_fft_state{
-	nfft:     60,
-	shift:    3,
-	factors:  [2 * MAXFACTORS]int16{4, 15, 3, 5, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	bitrev:   fft_bitrev60[:],
-	twiddles: fft_twiddles48000_960[:],
+	nfft:        60,
+	scale:       17476,
+	scale_shift: 5,
+	shift:       3,
+	factors:     [2 * MAXFACTORS]int16{5, 12, 3, 4, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	bitrev:      fft_bitrev60[:],
+	twiddles:    fft_twiddles48000_960[:],
+	arch_fft:    nil,
 }
 
 var mode48000_960_120 = CELTMode{

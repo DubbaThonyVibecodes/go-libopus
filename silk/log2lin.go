@@ -13,6 +13,8 @@ func Log2lin(
 
 	if inLog_Q7 < 0 {
 		return 0
+	} else if inLog_Q7 >= 3967 {
+		return int32_MAX
 	}
 
 	out = LSHIFT(1, int(RSHIFT(inLog_Q7, 7)))

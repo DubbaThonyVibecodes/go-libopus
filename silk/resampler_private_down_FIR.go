@@ -2,7 +2,7 @@ package silk
 
 // C: silk/resampler_private_down_FIR.c
 
-// C: static inline opus_int16 *silk_resampler_private_down_FIR_INTERPOL(
+// C: static OPUS_INLINE opus_int16 *silk_resampler_private_down_FIR_INTERPOL(
 //
 //	opus_int16          *out,
 //	opus_int32          *buf,
@@ -129,8 +129,10 @@ func (SS *ResamplerStateStruct) ResamplerPrivateDownFIR(out []int16, in []int16,
 	S := SS
 	var nSamplesIn int32
 	var max_index_Q16, index_increment_Q16 int32
-	var buf [RESAMPLER_MAX_BATCH_SIZE_IN + SILK_RESAMPLER_MAX_FIR_ORDER]int32
+	var buf []int32
 	var FIR_Coefs []int16
+
+	buf = make([]int32, S.batchSize+S.FIR_Order)
 
 	/* Copy buffered samples to start of buffer */
 	copy(buf[:S.FIR_Order], S.sFIR_i32[:S.FIR_Order])
@@ -148,7 +150,7 @@ func (SS *ResamplerStateStruct) ResamplerPrivateDownFIR(out []int16, in []int16,
 		max_index_Q16 = LSHIFT32(nSamplesIn, 16)
 
 		/* Interpolate filtered signal */
-		out = resamplerPrivateDownFIRINTERPOL(out, buf[:], FIR_Coefs, S.FIR_Order,
+		out = resamplerPrivateDownFIRINTERPOL(out, buf, FIR_Coefs, S.FIR_Order,
 			S.FIR_Fracs, max_index_Q16, index_increment_Q16)
 
 		in = in[nSamplesIn:]

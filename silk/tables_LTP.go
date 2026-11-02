@@ -82,6 +82,25 @@ var LTP_vq_ptrs_Q7 = [NB_LTP_CBKS][]int8{
 	LTP_gain_vq_2[:],
 }
 
+var LTP_gain_vq_0_gain = [8]uint8{
+	46, 2, 90, 87, 93, 91, 82, 98,
+}
+
+var LTP_gain_vq_1_gain = [16]uint8{
+	109, 120, 118, 12, 113, 115, 117, 119, 99, 59, 87, 111, 63, 111, 112, 80,
+}
+
+var LTP_gain_vq_2_gain = [32]uint8{
+	126, 124, 125, 124, 129, 121, 126, 23, 132, 127, 127, 127, 126, 127, 122, 133,
+	130, 134, 101, 118, 119, 145, 126, 86, 124, 120, 123, 119, 170, 173, 107, 109,
+}
+
+var LTP_vq_gain_ptrs_Q7 = [NB_LTP_CBKS][]uint8{
+	LTP_gain_vq_0_gain[:],
+	LTP_gain_vq_1_gain[:],
+	LTP_gain_vq_2_gain[:],
+}
+
 var LTP_vq_sizes = [NB_LTP_CBKS]int8{
 	8, 16, 32,
 }
