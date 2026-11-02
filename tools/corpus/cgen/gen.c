@@ -351,6 +351,7 @@ static int cmd_enc(int argc, char **argv) {
       else if (!strcmp(a, "--maxbw")) maxbw = parse_bw(NEXT);
       else if (!strcmp(a, "--complexity")) complexity = atoi(NEXT);
       else if (!strcmp(a, "--fec")) fec = 1;
+      else if (!strcmp(a, "--fec2")) fec = 2; /* libopus 1.4: FEC without forcing SILK for music */
       else if (!strcmp(a, "--lossperc")) lossperc = atoi(NEXT);
       else if (!strcmp(a, "--dtx")) dtx = 1;
       else if (!strcmp(a, "--forcech")) { const char *v = NEXT; forcech = strcmp(v, "auto") ? atoi(v) : OPUS_AUTO; }

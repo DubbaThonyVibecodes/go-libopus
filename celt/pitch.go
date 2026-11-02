@@ -106,14 +106,14 @@ func PitchDownsample(x [][]int32, x_lp []int16, length, C int, arch int) {
 		shift++
 	}
 	for i = 1; i < length>>1; i++ {
-		x_lp[i] = int16(SHR32(HALF32(HALF32(x[0][(2*i-1)]+x[0][(2*i+1)])+x[0][2*i]), shift))
+		x_lp[i] = int16(SHR32(x[0][(2*i-1)], shift+2) + SHR32(x[0][(2*i+1)], shift+2) + SHR32(x[0][2*i], shift+1))
 	}
-	x_lp[0] = int16(SHR32(HALF32(HALF32(x[0][1])+x[0][0]), shift))
+	x_lp[0] = int16(SHR32(x[0][1], shift+2) + SHR32(x[0][0], shift+1))
 	if C == 2 {
 		for i = 1; i < length>>1; i++ {
-			x_lp[i] += int16(SHR32(HALF32(HALF32(x[1][(2*i-1)]+x[1][(2*i+1)])+x[1][2*i]), shift))
+			x_lp[i] += int16(SHR32(x[1][(2*i-1)], shift+2) + SHR32(x[1][(2*i+1)], shift+2) + SHR32(x[1][2*i], shift+1))
 		}
-		x_lp[0] += int16(SHR32(HALF32(HALF32(x[1][1])+x[1][0]), shift))
+		x_lp[0] += int16(SHR32(x[1][1], shift+2) + SHR32(x[1][0], shift+1))
 	}
 
 	Autocorr(x_lp, ac[:], nil, 0,

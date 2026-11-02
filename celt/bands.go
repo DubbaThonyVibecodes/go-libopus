@@ -888,8 +888,8 @@ func compute_theta(ctx *band_ctx, sctx *split_ctx,
 	sctx.qalloc = qalloc
 }
 
-// C: static unsigned quant_band_n1(struct band_ctx *ctx, celt_norm *X, celt_norm *Y, int b, celt_norm *lowband_out)
-func quant_band_n1(ctx *band_ctx, X, Y []int16, b int, lowband_out []int16) uint32 {
+// C: static unsigned quant_band_n1(struct band_ctx *ctx, celt_norm *X, celt_norm *Y, celt_norm *lowband_out)
+func quant_band_n1(ctx *band_ctx, X, Y []int16, lowband_out []int16) uint32 {
 	var c int
 	var stereo int
 	x := X
@@ -911,7 +911,6 @@ func quant_band_n1(ctx *band_ctx, X, Y []int16, b int, lowband_out []int16) uint
 				sign = int(ec.DecBits(1))
 			}
 			ctx.remaining_bits -= 1 << BITRES
-			b -= 1 << BITRES
 		}
 		if ctx.resynth != 0 {
 			if sign != 0 {
@@ -1128,7 +1127,7 @@ func quant_band(ctx *band_ctx, X []int16,
 
 	// Special case for one sample
 	if N == 1 {
-		return quant_band_n1(ctx, X, nil, b, lowband_out)
+		return quant_band_n1(ctx, X, nil, lowband_out)
 	}
 
 	if tf_change > 0 {
@@ -1256,7 +1255,7 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 
 	// Special case for one sample
 	if N == 1 {
-		return quant_band_n1(ctx, X, Y, b, lowband_out)
+		return quant_band_n1(ctx, X, Y, lowband_out)
 	}
 
 	orig_fill = fill
@@ -1379,6 +1378,7 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 }
 
 // C: static void special_hybrid_folding(const CELTMode *m, celt_norm *norm, celt_norm *norm2, int start, int M, int dual_stereo)
+// (1.4: inside #ifndef DISABLE_UPDATE_DRAFT, which is not defined, so it is compiled.)
 func special_hybrid_folding(m *CELTMode, norm, norm2 []int16, start, M, dual_stereo int) {
 	var n1, n2 int
 	eBands := m.eBands

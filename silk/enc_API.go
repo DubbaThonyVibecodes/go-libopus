@@ -229,6 +229,7 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 			psEnc.state_Fxx[0].sCmn.fs_kHz*1000))
 	buf = make([]int16, nSamplesFromInputMax)
 	for {
+		var curr_nBitsUsedLBRR int = 0
 		nSamplesToBuffer = psEnc.state_Fxx[0].sCmn.frame_length - psEnc.state_Fxx[0].sCmn.inputBufIx
 		nSamplesToBuffer = min(nSamplesToBuffer, nSamplesToBufferMax)
 		nSamplesFromInput = int(DIV32_16(int32(nSamplesToBuffer)*psEnc.state_Fxx[0].sCmn.API_fs_Hz, psEnc.state_Fxx[0].sCmn.fs_kHz*1000))
@@ -301,6 +302,7 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 				iCDF := [2]uint8{0, 0}
 				iCDF[0] = uint8(256 - RSHIFT(256, (psEnc.state_Fxx[0].sCmn.nFramesPerPacket+1)*int(encControl.NChannelsInternal)))
 				psRangeEnc.EncIcdf(0, iCDF[:], 8)
+				curr_nBitsUsedLBRR = psRangeEnc.Tell()
 
 				/* Encode any LBRR data from previous packet */
 				/* Encode LBRR flags */
@@ -345,8 +347,7 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 				for n = 0; n < int(encControl.NChannelsInternal); n++ {
 					clear(psEnc.state_Fxx[n].sCmn.LBRR_flags[:])
 				}
-
-				psEnc.nBitsUsedLBRR = int32(psRangeEnc.Tell())
+				curr_nBitsUsedLBRR = psRangeEnc.Tell() - curr_nBitsUsedLBRR
 			}
 
 			HPVariableCutoff(psEnc.state_Fxx[:])
@@ -355,6 +356,16 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 			nBits = int(DIV32_16(MUL(encControl.BitRate, encControl.PayloadSize_ms), 1000))
 			/* Subtract bits used for LBRR */
 			if prefillFlag == 0 {
+				/* psEnc->nBitsUsedLBRR is an exponential moving average of the LBRR usage,
+				   except that for the first LBRR frame it does no averaging and for the first
+				   frame after after LBRR, it goes back to zero immediately. */
+				if curr_nBitsUsedLBRR < 10 {
+					psEnc.nBitsUsedLBRR = 0
+				} else if psEnc.nBitsUsedLBRR < 10 {
+					psEnc.nBitsUsedLBRR = int32(curr_nBitsUsedLBRR)
+				} else {
+					psEnc.nBitsUsedLBRR = (psEnc.nBitsUsedLBRR + int32(curr_nBitsUsedLBRR)) / 2
+				}
 				nBits -= int(psEnc.nBitsUsedLBRR)
 			}
 			/* Divide by number of uncoded frames left in packet */

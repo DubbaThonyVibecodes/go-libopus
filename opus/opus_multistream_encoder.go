@@ -345,7 +345,8 @@ func (st *OpusMSEncoder) multistreamEncoderInitImpl(Fs int32, channels int, stre
 	var i, ret int
 
 	if (channels > 255) || (channels < 1) || (coupled_streams > streams) ||
-		(streams < 1) || (coupled_streams < 0) || (streams > 255-coupled_streams) {
+		(streams < 1) || (coupled_streams < 0) || (streams > 255-coupled_streams) ||
+		(streams+coupled_streams > channels) {
 		return OPUS_BAD_ARG
 	}
 
@@ -365,8 +366,7 @@ func (st *OpusMSEncoder) multistreamEncoderInitImpl(Fs int32, channels int, stre
 	if validate_layout(&st.layout) == 0 {
 		return OPUS_BAD_ARG
 	}
-	if mapping_type == MAPPING_TYPE_SURROUND &&
-		validate_encoder_layout(&st.layout) == 0 {
+	if validate_encoder_layout(&st.layout) == 0 {
 		return OPUS_BAD_ARG
 	}
 	if mapping_type == MAPPING_TYPE_AMBISONICS &&
@@ -479,7 +479,8 @@ func (st *OpusMSEncoder) MultistreamSurroundEncoderInit(Fs int32, channels int, 
 func MultistreamEncoderCreate(Fs int32, channels int, streams int, coupled_streams int, mapping []byte, application int, error *int) *OpusMSEncoder {
 	var ret int
 	if (channels > 255) || (channels < 1) || (coupled_streams > streams) ||
-		(streams < 1) || (coupled_streams < 0) || (streams > 255-coupled_streams) {
+		(streams < 1) || (coupled_streams < 0) || (streams > 255-coupled_streams) ||
+		(streams+coupled_streams > channels) {
 		if error != nil {
 			*error = OPUS_BAD_ARG
 		}

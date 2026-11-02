@@ -324,7 +324,7 @@ func setupLBRR(psEncC *EncoderState, encControl *EncControlStruct) int {
 			/* Previous packet did not have LBRR, and was therefore coded at a higher bitrate */
 			psEncC.LBRR_GainIncreases = 7
 		} else {
-			psEncC.LBRR_GainIncreases = max_int(7-int(SMULWB(int32(psEncC.PacketLoss_perc), SILK_FIX_CONST(0.4, 16))), 2)
+			psEncC.LBRR_GainIncreases = max_int(7-int(SMULWB(int32(psEncC.PacketLoss_perc), SILK_FIX_CONST(0.2, 16))), 3)
 		}
 	}
 

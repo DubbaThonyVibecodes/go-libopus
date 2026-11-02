@@ -28,6 +28,13 @@ func MULT16_32_Q15[A, B integer](a A, b B) int32 {
 	return int32((int64(int16(a)) * int64(b)) >> 15)
 }
 
+// 32x32 multiplication, followed by a 16-bit shift right. Results fits in 32 bits
+//
+// C: MULT32_32_Q16(a,b) ((opus_val32)SHR((opus_int64)(a)*(opus_int64)(b),16))   (OPUS_FAST_INT64)
+func MULT32_32_Q16[A, B integer](a A, b B) int32 {
+	return int32((int64(a) * int64(b)) >> 16)
+}
+
 // C: MULT32_32_Q31(a,b) ((opus_val32)SHR((opus_int64)(a)*(opus_int64)(b),31))   (OPUS_FAST_INT64)
 func MULT32_32_Q31[A, B integer](a A, b B) int32 {
 	return int32((int64(a) * int64(b)) >> 31)
@@ -118,7 +125,7 @@ func SATURATE16[T integer](x T) int16 {
 // C: ROUND16(x,a) (EXTRACT16(PSHR32((x),(a))))
 func ROUND16[T integer](x T, a int) int16 { return EXTRACT16(PSHR32(x, a)) }
 
-// Shift by a and round-to-neareast 32-bit value. Result is a saturated 16-bit value.
+// Shift by a and round-to-nearest 32-bit value. Result is a saturated 16-bit value.
 //
 // C: SROUND16(x,a) EXTRACT16(SATURATE(PSHR32(x,a), 32767))
 func SROUND16[T integer](x T, a int) int16 { return EXTRACT16(SATURATE(PSHR32(x, a), 32767)) }
@@ -158,6 +165,11 @@ func NEG32_ovflw[T integer](a T) int32 { return int32(0 - uint32(a)) }
 
 // C: MULT16_16_16(a,b) ((((opus_val16)(a))*((opus_val16)(b))))   (promoted to int)
 func MULT16_16_16[A, B integer](a A, b B) int32 { return int32(int16(a)) * int32(int16(b)) }
+
+// 32x32 multiplication where the result fits in 32 bits
+//
+// C: MULT32_32_32(a,b) ((((opus_val32)(a))*((opus_val32)(b))))
+func MULT32_32_32[A, B integer](a A, b B) int32 { return int32(a) * int32(b) }
 
 // C: MULT16_16(a,b) (((opus_val32)(opus_val16)(a))*((opus_val32)(opus_val16)(b)))
 func MULT16_16[A, B integer](a A, b B) int32 { return int32(int16(a)) * int32(int16(b)) }

@@ -21,10 +21,10 @@ func Lpc(_lpc []int16, ac []int32, p int) {
 			for j = 0; j < i; j++ {
 				rr += MULT32_32_Q31(lpc[j], ac[i-j])
 			}
-			rr += SHR32(ac[i+1], 3)
-			r = -FracDiv32(SHL32(rr, 3), error)
+			rr += SHR32(ac[i+1], 6)
+			r = -FracDiv32(SHL32(rr, 6), error)
 			// Update LPC coefficients and total error
-			lpc[i] = SHR32(r, 3)
+			lpc[i] = SHR32(r, 6)
 			for j = 0; j < (i+1)>>1; j++ {
 				var tmp1, tmp2 int32
 				tmp1 = lpc[j]
@@ -35,13 +35,57 @@ func Lpc(_lpc []int16, ac []int32, p int) {
 
 			error = error - MULT32_32_Q31(MULT32_32_Q31(r, r), error)
 			// Bail out once we get 30 dB gain
-			if error < SHR32(ac[0], 10) {
+			if error <= SHR32(ac[0], 10) {
 				break
 			}
 		}
 	}
-	for i = 0; i < p; i++ {
-		_lpc[i] = ROUND16(lpc[i], 16)
+	{
+		// Convert the int32 lpcs to int16 and ensure there are no wrap-arounds.
+		// This reuses the logic in silk_LPC_fit() and silk_bwexpander_32(). Any bug
+		// fixes should also be applied there.
+		var iter, idx int = 0, 0
+		var maxabs, absval, chirp_Q16, chirp_minus_one_Q16 int32
+
+		for iter = 0; iter < 10; iter++ {
+			maxabs = 0
+			for i = 0; i < p; i++ {
+				absval = ABS32(lpc[i])
+				if absval > maxabs {
+					maxabs = absval
+					idx = i
+				}
+			}
+			maxabs = PSHR32(maxabs, 13) // Q25->Q12
+
+			if maxabs > 32767 {
+				maxabs = MIN32(maxabs, 163838)
+				// (C: QCONST32(0.999, 16) with a double literal; 65470 either way.)
+				chirp_Q16 = QCONST32(0.999, 16) - DIV32(SHL32(maxabs-32767, 14),
+					SHR32(MULT32_32_32(maxabs, idx+1), 2))
+				chirp_minus_one_Q16 = chirp_Q16 - 65536
+
+				// Apply bandwidth expansion.
+				for i = 0; i < p-1; i++ {
+					lpc[i] = MULT32_32_Q16(chirp_Q16, lpc[i])
+					chirp_Q16 += PSHR32(MULT32_32_32(chirp_Q16, chirp_minus_one_Q16), 16)
+				}
+				lpc[p-1] = MULT32_32_Q16(chirp_Q16, lpc[p-1])
+			} else {
+				break
+			}
+		}
+
+		if iter == 10 {
+			// If the coeffs still do not fit into the 16 bit range after 10 iterations,
+			// fall back to the A(z)=1 filter.
+			clear(lpc[:p])
+			_lpc[0] = 4096 // Q12
+		} else {
+			for i = 0; i < p; i++ {
+				_lpc[i] = EXTRACT16(PSHR32(lpc[i], 13)) // Q25->Q12
+			}
+		}
 	}
 }
 
@@ -65,17 +109,17 @@ func Fir(x []int16, num []int16, y []int16, N, ord int, arch int) {
 		sum[2] = SHL32(EXTEND32(x[ord+i+2]), SIG_SHIFT)
 		sum[3] = SHL32(EXTEND32(x[ord+i+3]), SIG_SHIFT)
 		XcorrKernel(rnum, x[i:], sum[:], ord, arch)
-		y[i] = ROUND16(sum[0], SIG_SHIFT)
-		y[i+1] = ROUND16(sum[1], SIG_SHIFT)
-		y[i+2] = ROUND16(sum[2], SIG_SHIFT)
-		y[i+3] = ROUND16(sum[3], SIG_SHIFT)
+		y[i] = SROUND16(sum[0], SIG_SHIFT)
+		y[i+1] = SROUND16(sum[1], SIG_SHIFT)
+		y[i+2] = SROUND16(sum[2], SIG_SHIFT)
+		y[i+3] = SROUND16(sum[3], SIG_SHIFT)
 	}
 	for ; i < N; i++ {
 		var sum int32 = SHL32(EXTEND32(x[ord+i]), SIG_SHIFT)
 		for j = 0; j < ord; j++ {
 			sum = MAC16_16(sum, rnum[j], x[i+j]) // C: x[i+j-ord]
 		}
-		y[i] = ROUND16(sum, SIG_SHIFT)
+		y[i] = SROUND16(sum, SIG_SHIFT)
 	}
 }
 

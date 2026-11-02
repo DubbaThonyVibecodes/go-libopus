@@ -321,6 +321,16 @@ func (e *Encoder) SetInbandFEC(on bool) error {
 // InbandFEC reports whether in-band FEC is enabled.
 func (e *Encoder) InbandFEC() bool { return e.getInt(opus.OPUS_GET_INBAND_FEC_REQUEST) != 0 }
 
+// SetInbandFECMode sets the in-band FEC mode: 0 off, 1 on (the encoder may
+// switch to SILK to make FEC possible), 2 on without forcing SILK for
+// music (libopus 1.4+).
+func (e *Encoder) SetInbandFECMode(mode int) error {
+	return e.Ctl(opus.OPUS_SET_INBAND_FEC_REQUEST, int32(mode))
+}
+
+// InbandFECMode returns the configured in-band FEC mode (0, 1 or 2).
+func (e *Encoder) InbandFECMode() int { return e.getInt(opus.OPUS_GET_INBAND_FEC_REQUEST) }
+
 // SetPacketLossPerc tells the encoder the expected packet loss in percent.
 func (e *Encoder) SetPacketLossPerc(p int) error {
 	return e.Ctl(opus.OPUS_SET_PACKET_LOSS_PERC_REQUEST, int32(p))

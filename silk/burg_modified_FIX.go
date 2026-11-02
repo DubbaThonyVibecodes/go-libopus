@@ -7,7 +7,7 @@ import "github.com/DubbaThonyVibecodes/go-libopus/celt"
 // Compute reflection coefficients from input signal
 //
 // C: void silk_burg_modified_c(opus_int32 *res_nrg, opus_int *res_nrg_Q, opus_int32 A_Q16[], const opus_int16 x[], const opus_int32 minInvGain_Q30, const opus_int subfr_length, const opus_int nb_subfr, const opus_int D, int arch)
-// C: #define silk_burg_modified(res_nrg, res_nrg_Q, A_Q16, x, minInvGain_Q30, subfr_length, nb_subfr, D, arch) ((void)(arch), silk_burg_modified_c(res_nrg, res_nrg_Q, A_Q16, x, minInvGain_Q30, subfr_length, nb_subfr, D, arch))
+// C: #define silk_burg_modified(res_nrg, res_nrg_Q, A_Q16, x, minInvGain_Q30, subfr_length, nb_subfr, D, arch) ((void)(arch), silk_burg_modified_c(res_nrg, res_nrg_Q, A_Q16, x, minInvGain_Q30, subfr_length, nb_subfr, D, arch))   (#if !defined(OVERRIDE_silk_burg_modified))
 func BurgModified(
 	res_nrg *int32, // O    Residual energy
 	res_nrg_Q *int, // O    Residual energy Q value
@@ -40,7 +40,7 @@ func BurgModified(
 	silk_assert(subfr_length*nb_subfr <= MAX_FRAME_SIZE)
 
 	// Compute autocorrelations, added over subframes
-	C0_64 = InnerProd16Aligned64(x, x, subfr_length*nb_subfr, arch)
+	C0_64 = InnerProd16(x, x, subfr_length*nb_subfr, arch)
 	lz = int(CLZ64(C0_64))
 	rshifts = 32 + 1 + N_BITS_HEAD_ROOM - lz
 	if rshifts > MAX_RSHIFTS {
@@ -64,7 +64,7 @@ func BurgModified(
 			x_ptr = x[s*subfr_length:]
 			for n = 1; n < D+1; n++ {
 				C_first_row[n-1] += int32(RSHIFT64(
-					InnerProd16Aligned64(x_ptr, x_ptr[n:], subfr_length-n, arch), rshifts))
+					InnerProd16(x_ptr, x_ptr[n:], subfr_length-n, arch), rshifts))
 			}
 		}
 	} else {
@@ -129,7 +129,7 @@ func BurgModified(
 					C_first_row[k] = MLA(C_first_row[k], x1, x_ptr[n-k-1])          // Q( -rshifts )
 					C_last_row[k] = MLA(C_last_row[k], x2, x_ptr[subfr_length-n+k]) // Q( -rshifts )
 					Atmp1 = RSHIFT_ROUND(Af_QA[k], QA-17)                           // Q17
-					// We sometimes have get overflows in the multiplications (even beyond +/- 2^32),
+					// We sometimes get overflows in the multiplications (even beyond +/- 2^32),
 					// but they cancel each other and the real result seems to always fit in a 32-bit
 					// signed integer. This was determined experimentally, not theoretically (unfortunately).
 					tmp1 = MLA_ovflw(tmp1, x_ptr[n-k-1], Atmp1)            // Q17
@@ -236,7 +236,7 @@ func BurgModified(
 		if rshifts > 0 {
 			for s = 0; s < nb_subfr; s++ {
 				x_ptr = x[s*subfr_length:]
-				C0 -= int32(RSHIFT64(InnerProd16Aligned64(x_ptr, x_ptr, D, arch), rshifts))
+				C0 -= int32(RSHIFT64(InnerProd16(x_ptr, x_ptr, D, arch), rshifts))
 			}
 		} else {
 			for s = 0; s < nb_subfr; s++ {

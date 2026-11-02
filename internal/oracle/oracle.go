@@ -463,6 +463,8 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 			complexity = int32(atoi(next()))
 		case "--fec":
 			fec = 1
+		case "--fec2":
+			fec = 2
 		case "--lossperc":
 			lossperc = int32(atoi(next()))
 		case "--dtx":

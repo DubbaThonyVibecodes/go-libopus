@@ -59,7 +59,7 @@ func (state *StereoEncState) StereoLRToMS(x1 []int16, x2 []int16, ix *[2][3]int8
 	LP_mid = make([]int16, frame_length)
 	HP_mid = make([]int16, frame_length)
 	for n = 0; n < frame_length; n++ {
-		sum = RSHIFT_ROUND(ADD_LSHIFT(int32(mid[n])+int32(mid[n+2]), mid[n+1], 1), 2)
+		sum = RSHIFT_ROUND(ADD_LSHIFT32(int32(mid[n])+int32(mid[n+2]), mid[n+1], 1), 2)
 		LP_mid[n] = int16(sum)
 		HP_mid[n] = int16(int32(mid[n+1]) - sum)
 	}
@@ -68,7 +68,7 @@ func (state *StereoEncState) StereoLRToMS(x1 []int16, x2 []int16, ix *[2][3]int8
 	LP_side = make([]int16, frame_length)
 	HP_side = make([]int16, frame_length)
 	for n = 0; n < frame_length; n++ {
-		sum = RSHIFT_ROUND(ADD_LSHIFT(int32(side[n])+int32(side[n+2]), side[n+1], 1), 2)
+		sum = RSHIFT_ROUND(ADD_LSHIFT32(int32(side[n])+int32(side[n+2]), side[n+1], 1), 2)
 		LP_side[n] = int16(sum)
 		HP_side[n] = int16(int32(side[n+1]) - sum)
 	}
@@ -193,20 +193,20 @@ func (state *StereoEncState) StereoLRToMS(x1 []int16, x2 []int16, ix *[2][3]int8
 		pred0_Q13 += int32(delta0_Q13)
 		pred1_Q13 += int32(delta1_Q13)
 		w_Q24 += deltaw_Q24
-		sum = LSHIFT(ADD_LSHIFT(int32(mid[n])+int32(mid[n+2]), mid[n+1], 1), 9) /* Q11 */
-		sum = SMLAWB(SMULWB(w_Q24, side[n+1]), sum, pred0_Q13)                  /* Q8  */
-		sum = SMLAWB(sum, LSHIFT(int32(mid[n+1]), 11), pred1_Q13)               /* Q8  */
-		x2[n+1] = int16(SAT16(RSHIFT_ROUND(sum, 8)))                            /* C: x2[ n - 1 ] */
+		sum = LSHIFT(ADD_LSHIFT32(int32(mid[n])+int32(mid[n+2]), mid[n+1], 1), 9) /* Q11 */
+		sum = SMLAWB(SMULWB(w_Q24, side[n+1]), sum, pred0_Q13)                    /* Q8  */
+		sum = SMLAWB(sum, LSHIFT(int32(mid[n+1]), 11), pred1_Q13)                 /* Q8  */
+		x2[n+1] = int16(SAT16(RSHIFT_ROUND(sum, 8)))                              /* C: x2[ n - 1 ] */
 	}
 
 	pred0_Q13 = -pred_Q13[0]
 	pred1_Q13 = -pred_Q13[1]
 	w_Q24 = LSHIFT(width_Q14, 10)
 	for n = STEREO_INTERP_LEN_MS * fs_kHz; n < frame_length; n++ {
-		sum = LSHIFT(ADD_LSHIFT(int32(mid[n])+int32(mid[n+2]), mid[n+1], 1), 9) /* Q11 */
-		sum = SMLAWB(SMULWB(w_Q24, side[n+1]), sum, pred0_Q13)                  /* Q8  */
-		sum = SMLAWB(sum, LSHIFT(int32(mid[n+1]), 11), pred1_Q13)               /* Q8  */
-		x2[n+1] = int16(SAT16(RSHIFT_ROUND(sum, 8)))                            /* C: x2[ n - 1 ] */
+		sum = LSHIFT(ADD_LSHIFT32(int32(mid[n])+int32(mid[n+2]), mid[n+1], 1), 9) /* Q11 */
+		sum = SMLAWB(SMULWB(w_Q24, side[n+1]), sum, pred0_Q13)                    /* Q8  */
+		sum = SMLAWB(sum, LSHIFT(int32(mid[n+1]), 11), pred1_Q13)                 /* Q8  */
+		x2[n+1] = int16(SAT16(RSHIFT_ROUND(sum, 8)))                              /* C: x2[ n - 1 ] */
 	}
 	state.pred_prev_Q13[0] = int16(pred_Q13[0])
 	state.pred_prev_Q13[1] = int16(pred_Q13[1])

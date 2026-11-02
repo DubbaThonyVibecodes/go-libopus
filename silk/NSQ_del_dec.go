@@ -321,7 +321,7 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 		/* Long-term shaping */
 		if lag > 0 {
 			/* Symmetric, packed FIR coefficients */
-			n_LTP_Q14 = SMULWB(ADD32(NSQ.sLTP_shp_Q14[shp_lag_ptr+0], NSQ.sLTP_shp_Q14[shp_lag_ptr-2]), HarmShapeFIRPacked_Q14)
+			n_LTP_Q14 = SMULWB(ADD_SAT32(NSQ.sLTP_shp_Q14[shp_lag_ptr+0], NSQ.sLTP_shp_Q14[shp_lag_ptr-2]), HarmShapeFIRPacked_Q14)
 			n_LTP_Q14 = SMLAWT(n_LTP_Q14, NSQ.sLTP_shp_Q14[shp_lag_ptr-1], HarmShapeFIRPacked_Q14)
 			n_LTP_Q14 = SUB_LSHIFT32(LTP_pred_Q14, n_LTP_Q14, 2) /* Q12 -> Q14 */
 			shp_lag_ptr++
@@ -378,9 +378,9 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 
 			/* Input minus prediction plus noise feedback                       */
 			/* r = x[ i ] - LTP_pred - LPC_pred + n_AR + n_Tilt + n_LF + n_LTP  */
-			tmp1 = ADD32(n_AR_Q14, n_LF_Q14)      /* Q14 */
+			tmp1 = ADD_SAT32(n_AR_Q14, n_LF_Q14)  /* Q14 */
 			tmp2 = ADD32(n_LTP_Q14, LPC_pred_Q14) /* Q13 */
-			tmp1 = SUB32(tmp2, tmp1)              /* Q13 */
+			tmp1 = SUB_SAT32(tmp2, tmp1)          /* Q13 */
 			tmp1 = RSHIFT_ROUND(tmp1, 4)          /* Q10 */
 
 			r_Q10 = SUB32(x_Q10[i], tmp1) /* residual error Q10 */
@@ -462,7 +462,7 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 			/* Update states */
 			psSS[0].Diff_Q14 = SUB_LSHIFT32(xq_Q14, x_Q10[i], 4)
 			sLF_AR_shp_Q14 = SUB32(psSS[0].Diff_Q14, n_AR_Q14)
-			psSS[0].sLTP_shp_Q14 = SUB32(sLF_AR_shp_Q14, n_LF_Q14)
+			psSS[0].sLTP_shp_Q14 = SUB_SAT32(sLF_AR_shp_Q14, n_LF_Q14)
 			psSS[0].LF_AR_Q14 = sLF_AR_shp_Q14
 			psSS[0].LPC_exc_Q14 = LPC_exc_Q14
 			psSS[0].xq_Q14 = xq_Q14
@@ -482,7 +482,7 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 			/* Update states */
 			psSS[1].Diff_Q14 = SUB_LSHIFT32(xq_Q14, x_Q10[i], 4)
 			sLF_AR_shp_Q14 = SUB32(psSS[1].Diff_Q14, n_AR_Q14)
-			psSS[1].sLTP_shp_Q14 = SUB32(sLF_AR_shp_Q14, n_LF_Q14)
+			psSS[1].sLTP_shp_Q14 = SUB_SAT32(sLF_AR_shp_Q14, n_LF_Q14)
 			psSS[1].LF_AR_Q14 = sLF_AR_shp_Q14
 			psSS[1].LPC_exc_Q14 = LPC_exc_Q14
 			psSS[1].xq_Q14 = xq_Q14

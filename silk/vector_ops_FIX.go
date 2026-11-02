@@ -53,9 +53,9 @@ func InnerProdAligned(
 	return celt.InnerProd(inVec1, inVec2, len, arch)
 }
 
-// C: opus_int64 silk_inner_prod16_aligned_64_c(const opus_int16 *inVec1, const opus_int16 *inVec2, const opus_int len)
-// C: #define silk_inner_prod16_aligned_64(inVec1, inVec2, len, arch) ((void)(arch),silk_inner_prod16_aligned_64_c(inVec1, inVec2, len))
-func InnerProd16Aligned64(
+// C: opus_int64 silk_inner_prod16_c(const opus_int16 *inVec1, const opus_int16 *inVec2, const opus_int len)
+// C: #define silk_inner_prod16(inVec1, inVec2, len, arch) ((void)(arch),silk_inner_prod16_c(inVec1, inVec2, len))   (#if !defined(OVERRIDE_silk_inner_prod16))
+func InnerProd16(
 	inVec1 []int16, //    I input vector 1
 	inVec2 []int16, //    I input vector 2
 	len int, //    I vector lengths

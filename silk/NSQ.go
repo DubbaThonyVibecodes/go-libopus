@@ -102,9 +102,9 @@ func (psEncC *EncoderState) NSQ(NSQ *NsqState, psIndices *SideInfoIndices, x16 [
 	copy(NSQ.sLTP_shp_Q14[:psEncC.ltp_mem_length], NSQ.sLTP_shp_Q14[psEncC.frame_length:psEncC.frame_length+psEncC.ltp_mem_length])
 }
 
-/***********************************/
-/* silk_noise_shape_quantizer  */
-/***********************************/
+/******************************/
+/* silk_noise_shape_quantizer */
+/******************************/
 
 // C: static OPUS_INLINE void silk_noise_shape_quantizer(
 //
@@ -185,7 +185,7 @@ func noiseShapeQuantizer(NSQ *NsqState, signalType int, x_sc_Q10 []int32, pulses
 		tmp1 = SUB32(tmp1, n_LF_Q12)                      /* Q12 */
 		if lag > 0 {
 			/* Symmetric, packed FIR coefficients */
-			n_LTP_Q13 = SMULWB(ADD32(NSQ.sLTP_shp_Q14[shp_lag_ptr+0], NSQ.sLTP_shp_Q14[shp_lag_ptr-2]), HarmShapeFIRPacked_Q14)
+			n_LTP_Q13 = SMULWB(ADD_SAT32(NSQ.sLTP_shp_Q14[shp_lag_ptr+0], NSQ.sLTP_shp_Q14[shp_lag_ptr-2]), HarmShapeFIRPacked_Q14)
 			n_LTP_Q13 = SMLAWT(n_LTP_Q13, NSQ.sLTP_shp_Q14[shp_lag_ptr-1], HarmShapeFIRPacked_Q14)
 			n_LTP_Q13 = LSHIFT(n_LTP_Q13, 1)
 			shp_lag_ptr++

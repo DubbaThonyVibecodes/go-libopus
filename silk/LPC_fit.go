@@ -2,7 +2,8 @@ package silk
 
 // C: silk/LPC_fit.c
 
-// Convert int32 coefficients to int16 coefs and make sure there's no wrap-around
+// Convert int32 coefficients to int16 coefs and make sure there's no wrap-around.
+// This logic is reused in _celt_lpc(). Any bug fixes should also be applied there.
 //
 // C: void silk_LPC_fit(opus_int16 *a_QOUT, opus_int32 *a_QIN, const opus_int QOUT, const opus_int QIN, const opus_int d)
 func LPCFit(

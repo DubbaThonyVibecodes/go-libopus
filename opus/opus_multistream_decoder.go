@@ -174,8 +174,10 @@ func (st *OpusMSDecoder) MultistreamDecodeNative(data []byte, length int32, pcm 
 		}
 		packet_offset = 0
 		ret = dec.DecodeNative(data, length, buf, frame_size, decode_fec, b2i(s != st.layout.nb_streams-1), &packet_offset, soft_clip)
-		data = data[packet_offset:]
-		length -= packet_offset
+		if do_plc == 0 {
+			data = data[packet_offset:]
+			length -= packet_offset
+		}
 		if ret <= 0 {
 			return ret
 		}

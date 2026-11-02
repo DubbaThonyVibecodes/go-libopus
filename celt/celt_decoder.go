@@ -30,7 +30,7 @@ type CELTDecoder struct {
 	rng                   uint32
 	error                 int
 	last_pitch_index      int
-	loss_count            int
+	loss_duration         int
 	skip_plc              int
 	postfilter_period     int
 	postfilter_period_old int
@@ -58,12 +58,12 @@ func validate_celt_decoder(st *CELTDecoder) {
 	// CUSTOM_MODES is not defined.
 	celt_assert(st.mode == CustomModeCreate(48000, 960, nil))
 	celt_assert(st.overlap == 120)
+	celt_assert(st.end <= 21)
 	celt_assert(st.channels == 1 || st.channels == 2)
 	celt_assert(st.stream_channels == 1 || st.stream_channels == 2)
 	celt_assert(st.downsample > 0)
 	celt_assert(st.start == 0 || st.start == 17)
 	celt_assert(st.start < st.end)
-	celt_assert(st.end <= 21)
 	// OPUS_ARCHMASK is not defined.
 	celt_assert(st.last_pitch_index <= PLC_PITCH_LAG_MAX)
 	celt_assert(st.last_pitch_index >= PLC_PITCH_LAG_MIN || st.last_pitch_index == 0)
@@ -408,7 +408,7 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 	var nbEBands int
 	var overlap int
 	var start int
-	var loss_count int
+	var loss_duration int
 	var noise_based int
 	var eBands []int16
 
@@ -434,9 +434,9 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 	_ = oldLogE
 	_ = oldLogE2
 
-	loss_count = st.loss_count
+	loss_duration = st.loss_duration
 	start = st.start
-	noise_based = b2i(loss_count >= 5 || start != 0 || st.skip_plc != 0)
+	noise_based = b2i(loss_duration >= 40 || start != 0 || st.skip_plc != 0)
 	if noise_based != 0 {
 		// Noise-based PLC/CNG
 		var seed uint32
@@ -447,9 +447,17 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 		effEnd = IMAX(start, IMIN(end, mode.effEBands))
 
 		X := make([]int16, C*N) // Interleaved normalised MDCTs
+		c = 0
+		for {
+			copy(decode_mem[c][:DECODE_BUFFER_SIZE-N+(overlap>>1)], decode_mem[c][N:])
+			c++
+			if c >= C {
+				break
+			}
+		}
 
 		// Energy decay
-		if loss_count == 0 {
+		if loss_duration == 0 {
 			decay = QCONST16(1.5, DB_SHIFT)
 		} else {
 			decay = QCONST16(.5, DB_SHIFT)
@@ -481,15 +489,6 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 		}
 		st.rng = seed
 
-		c = 0
-		for {
-			copy(decode_mem[c][:DECODE_BUFFER_SIZE-N+(overlap>>1)], decode_mem[c][N:])
-			c++
-			if c >= C {
-				break
-			}
-		}
-
 		celt_synthesis(mode, X, out_syn[:], oldBandE, start, effEnd, C, C, 0, LM, st.downsample, 0, st.arch)
 	} else {
 		var exc_length int
@@ -498,7 +497,7 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 		var fade int16 = Q15ONE
 		var pitch_index int
 
-		if loss_count == 0 {
+		if loss_duration == 0 {
 			pitch_index = celt_plc_pitch_search(decode_mem[:], C, st.arch)
 			st.last_pitch_index = pitch_index
 		} else {
@@ -528,10 +527,10 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 			buf = decode_mem[c]
 			// (C: exc[i-LPC_ORDER]; exc = _exc+LPC_ORDER.)
 			for i = 0; i < MAX_PERIOD+LPC_ORDER; i++ {
-				_exc[i] = ROUND16(buf[DECODE_BUFFER_SIZE-MAX_PERIOD-LPC_ORDER+i], SIG_SHIFT)
+				_exc[i] = SROUND16(buf[DECODE_BUFFER_SIZE-MAX_PERIOD-LPC_ORDER+i], SIG_SHIFT)
 			}
 
-			if loss_count == 0 {
+			if loss_duration == 0 {
 				var ac [LPC_ORDER + 1]int32
 				// Compute LPC coefficients for the last MAX_PERIOD samples before
 				// the first loss so we can work in the excitation-filter domain.
@@ -621,7 +620,7 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 						exc[extrapolation_offset+j])), SIG_SHIFT)
 				// Compute the energy of the previously decoded signal whose
 				// excitation we're copying.
-				tmp = ROUND16(
+				tmp = SROUND16(
 					buf[DECODE_BUFFER_SIZE-MAX_PERIOD-N+extrapolation_offset+j],
 					SIG_SHIFT)
 				S1 += SHR32(MULT16_16(tmp, tmp), 10)
@@ -631,7 +630,7 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 				// Copy the last decoded samples (prior to the overlap region) to
 				// synthesis filter memory so we can have a continuous signal.
 				for i = 0; i < LPC_ORDER; i++ {
-					lpc_mem[i] = ROUND16(buf[DECODE_BUFFER_SIZE-N-1-i], SIG_SHIFT)
+					lpc_mem[i] = SROUND16(buf[DECODE_BUFFER_SIZE-N-1-i], SIG_SHIFT)
 				}
 				// Apply the synthesis filter to convert the excitation back into
 				// the signal domain.
@@ -649,7 +648,7 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 			{
 				var S2 int32 = 0
 				for i = 0; i < extrapolation_len; i++ {
-					var tmp int16 = ROUND16(buf[DECODE_BUFFER_SIZE-N+i], SIG_SHIFT)
+					var tmp int16 = SROUND16(buf[DECODE_BUFFER_SIZE-N+i], SIG_SHIFT)
 					S2 += SHR32(MULT16_16(tmp, tmp), 10)
 				}
 				// This checks for an "explosion" in the synthesis.
@@ -694,7 +693,8 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 		}
 	}
 
-	st.loss_count = loss_count + 1
+	// Saturate to soemthing large to avoid wrap-around.
+	st.loss_duration = IMIN(10000, loss_duration+(1<<uint(LM)))
 }
 
 // DecodeWithEc decodes one frame. data==nil or len<=1 triggers packet loss
@@ -715,6 +715,7 @@ func (st *CELTDecoder) DecodeWithEc(data []byte, length int, pcm []int16, frame_
 
 	var shortBlocks int
 	var isTransient int
+	var max_background_increase int16
 	var intra_ener int
 	CC := st.channels
 	var LM, M int
@@ -797,7 +798,7 @@ func (st *CELTDecoder) DecodeWithEc(data []byte, length int, pcm []int16, frame_
 
 	// Check if there are at least two packets received consecutively before
 	// turning on the pitch-based PLC
-	st.skip_plc = b2i(st.loss_count != 0)
+	st.skip_plc = b2i(st.loss_duration != 0)
 
 	if dec == nil {
 		_dec.DecInit(data, uint32(length))
@@ -1015,27 +1016,22 @@ func (st *CELTDecoder) DecodeWithEc(data []byte, length int, pcm []int16, frame_
 		copy(oldBandE[nbEBands:nbEBands+nbEBands], oldBandE[:nbEBands])
 	}
 
-	// In case start or end were to change
 	if isTransient == 0 {
-		var max_background_increase int16
 		copy(oldLogE2[:2*nbEBands], oldLogE[:2*nbEBands])
 		copy(oldLogE[:2*nbEBands], oldBandE[:2*nbEBands])
-		// In normal circumstances, we only allow the noise floor to increase by
-		// up to 2.4 dB/second, but when we're in DTX, we allow up to 6 dB
-		// increase for each update.
-		if st.loss_count < 10 {
-			max_background_increase = int16(M * int(QCONST16(0.001, DB_SHIFT)))
-		} else {
-			max_background_increase = QCONST16(1.0, DB_SHIFT)
-		}
-		for i = 0; i < 2*nbEBands; i++ {
-			backgroundLogE[i] = MIN16(backgroundLogE[i]+max_background_increase, oldBandE[i])
-		}
 	} else {
 		for i = 0; i < 2*nbEBands; i++ {
 			oldLogE[i] = MIN16(oldLogE[i], oldBandE[i])
 		}
 	}
+	// In normal circumstances, we only allow the noise floor to increase by
+	// up to 2.4 dB/second, but when we're in DTX we give the weight of
+	// all missing packets to the update packet.
+	max_background_increase = int16(IMIN(160, st.loss_duration+M) * int(QCONST16(0.001, DB_SHIFT)))
+	for i = 0; i < 2*nbEBands; i++ {
+		backgroundLogE[i] = MIN16(backgroundLogE[i]+max_background_increase, oldBandE[i])
+	}
+	// In case start or end were to change
 	c = 0
 	for {
 		for i = 0; i < start; i++ {
@@ -1056,7 +1052,7 @@ func (st *CELTDecoder) DecodeWithEc(data []byte, length int, pcm []int16, frame_
 	st.rng = dec.rng
 
 	deemphasis(out_syn[:], pcm, N, CC, st.downsample, mode.preemph[:], st.preemph_memD[:], accum)
-	st.loss_count = 0
+	st.loss_duration = 0
 	if dec.Tell() > 8*length {
 		return OPUS_INTERNAL_ERROR
 	}
@@ -1108,7 +1104,7 @@ func (st *CELTDecoder) Ctl(request int, args ...any) int {
 		st.rng = 0
 		st.error = 0
 		st.last_pitch_index = 0
-		st.loss_count = 0
+		st.loss_duration = 0
 		st.skip_plc = 0
 		st.postfilter_period = 0
 		st.postfilter_period_old = 0

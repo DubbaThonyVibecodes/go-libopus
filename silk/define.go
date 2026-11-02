@@ -186,7 +186,8 @@ const (
 	BWE_AFTER_LOSS_Q16 = 63570
 
 	// Defines for CN generation
-	CNG_BUF_MASK_MAX  = 255   // 2^floor(log2(MAX_FRAME_LENGTH))-1
-	CNG_GAIN_SMTH_Q16 = 4634  // 0.25^(1/4)
-	CNG_NLSF_SMTH_Q16 = 16348 // 0.25
+	CNG_BUF_MASK_MAX            = 255   // 2^floor(log2(MAX_FRAME_LENGTH))-1
+	CNG_GAIN_SMTH_Q16           = 4634  // 0.25^(1/4)
+	CNG_GAIN_SMTH_THRESHOLD_Q16 = 46396 // -3 dB
+	CNG_NLSF_SMTH_Q16           = 16348 // 0.25
 )

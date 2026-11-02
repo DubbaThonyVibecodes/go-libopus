@@ -400,6 +400,14 @@ func cases() []encCase {
 	ms("surround_fam1_6ch_16k", synth("bursts", 16000, 6), "--app audio --bitrate 128000 --family 1", famMaps[6])
 	ms("surround_fam1_6ch_voip_fs40", synth("bursts", 48000, 6), "--app voip --bitrate 128000 --framesize 40 --family 1", famMaps[6])
 
+	// libopus 1.4: FEC mode 2 (FEC without forcing SILK for music) and the new DTX timing
+	add("mix_48k_audio_fec2_loss20", m48, "--app audio --bitrate 48000 --fec2 --lossperc 20", fecloss(20, 70), loss(20, 70))
+	add("speech_a_16k_voip_fec2_loss10", sa16, "--app voip --bitrate 24000 --fec2 --lossperc 10", fecloss(10, 71))
+	add("piano_48k_audio_fec2_loss30_dtx", p48, "--app audio --bitrate 64000 --fec2 --lossperc 30 --dtx", fecloss(30, 72))
+	sch("mix_48k_sched_fec2", m48, "--app voip --bitrate 32000", "f=20:fec=2,f=40:lossperc=20,f=60:fec=1,f=80:fec=2,f=100:lossperc=50,f=120:fec=0", fecloss(20, 73))
+	add("synth_bursts_16k_voip_dtx_fs60", synth("bursts", 16000, 1), "--app voip --bitrate 20000 --dtx --framesize 60")
+	add("synth_lowlevel_48k_voip_dtx_fs10", synth("lowlevel", 48000, 2), "--app voip --bitrate 32000 --dtx --framesize 10")
+
 	// libopus 1.3: ambisonics (mapping family 2: ACN channels as mono streams plus an
 	// optional non-diegetic stereo pair; family 3: projection encoder/decoder).
 	amb := func(ch int) string {

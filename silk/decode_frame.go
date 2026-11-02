@@ -61,7 +61,6 @@ func (psDec *DecoderState) DecodeFrame(psRangeDec *celt.EcDec, pOut []int16, pN 
 		psDec.first_frame_after_reset = 0
 	} else {
 		/* Handle packet loss by extrapolation */
-		psDec.indices.signalType = int8(psDec.prevSignalType)
 		psDec.PLC(psDecCtrl, pOut, 1, arch)
 	}
 

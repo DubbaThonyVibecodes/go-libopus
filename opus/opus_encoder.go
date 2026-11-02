@@ -44,6 +44,7 @@ type OpusEncoder struct {
 	lfe                int
 	arch               int
 	use_dtx            int // general DTX for both SILK and CELT
+	fec_config         int
 	analysis           TonalityAnalysisState
 
 	// Everything beyond this point gets cleared on a reset (OPUS_ENCODER_RESET_START)
@@ -61,15 +62,15 @@ type OpusEncoder struct {
 	auto_bandwidth int
 	silk_bw_switch int
 	// Sampling rate (at the API level)
-	first                 int
-	energy_masking        []int16
-	width_mem             StereoWidthState
-	delay_buffer          [MAX_ENCODER_BUFFER * 2]int16
-	detected_bandwidth    int
-	nb_no_activity_frames int
-	peak_signal_energy    int32
-	nonfinal_frame        int // current frame is not the final in a packet
-	rangeFinal            uint32
+	first                int
+	energy_masking       []int16
+	width_mem            StereoWidthState
+	delay_buffer         [MAX_ENCODER_BUFFER * 2]int16
+	detected_bandwidth   int
+	nb_no_activity_ms_Q1 int
+	peak_signal_energy   int32
+	nonfinal_frame       int // current frame is not the final in a packet
+	rangeFinal           uint32
 
 	silk_enc silk.Encoder
 	celt_enc celt.CELTEncoder
@@ -745,43 +746,27 @@ func compute_frame_energy(pcm []int16, frame_size int, channels int, arch int) i
 
 // Decides if DTX should be turned on (=1) or off (=0)
 //
-// C: static int decide_dtx_mode(float activity_probability, int *nb_no_activity_frames, opus_val32 peak_signal_energy,
-//
-//	const opus_val16 *pcm, int frame_size, int channels, int is_silence, int arch)
-func decide_dtx_mode(activity_probability float32, // probability that current frame contains speech/music
-	nb_no_activity_frames *int, // number of consecutive frames with no activity
-	peak_signal_energy int32, // peak energy of desired signal detected so far
-	pcm []int16, // input pcm signal
-	frame_size int, // frame size
-	channels int,
-	is_silence int, // only digital silence detected in this frame
-	arch int,
+// C: static int decide_dtx_mode(opus_int activity, int *nb_no_activity_ms_Q1, int frame_size_ms_Q1)
+func decide_dtx_mode(activity int, // indicates if this frame contains speech/music
+	nb_no_activity_ms_Q1 *int, // number of consecutive milliseconds with no activity, in Q1
+	frame_size_ms_Q1 int, // number of miliseconds in this update, in Q1
 ) int {
-	var noise_energy int32
-
-	if is_silence == 0 {
-		if activity_probability < silk.DTX_ACTIVITY_THRESHOLD { // is noise
-			noise_energy = compute_frame_energy(pcm, frame_size, channels, arch)
-
-			// but is sufficiently quiet
-			is_silence = b2i(float32(peak_signal_energy) >= float32(PSEUDO_SNR_THRESHOLD*float32(noise_energy)))
-		}
-	}
-
-	if is_silence != 0 {
-		// The number of consecutive DTX frames should be within the allowed bounds
-		(*nb_no_activity_frames)++
-
-		if *nb_no_activity_frames > silk.NB_SPEECH_FRAMES_BEFORE_DTX {
-			if *nb_no_activity_frames <= (silk.NB_SPEECH_FRAMES_BEFORE_DTX + silk.MAX_CONSECUTIVE_DTX) {
+	if activity == 0 {
+		// The number of consecutive DTX frames should be within the allowed bounds.
+		// Note that the allowed bound is defined in the SILK headers and assumes 20 ms
+		// frames. As this function can be called with any frame length, a conversion to
+		// milliseconds is done before the comparisons.
+		(*nb_no_activity_ms_Q1) += frame_size_ms_Q1
+		if *nb_no_activity_ms_Q1 > silk.NB_SPEECH_FRAMES_BEFORE_DTX*20*2 {
+			if *nb_no_activity_ms_Q1 <= (silk.NB_SPEECH_FRAMES_BEFORE_DTX+silk.MAX_CONSECUTIVE_DTX)*20*2 {
 				// Valid frame for DTX!
 				return 1
 			} else {
-				(*nb_no_activity_frames) = silk.NB_SPEECH_FRAMES_BEFORE_DTX
+				(*nb_no_activity_ms_Q1) = silk.NB_SPEECH_FRAMES_BEFORE_DTX * 20 * 2
 			}
 		}
 	} else {
-		(*nb_no_activity_frames) = 0
+		(*nb_no_activity_ms_Q1) = 0
 	}
 
 	return 0
@@ -953,6 +938,7 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	var analysis_read_pos_bak int = -1
 	var analysis_read_subframe_bak int = -1
 	var is_silence int = 0
+	var activity int = silk.VAD_NO_DECISION
 
 	max_data_bytes = IMIN(1276, out_data_bytes)
 
@@ -999,6 +985,17 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	// Otherwise, preserve voice_ratio from the last non-silent frame
 	if is_silence == 0 {
 		st.voice_ratio = -1
+	}
+
+	if is_silence != 0 {
+		activity = b2i(is_silence == 0)
+	} else if analysis_info.Valid != 0 {
+		activity = b2i(analysis_info.Activity_probability >= silk.DTX_ACTIVITY_THRESHOLD)
+		if activity == 0 {
+			// Mark as active if this noise frame is sufficiently loud
+			var noise_energy int32 = compute_frame_energy(pcm, frame_size, st.channels, st.arch)
+			activity = b2i(float32(st.peak_signal_energy) < float32(PSEUDO_SNR_THRESHOLD*float32(noise_energy)))
+		}
 	}
 
 	st.detected_bandwidth = 0
@@ -1210,8 +1207,9 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 			st.mode = MODE_SILK_ONLY
 		}
 
-		// When FEC is enabled and there's enough packet loss, use SILK
-		if st.silk_mode.UseInBandFEC != 0 && st.silk_mode.PacketLossPercentage > (128-voice_est)>>4 {
+		// When FEC is enabled and there's enough packet loss, use SILK.
+		// Unless the FEC is set to 2, in which case we don't switch to SILK if we're confident we have music.
+		if st.silk_mode.UseInBandFEC != 0 && st.silk_mode.PacketLossPercentage > (128-voice_est)>>4 && (st.fec_config != 2 || voice_est > 25) {
 			st.mode = MODE_SILK_ONLY
 		}
 		// When encoding voice and DTX is enabled but the generalized DTX cannot be used,
@@ -1488,14 +1486,7 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	HB_gain = celt.Q15ONE
 	if st.mode != MODE_CELT_ONLY {
 		var total_bitRate, celt_rate int32
-		var activity int
 		var pcm_silk []int16
-
-		activity = silk.VAD_NO_DECISION
-		if analysis_info.Valid != 0 {
-			// Inform SILK about the Opus VAD decision
-			activity = b2i(analysis_info.Activity_probability >= silk.DTX_ACTIVITY_THRESHOLD)
-		}
 
 		// Distribute bits between SILK and CELT
 		total_bitRate = int32(8 * bytes_target * frame_rate)
@@ -1909,14 +1900,13 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 
 	// DTX decision
 	if st.use_dtx != 0 && (analysis_info.Valid != 0 || is_silence != 0) {
-		if decide_dtx_mode(analysis_info.Activity_probability, &st.nb_no_activity_frames,
-			st.peak_signal_energy, pcm, frame_size, st.channels, is_silence, st.arch) != 0 {
+		if decide_dtx_mode(activity, &st.nb_no_activity_ms_Q1, 2*1000*frame_size/int(st.Fs)) != 0 {
 			st.rangeFinal = 0
 			data[0] = gen_toc(st.mode, int(st.Fs)/frame_size, curr_bandwidth, st.stream_channels)
 			return 1
 		}
 	} else {
-		st.nb_no_activity_frames = 0
+		st.nb_no_activity_ms_Q1 = 0
 	}
 
 	// In the unlikely case that the SILK encoder busted its target, tell
@@ -2122,16 +2112,17 @@ func (st *OpusEncoder) Ctl(request int, args ...any) int {
 		*value = int32(st.silk_mode.Complexity)
 	case OPUS_SET_INBAND_FEC_REQUEST:
 		value, ok := argInt32(args, 0)
-		if !ok || value < 0 || value > 1 {
+		if !ok || value < 0 || value > 2 {
 			return OPUS_BAD_ARG
 		}
-		st.silk_mode.UseInBandFEC = int(value)
+		st.fec_config = int(value)
+		st.silk_mode.UseInBandFEC = b2i(value != 0)
 	case OPUS_GET_INBAND_FEC_REQUEST:
 		value, ok := args[0].(*int32)
 		if !ok || value == nil {
 			return OPUS_BAD_ARG
 		}
-		*value = int32(st.silk_mode.UseInBandFEC)
+		*value = int32(st.fec_config)
 	case OPUS_SET_PACKET_LOSS_PERC_REQUEST:
 		value, ok := argInt32(args, 0)
 		if !ok || value < 0 || value > 100 {
@@ -2290,7 +2281,7 @@ func (st *OpusEncoder) Ctl(request int, args ...any) int {
 		st.width_mem = StereoWidthState{}
 		st.delay_buffer = [MAX_ENCODER_BUFFER * 2]int16{}
 		st.detected_bandwidth = 0
-		st.nb_no_activity_frames = 0
+		st.nb_no_activity_ms_Q1 = 0
 		st.peak_signal_energy = 0
 		st.nonfinal_frame = 0
 		st.rangeFinal = 0
@@ -2339,15 +2330,15 @@ func (st *OpusEncoder) Ctl(request int, args ...any) int {
 		}
 		if st.silk_mode.UseDTX != 0 && (st.prev_mode == MODE_SILK_ONLY || st.prev_mode == MODE_HYBRID) {
 			// DTX determined by Silk.
-			var n int
 			silk_enc := &st.silk_enc
-			*value = 1
-			for n = 0; n < int(st.silk_mode.NChannelsInternal); n++ {
-				*value = int32(b2i(*value != 0 && silk_enc.NoSpeechCounter(n) >= silk.NB_SPEECH_FRAMES_BEFORE_DTX))
+			*value = int32(b2i(silk_enc.NoSpeechCounter(0) >= silk.NB_SPEECH_FRAMES_BEFORE_DTX))
+			// Stereo: check second channel unless only the middle channel was encoded.
+			if *value == 1 && st.silk_mode.NChannelsInternal == 2 && silk_enc.PrevDecodeOnlyMiddle() == 0 {
+				*value = int32(b2i(silk_enc.NoSpeechCounter(1) >= silk.NB_SPEECH_FRAMES_BEFORE_DTX))
 			}
 		} else if st.use_dtx != 0 {
 			// DTX determined by Opus.
-			*value = int32(b2i(st.nb_no_activity_frames >= silk.NB_SPEECH_FRAMES_BEFORE_DTX))
+			*value = int32(b2i(st.nb_no_activity_ms_Q1 >= silk.NB_SPEECH_FRAMES_BEFORE_DTX*20*2))
 		} else {
 			*value = 0
 		}

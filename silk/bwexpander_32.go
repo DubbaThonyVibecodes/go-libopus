@@ -2,7 +2,8 @@ package silk
 
 // C: silk/bwexpander_32.c
 
-// Chirp (bandwidth expand) LP AR filter
+// Chirp (bandwidth expand) LP AR filter.
+// This logic is reused in _celt_lpc(). Any bug fixes should also be applied there.
 //
 // C: void silk_bwexpander_32(opus_int32 *ar, const opus_int d, opus_int32 chirp_Q16)
 func Bwexpander32(

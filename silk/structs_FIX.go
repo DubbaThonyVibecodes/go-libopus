@@ -72,3 +72,7 @@ func (e *Encoder) VariableHPSmth1Q15() int32 { return e.state_Fxx[0].sCmn.variab
 // NoSpeechCounter returns state_Fxx[n].sCmn.noSpeechCounter (read by
 // opus_encoder_ctl(OPUS_GET_IN_DTX) in src/opus_encoder.c).
 func (e *Encoder) NoSpeechCounter(n int) int { return e.state_Fxx[n].sCmn.noSpeechCounter }
+
+// PrevDecodeOnlyMiddle returns prev_decode_only_middle (read by
+// opus_encoder_ctl(OPUS_GET_IN_DTX) in src/opus_encoder.c since 1.4).
+func (e *Encoder) PrevDecodeOnlyMiddle() int { return e.prev_decode_only_middle }

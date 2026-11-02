@@ -209,7 +209,12 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 		dec.DecInit(data, uint32(length))
 	} else {
 		audiosize = frame_size
-		mode = st.prev_mode
+		// Run PLC using last used mode (CELT if we ended with CELT redundancy)
+		if st.prev_redundancy != 0 {
+			mode = MODE_CELT_ONLY
+		} else {
+			mode = st.prev_mode
+		}
 		bandwidth = 0
 
 		if mode == 0 {
@@ -348,7 +353,7 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 
 	start_band = 0
 	if decode_fec == 0 && mode != MODE_CELT_ONLY && data != nil &&
-		dec.Tell()+17+20*b2i(st.mode == MODE_HYBRID) <= 8*int(length) {
+		dec.Tell()+17+20*b2i(mode == MODE_HYBRID) <= 8*int(length) {
 		// Check if we have a redundant 0-8 kHz band
 		if mode == MODE_HYBRID {
 			redundancy = dec.DecBitLogp(12)
@@ -421,6 +426,11 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 
 	// 5 ms redundant frame for CELT->SILK
 	if redundancy != 0 && celt_to_silk != 0 {
+		// If the previous frame did not use CELT (the first redundancy frame in
+		// a transition from SILK may have been lost) then the CELT decoder is
+		// stale at this point and the redundancy audio is not useful, however
+		// the final range is still needed (for testing), so the redundancy is
+		// always decoded but the decoded audio may not be used
 		celt.MustSucceed(celt_dec.Ctl(celt.CELT_SET_START_BAND_REQUEST, int32(0)))
 		celt_dec.DecodeWithEc(data[length:], redundancy_bytes,
 			redundant_audio, F5, nil, 0)
@@ -480,7 +490,10 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 		smooth_fade(pcm[st.channels*(frame_size-F2_5):], redundant_audio[st.channels*F2_5:],
 			pcm[st.channels*(frame_size-F2_5):], F2_5, st.channels, window, st.Fs)
 	}
-	if redundancy != 0 && celt_to_silk != 0 {
+	// 5ms redundant frame for CELT->SILK; ignore if the previous frame did not
+	// use CELT (the first redundancy frame in a transition from SILK may have
+	// been lost)
+	if redundancy != 0 && celt_to_silk != 0 && (st.prev_mode != MODE_SILK_ONLY || st.prev_redundancy != 0) {
 		for c = 0; c < st.channels; c++ {
 			for i = 0; i < F2_5; i++ {
 				pcm[st.channels*i+c] = redundant_audio[st.channels*i+c]

@@ -83,6 +83,10 @@ func (psDec *DecoderState) CNG(psDecCtrl *DecoderControl, frame []int16, length 
 		/* Smooth gains */
 		for i = 0; i < psDec.nb_subfr; i++ {
 			psCNG.CNG_smth_Gain_Q16 += SMULWB(psDecCtrl.Gains_Q16[i]-psCNG.CNG_smth_Gain_Q16, CNG_GAIN_SMTH_Q16)
+			/* If the smoothed gain is 3 dB greater than this subframe's gain, use this subframe's gain to adapt faster. */
+			if SMULWW(psCNG.CNG_smth_Gain_Q16, CNG_GAIN_SMTH_THRESHOLD_Q16) > psDecCtrl.Gains_Q16[i] {
+				psCNG.CNG_smth_Gain_Q16 = psDecCtrl.Gains_Q16[i]
+			}
 		}
 	}
 

@@ -1387,7 +1387,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		}
 		effectiveBytes = nbCompressedBytes - nbFilledBytes
 	}
-	equiv_rate = (int32(nbCompressedBytes) * 8 * 50 >> uint(3-LM)) - int32((40*C+20)*((400>>uint(LM))-50))
+	equiv_rate = (int32(nbCompressedBytes) * 8 * 50 << uint(3-LM)) - int32((40*C+20)*((400>>uint(LM))-50))
 	if st.bitrate != OPUS_BITRATE_MAX {
 		equiv_rate = IMIN(equiv_rate, st.bitrate-int32((40*C+20)*((400>>uint(LM))-50)))
 	}
@@ -1528,8 +1528,10 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		compute_mdcts(mode, 0, in, freq, C, CC, LM, st.upsample, st.arch)
 		ComputeBandEnergies(mode, freq, bandE, effEnd, C, LM, st.arch)
 		Amp2Log2(mode, effEnd, end, bandE, bandLogE2, C)
-		for i = 0; i < C*nbEBands; i++ {
-			bandLogE2[i] += int16(HALF16(SHL16(LM, DB_SHIFT)))
+		for c = 0; c < C; c++ {
+			for i = 0; i < end; i++ {
+				bandLogE2[nbEBands*c+i] += int16(HALF16(SHL16(LM, DB_SHIFT)))
+			}
 		}
 	}
 
@@ -1663,8 +1665,10 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 			ComputeBandEnergies(mode, freq, bandE, effEnd, C, LM, st.arch)
 			Amp2Log2(mode, effEnd, end, bandE, bandLogE, C)
 			// Compensate for the scaling of short vs long mdcts
-			for i = 0; i < C*nbEBands; i++ {
-				bandLogE2[i] += int16(HALF16(SHL16(LM, DB_SHIFT)))
+			for c = 0; c < C; c++ {
+				for i = 0; i < end; i++ {
+					bandLogE2[nbEBands*c+i] += int16(HALF16(SHL16(LM, DB_SHIFT)))
+				}
 			}
 			tf_estimate = QCONST16(.2, 14)
 		}

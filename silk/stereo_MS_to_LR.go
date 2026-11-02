@@ -40,17 +40,17 @@ func (state *StereoDecState) StereoMSToLR(x1 []int16, x2 []int16, pred_Q13 []int
 	for n = 0; n < STEREO_INTERP_LEN_MS*fs_kHz; n++ {
 		pred0_Q13 += int32(delta0_Q13)
 		pred1_Q13 += int32(delta1_Q13)
-		sum = LSHIFT(ADD_LSHIFT(int32(x1[n])+int32(x1[n+2]), x1[n+1], 1), 9) /* Q11 */
-		sum = SMLAWB(LSHIFT(int32(x2[n+1]), 8), sum, pred0_Q13)              /* Q8  */
-		sum = SMLAWB(sum, LSHIFT(int32(x1[n+1]), 11), pred1_Q13)             /* Q8  */
+		sum = LSHIFT(ADD_LSHIFT32(int32(x1[n])+int32(x1[n+2]), x1[n+1], 1), 9) /* Q11 */
+		sum = SMLAWB(LSHIFT(int32(x2[n+1]), 8), sum, pred0_Q13)                /* Q8  */
+		sum = SMLAWB(sum, LSHIFT(int32(x1[n+1]), 11), pred1_Q13)               /* Q8  */
 		x2[n+1] = int16(SAT16(RSHIFT_ROUND(sum, 8)))
 	}
 	pred0_Q13 = pred_Q13[0]
 	pred1_Q13 = pred_Q13[1]
 	for n = STEREO_INTERP_LEN_MS * fs_kHz; n < frame_length; n++ {
-		sum = LSHIFT(ADD_LSHIFT(int32(x1[n])+int32(x1[n+2]), x1[n+1], 1), 9) /* Q11 */
-		sum = SMLAWB(LSHIFT(int32(x2[n+1]), 8), sum, pred0_Q13)              /* Q8  */
-		sum = SMLAWB(sum, LSHIFT(int32(x1[n+1]), 11), pred1_Q13)             /* Q8  */
+		sum = LSHIFT(ADD_LSHIFT32(int32(x1[n])+int32(x1[n+2]), x1[n+1], 1), 9) /* Q11 */
+		sum = SMLAWB(LSHIFT(int32(x2[n+1]), 8), sum, pred0_Q13)                /* Q8  */
+		sum = SMLAWB(sum, LSHIFT(int32(x1[n+1]), 11), pred1_Q13)               /* Q8  */
 		x2[n+1] = int16(SAT16(RSHIFT_ROUND(sum, 8)))
 	}
 	state.pred_prev_Q13[0] = int16(pred_Q13[0])

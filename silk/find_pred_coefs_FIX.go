@@ -18,7 +18,8 @@ package silk
 func (psEnc *EncoderStateFIX) FindPredCoefsFIX(psEncCtrl *EncoderControlFIX, res_pitch []int16, res_pitch_idx int, x []int16, condCoding int) {
 	var i int
 	var invGains_Q16, local_gains [MAX_NB_SUBFR]int32
-	var NLSF_Q15 [MAX_LPC_ORDER]int16
+	/* Set to NLSF_Q15 to zero so we don't copy junk to the state. */
+	var NLSF_Q15 [MAX_LPC_ORDER]int16 // C: ={0}; a Go array is zero-initialised
 	var x_ptr []int16
 	var x_pre_ptr []int16
 	var LPC_in_pre []int16
