@@ -61,7 +61,7 @@ lost, err := dec.Decode(nil, out[:960*2], false) // conceal a lost 20 ms packet
 ## Documentation
 
 * **API reference:** `go doc github.com/DubbaThonyVibecodes/go-libopus` or
-  [pkg.go.dev](https://pkg.go.dev/github.com/DubbaThonyVibecodes/go-libopus@v1.0),
+  [pkg.go.dev](https://pkg.go.dev/github.com/DubbaThonyVibecodes/go-libopus@v1.0.1),
   with runnable examples (encode/decode, packet loss and FEC, float input,
   surround, repacketizing).
   The reference follows the module version, so each `v1.Y` documents
