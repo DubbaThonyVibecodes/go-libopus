@@ -1,0 +1,8 @@
+# Out-of-tree reference builds of upstream libopus and downloaded material.
+/build/
+# Locally regenerated full corpus (the committed subset lives in testdata/).
+/testdata/generated/
+# Never commit personal / non-redistributable audio placed here for local testing.
+/testdata/local/
+*.test
+*.out
