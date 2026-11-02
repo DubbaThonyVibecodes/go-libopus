@@ -2,7 +2,7 @@
 
 This guide covers this module's release line v1.4.z, a pure-Go,
 bit-exact port of libopus 1.4. API reference: `go doc` or
-[pkg.go.dev](https://pkg.go.dev/github.com/DubbaThonyVibecodes/go-libopus@v1.4).
+[pkg.go.dev](https://pkg.go.dev/github.com/DubbaThonyVibecodes/go-libopus@v1.4.1).
 
 - [Installing and choosing a version](#installing-and-choosing-a-version)
 - [Opus in five minutes](#opus-in-five-minutes)
