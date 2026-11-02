@@ -26,6 +26,12 @@ each supported minor has its own branch.
 | `tools/corpus` | – | Conformance-corpus generator (C oracle driver + Go orchestrator) |
 | `testdata/` | – | Committed conformance corpus, clips, RFC 6716 vectors |
 
+## Status
+
+Tracks libopus **1.0.3**. The decoder (SILK, CELT, hybrid, PLC, FEC,
+multistream, repacketizer) is bit-exact against the upstream fixed-point
+build on every corpus case; the encoder is being verified.
+
 ## Testing
 
 Correctness is defined as bit-exactness against the upstream *fixed-point*

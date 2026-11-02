@@ -573,6 +573,8 @@ func runCase(gen, out, scratch string, c *testvec.Case) error {
 		pcm := filepath.Join(out, "pcm", strings.TrimPrefix(c.Name, "dec/")+".s16")
 		if !*flagExtended {
 			pcm = tmpTrace + ".pcm"
+		} else {
+			os.MkdirAll(filepath.Dir(pcm), 0o755)
 		}
 		args = append(args, filepath.Join(out, c.Pkt), tmpTrace, pcm)
 		defer func() {

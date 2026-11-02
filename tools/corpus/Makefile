@@ -38,3 +38,10 @@ gen: $(BUILD)/gen-fixed $(BUILD)/gen-float
 
 clean:
 	rm -rf $(BUILD)/gen-fixed $(BUILD)/gen-float
+
+# Reference decoded output of the RFC 6716 test vectors (39 MB, not committed).
+.PHONY: vectors
+vectors:
+	mkdir -p $(BUILD)/dl
+	[ -s $(BUILD)/dl/opus_testvectors.tar.gz ] || curl -sSL -o $(BUILD)/dl/opus_testvectors.tar.gz https://opus-codec.org/docs/opus_testvectors.tar.gz
+	cd $(BUILD)/dl && tar xzf opus_testvectors.tar.gz
