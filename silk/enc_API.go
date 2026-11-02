@@ -189,7 +189,6 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 		}
 	}
 
-	TargetRate_bps = RSHIFT32(encControl.BitRate, int(encControl.NChannelsInternal)-1)
 	for n = 0; n < int(encControl.NChannelsInternal); n++ {
 		/* Force the side channel to the same rate as the mid */
 		var force_fs_kHz int
@@ -198,7 +197,7 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 		} else {
 			force_fs_kHz = 0
 		}
-		if ret = psEnc.state_Fxx[n].ControlEncoder(encControl, TargetRate_bps, psEnc.allowBandwidthSwitch, n, force_fs_kHz); ret != 0 {
+		if ret = psEnc.state_Fxx[n].ControlEncoder(encControl, psEnc.allowBandwidthSwitch, n, force_fs_kHz); ret != 0 {
 			silk_assert(false)
 			return ret
 		}
@@ -381,7 +380,6 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 					/* Reset side channel encoder memory for first frame with side coding */
 					if psEnc.prev_decode_only_middle == 1 {
 						psEnc.state_Fxx[1].sShape = ShapeStateFIX{}
-						psEnc.state_Fxx[1].sPrefilt = PrefilterStateFIX{}
 						psEnc.state_Fxx[1].sCmn.sNSQ = NsqState{}
 						clear(psEnc.state_Fxx[1].sCmn.prev_NLSFq_Q15[:])
 						clear(psEnc.state_Fxx[1].sCmn.sLP.In_LP_State[:])
@@ -526,5 +524,7 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 		}
 	}
 
+	encControl.SignalType = int(psEnc.state_Fxx[0].sCmn.indices.signalType)
+	encControl.Offset = int(Quantization_Offsets_Q10[psEnc.state_Fxx[0].sCmn.indices.signalType>>1][psEnc.state_Fxx[0].sCmn.indices.quantOffsetType])
 	return ret
 }

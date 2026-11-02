@@ -19,8 +19,6 @@ var LTP_gain_iCDF_2 = [32]uint8{
 	72, 64, 57, 50, 44, 38, 33, 29, 24, 20, 16, 12, 9, 5, 2, 0,
 }
 
-const LTP_gain_middle_avg_RD_Q14 int16 = 12304
-
 var LTP_gain_BITS_Q5_0 = [8]uint8{
 	15, 131, 138, 138, 155, 155, 173, 173,
 }

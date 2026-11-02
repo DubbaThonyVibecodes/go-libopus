@@ -109,6 +109,6 @@ func (psLP *LPState) LPVariableCutoff(frame []int16, frame_length int) {
 
 		/* ARMA low-pass filtering */
 		silk_assert(TRANSITION_NB == 3 && TRANSITION_NA == 2)
-		BiquadAlt(frame, B_Q28[:], A_Q28[:], psLP.In_LP_State[:], frame, int32(frame_length), 1)
+		BiquadAltStride1(frame, B_Q28[:], A_Q28[:], psLP.In_LP_State[:], frame, int32(frame_length))
 	}
 }

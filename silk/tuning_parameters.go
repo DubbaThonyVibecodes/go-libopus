@@ -19,18 +19,11 @@ const (
 	// LPC analysis defines: regularization and bandwidth expansion
 	FIND_LPC_COND_FAC float32 = 1e-5
 
-	// LTP analysis defines
-	FIND_LTP_COND_FAC float32 = 1e-5
-	LTP_DAMPING       float32 = 0.05
-	LTP_SMOOTHING     float32 = 0.1
-
-	// LTP quantization settings
-	MU_LTP_QUANT_NB float32 = 0.03
-	MU_LTP_QUANT_MB float32 = 0.025
-	MU_LTP_QUANT_WB float32 = 0.02
-
 	// Max cumulative LTP gain
 	MAX_SUM_LOG_GAIN_DB float32 = 250.0
+
+	// LTP analysis defines
+	LTP_CORR_INV_MAX float32 = 0.03
 
 	// High pass filtering
 
@@ -63,25 +56,16 @@ const (
 	SPARSE_SNR_INCR_dB float32 = 2.0
 
 	// threshold for sparseness measure above which to use lower quantization offset during unvoiced
-	SPARSENESS_THRESHOLD_QNT_OFFSET float32 = 0.75
+	ENERGY_VARIATION_THRESHOLD_QNT_OFFSET float32 = 0.6
 
 	// warping control
 	WARPING_MULTIPLIER float32 = 0.015
 
 	// fraction added to first autocorrelation value
-	SHAPE_WHITE_NOISE_FRACTION float32 = 5e-5
+	SHAPE_WHITE_NOISE_FRACTION float32 = 3e-5
 
 	// noise shaping filter chirp factor
-	BANDWIDTH_EXPANSION float32 = 0.95
-
-	// difference between chirp factors for analysis and synthesis noise shaping filters at low bitrates
-	LOW_RATE_BANDWIDTH_EXPANSION_DELTA float32 = 0.01
-
-	// extra harmonic boosting (signal shaping) at low bitrates
-	LOW_RATE_HARMONIC_BOOST float32 = 0.1
-
-	// extra harmonic boosting (signal shaping) for noisy input signals
-	LOW_INPUT_QUALITY_HARMONIC_BOOST float32 = 0.1
+	BANDWIDTH_EXPANSION float32 = 0.94
 
 	// harmonic noise shaping
 	HARMONIC_SHAPING float32 = 0.3

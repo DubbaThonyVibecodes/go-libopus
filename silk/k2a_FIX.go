@@ -11,14 +11,15 @@ func K2a(
 	order int32, // I    Prediction order
 ) {
 	var k, n int
-	var Atmp [SILK_MAX_ORDER_LPC]int32
+	var rc, tmp1, tmp2 int32
 
 	for k = 0; k < int(order); k++ {
-		for n = 0; n < k; n++ {
-			Atmp[n] = A_Q24[n]
-		}
-		for n = 0; n < k; n++ {
-			A_Q24[n] = SMLAWB(A_Q24[n], LSHIFT(Atmp[k-n-1], 1), rc_Q15[k])
+		rc = int32(rc_Q15[k])
+		for n = 0; n < (k+1)>>1; n++ {
+			tmp1 = A_Q24[n]
+			tmp2 = A_Q24[k-n-1]
+			A_Q24[n] = SMLAWB(tmp1, LSHIFT(tmp2, 1), rc)
+			A_Q24[k-n-1] = SMLAWB(tmp2, LSHIFT(tmp1, 1), rc)
 		}
 		A_Q24[k] = -LSHIFT(int32(rc_Q15[k]), 9)
 	}

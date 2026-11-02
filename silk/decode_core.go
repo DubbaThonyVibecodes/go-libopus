@@ -193,8 +193,6 @@ func (psDec *DecoderState) DecodeCore(psDecCtrl *DecoderControl, xq []int16, pul
 			pxq[i] = int16(SAT16(RSHIFT_ROUND(SMULWW(sLPC_Q14[MAX_LPC_ORDER+i], Gain_Q10), 8)))
 		}
 
-		/* DEBUG_STORE_DATA( dec.pcm, pxq, psDec->subfr_length * sizeof( opus_int16 ) ) */
-
 		/* Update LPC filter state */
 		copy(sLPC_Q14[:MAX_LPC_ORDER], sLPC_Q14[psDec.subfr_length:psDec.subfr_length+MAX_LPC_ORDER])
 		pexc_Q14 = pexc_Q14[psDec.subfr_length:]

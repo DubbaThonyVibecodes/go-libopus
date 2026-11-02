@@ -126,7 +126,9 @@ static int parse_framedur(const char *s) {
    if (!strcmp(s, "20"))  return OPUS_FRAMESIZE_20_MS;
    if (!strcmp(s, "40"))  return OPUS_FRAMESIZE_40_MS;
    if (!strcmp(s, "60"))  return OPUS_FRAMESIZE_60_MS;
-   if (!strcmp(s, "variable")) return OPUS_FRAMESIZE_VARIABLE;
+   if (!strcmp(s, "80"))  return OPUS_FRAMESIZE_80_MS;
+   if (!strcmp(s, "100")) return OPUS_FRAMESIZE_100_MS;
+   if (!strcmp(s, "120")) return OPUS_FRAMESIZE_120_MS;
    dief("bad frame duration", s); return 0;
 }
 static int parse_framesize(const char *s, int rate) {
@@ -136,6 +138,9 @@ static int parse_framesize(const char *s, int rate) {
    if (!strcmp(s, "20"))  return rate/50;
    if (!strcmp(s, "40"))  return rate/25;
    if (!strcmp(s, "60"))  return 3*rate/50;
+   if (!strcmp(s, "80"))  return 4*rate/50;
+   if (!strcmp(s, "100")) return rate/10;
+   if (!strcmp(s, "120")) return 6*rate/50;
    dief("bad framesize", s); return 0;
 }
 static int parse_bitrate(const char *s) {
@@ -290,6 +295,7 @@ static void apply_sched(void *enc, int ms, const struct sched *s, int *frame_siz
    else if (!strcmp(s->what, "reset")) r = ENC_CTL(enc, ms, OPUS_RESET_STATE);
    else if (!strcmp(s->what, "framedur")) { r = ENC_CTL(enc, ms, OPUS_SET_EXPERT_FRAME_DURATION(s->val)); *framedur = s->val; }
    else if (!strcmp(s->what, "pred")) r = ENC_CTL(enc, ms, OPUS_SET_PREDICTION_DISABLED(s->val));
+   else if (!strcmp(s->what, "phaseinv")) r = ENC_CTL(enc, ms, OPUS_SET_PHASE_INVERSION_DISABLED(s->val));
    else if (!strcmp(s->what, "framesize")) *frame_size = s->val;
    else dief("unknown sched key", s->what);
    if (r != OPUS_OK) { fprintf(stderr, "gen: sched %s=%d failed: %s\n", s->what, s->val, opus_strerror(r)); exit(2); }
@@ -300,7 +306,7 @@ static int cmd_enc(int argc, char **argv) {
    int rate = 48000, ch = 1, app = OPUS_APPLICATION_AUDIO, bitrate = 64000, frame_size = -1;
    int vbr = 1, cvbr = 0, bw = OPUS_AUTO, maxbw = OPUS_AUTO, complexity = 10, fec = 0, lossperc = 0, dtx = 0;
    int forcech = OPUS_AUTO, sig = OPUS_AUTO, lsbdepth = 16, maxpayload = MAX_PACKET, mode = OPUS_AUTO;
-   int voiceratio = -1, framedur = OPUS_FRAMESIZE_ARG, nopred = 0, remaining = 0;
+   int voiceratio = -1, framedur = OPUS_FRAMESIZE_ARG, nopred = 0, remaining = 0, nophaseinv = 0;
    int sweep_bps = 0, sweep_max = 0, sweep_min = 0, random_framesize = 0, random_fec = 0;
    const int (*mode_list)[4] = NULL; int nb_modes = 0;
    struct sched sched[MAX_SCHED]; int nsched = 0;
@@ -338,6 +344,7 @@ static int cmd_enc(int argc, char **argv) {
       else if (!strcmp(a, "--voiceratio")) voiceratio = atoi(NEXT);
       else if (!strcmp(a, "--framedur")) framedur = parse_framedur(NEXT);
       else if (!strcmp(a, "--nopred")) nopred = 1;
+      else if (!strcmp(a, "--nophaseinv")) nophaseinv = 1;
       else if (!strcmp(a, "--sweep")) sweep_bps = atoi(NEXT);
       else if (!strcmp(a, "--sweep-max")) sweep_max = atoi(NEXT);
       else if (!strcmp(a, "--random-framesize")) random_framesize = 1;
@@ -414,6 +421,7 @@ static int cmd_enc(int argc, char **argv) {
    if (voiceratio >= 0 && !ms) SET(OPUS_SET_VOICE_RATIO(voiceratio));
    if (framedur != OPUS_FRAMESIZE_ARG) SET(OPUS_SET_EXPERT_FRAME_DURATION(framedur));
    if (nopred) SET(OPUS_SET_PREDICTION_DISABLED(nopred));
+   if (nophaseinv) SET(OPUS_SET_PHASE_INVERSION_DISABLED(nophaseinv));
    SET(OPUS_GET_LOOKAHEAD(&lookahead));
    {
       int v;
@@ -429,6 +437,7 @@ static int cmd_enc(int argc, char **argv) {
       SET(OPUS_GET_LSB_DEPTH(&v)); fprintf(ftr, " lsb=%d", v);
       SET(OPUS_GET_EXPERT_FRAME_DURATION(&v)); fprintf(ftr, " framedur=%d", v);
       SET(OPUS_GET_PREDICTION_DISABLED(&v)); fprintf(ftr, " pred=%d", v);
+      SET(OPUS_GET_PHASE_INVERSION_DISABLED(&v)); fprintf(ftr, " phaseinv=%d", v);
       fprintf(ftr, "\n");
    }
    if (sweep_max) sweep_min = bitrate;
@@ -508,7 +517,7 @@ static int cmd_enc(int argc, char **argv) {
 
 /* ---- dec ----------------------------------------------------------------- */
 static int cmd_dec(int argc, char **argv) {
-   int rate = 48000, ch = 1, lossperc = 0, fec = 0, gain = 0, use_float = 0;
+   int rate = 48000, ch = 1, lossperc = 0, fec = 0, gain = 0, use_float = 0, nophaseinv = 0;
    int ms = 0, streams = 0, coupled = 0; unsigned char mapping[MAX_CH]; int nmap = 0;
    struct sched sched[MAX_SCHED]; int nsched = 0;
    const char *pkt_path = NULL, *trace_path = NULL, *out_path = NULL;
@@ -528,6 +537,7 @@ static int cmd_dec(int argc, char **argv) {
       else if (!strcmp(a, "--gain")) gain = atoi(NEXT);
       else if (!strcmp(a, "--skip")) skip = atoi(NEXT);
       else if (!strcmp(a, "--float")) use_float = 1;
+      else if (!strcmp(a, "--nophaseinv")) nophaseinv = 1;
       else if (!strcmp(a, "--seed")) lcg_state = (uint32_t)strtoul(NEXT, NULL, 0);
       else if (!strcmp(a, "--sched")) nsched = parse_sched(NEXT, sched, rate);
       else if (!strcmp(a, "--streams")) { ms = 1; streams = atoi(NEXT); }
@@ -561,11 +571,12 @@ static int cmd_dec(int argc, char **argv) {
 #define SET(...) do { int r_ = DEC_CTL(dec, ms, __VA_ARGS__); if (r_ != OPUS_OK) { fprintf(stderr, "gen: dec ctl failed: %s\n", opus_strerror(r_)); exit(2);} } while (0)
 #define GET_DUR(pv) SET(OPUS_GET_LAST_PACKET_DURATION(pv))
    if (gain) SET(OPUS_SET_GAIN(gain));
+   if (nophaseinv) SET(OPUS_SET_PHASE_INVERSION_DISABLED(nophaseinv));
    {
       int v;
       SET(OPUS_GET_SAMPLE_RATE(&v)); fprintf(ftr, "H fs=%d", v);
-      SET(OPUS_GET_GAIN(&v));
-      fprintf(ftr, " gain=%d\n", v);
+      SET(OPUS_GET_GAIN(&v)); fprintf(ftr, " gain=%d", v);
+      SET(OPUS_GET_PHASE_INVERSION_DISABLED(&v)); fprintf(ftr, " phaseinv=%d\n", v);
    }
    data[0] = malloc(MAX_PACKET); data[1] = malloc(MAX_PACKET);
    len[0] = len[1] = 0; enc_rng[0] = enc_rng[1] = 0;
@@ -583,6 +594,7 @@ static int cmd_dec(int argc, char **argv) {
       for (s_i = 0; s_i < nsched; s_i++) if (sched[s_i].frame == count) {
          if (!strcmp(sched[s_i].what, "gain")) SET(OPUS_SET_GAIN(sched[s_i].val));
          else if (!strcmp(sched[s_i].what, "reset")) SET(OPUS_RESET_STATE);
+         else if (!strcmp(sched[s_i].what, "phaseinv")) SET(OPUS_SET_PHASE_INVERSION_DISABLED(sched[s_i].val));
          else dief("unknown dec sched key", sched[s_i].what);
       }
       lost = len[toggle] == 0 || (lossperc > 0 && (int)(lcg()%100) < lossperc);

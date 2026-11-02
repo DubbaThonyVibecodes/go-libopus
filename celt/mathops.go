@@ -4,6 +4,9 @@ import "math"
 
 // C: celt/mathops.h, celt/mathops.c — various math functions (fixed-point build).
 
+// C: #define PI 3.141592653f
+const PI float32 = 3.141592653
+
 // C: FRAC_MUL16(a,b) ((16384+((opus_int32)(opus_int16)(a)*(opus_int16)(b)))>>15)
 func FRAC_MUL16[A, B integer](a A, b B) int32 {
 	return (16384 + int32(int16(a))*int32(int16(b))) >> 15
@@ -289,6 +292,48 @@ func Atan2p(y, x int16) int16 {
 		arg = 32767
 	}
 	return int16(25736 - SHR16(atan01(EXTRACT16(arg)), 1))
+}
+
+// CELT doesn't need it for fixed-point, by analysis.c does.
+//
+// C: static OPUS_INLINE float fast_atan2f(float y, float x)   (#if !defined(FIXED_POINT) || defined(ANALYSIS_C))
+func FastAtan2f(y, x float32) float32 {
+	const cA float32 = 0.43157974
+	const cB float32 = 0.67848403
+	const cC float32 = 0.08595542
+	const cE float32 = PI / 2
+	var x2, y2 float32
+	x2 = x * x
+	y2 = y * y
+	// For very small values, we don't care about the answer, so
+	// we can just return 0.
+	if x2+y2 < 1e-18 {
+		return 0
+	}
+	if x2 < y2 {
+		var den float32 = (y2 + float32(cB*x2)) * (y2 + float32(cC*x2))
+		var e float32
+		if y < 0 {
+			e = -cE
+		} else {
+			e = cE
+		}
+		return float32(-x*y*(y2+float32(cA*x2))/den) + e
+	} else {
+		var den float32 = (x2 + float32(cB*y2)) * (x2 + float32(cC*y2))
+		var e, f float32
+		if y < 0 {
+			e = -cE
+		} else {
+			e = cE
+		}
+		if x*y < 0 {
+			f = -cE
+		} else {
+			f = cE
+		}
+		return float32(float32(x*y*(x2+float32(cA*y2))/den)+e) - f
+	}
 }
 
 // Float2int is the C float2int (float_cast.h): lrintf, i.e. round to

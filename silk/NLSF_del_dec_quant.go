@@ -55,7 +55,7 @@ func NLSFDelDecQuant( // O    Returns RD value in Q25
 	nStates = 1
 	RD_Q25[0] = 0
 	prev_out_Q10[0] = 0
-	for i = int(order) - 1; ; i-- {
+	for i = int(order) - 1; i >= 0; i-- {
 		rates_Q5 = ec_rates_Q5[ec_ix[i]:]
 		in_Q10 = int(x_Q10[i])
 		for j = 0; j < nStates; j++ {
@@ -102,7 +102,7 @@ func NLSFDelDecQuant( // O    Returns RD value in Q25
 			RD_Q25[j+nStates] = SMLABB(MLA(RD_tmp_Q25, SMULBB(diff_Q10, diff_Q10), w_Q5[i]), mu_Q20, rate1_Q5)
 		}
 
-		if nStates <= (NLSF_QUANT_DEL_DEC_STATES >> 1) {
+		if nStates <= NLSF_QUANT_DEL_DEC_STATES/2 {
 			// double number of states and copy
 			for j = 0; j < nStates; j++ {
 				ind[j+nStates][i] = ind[j][i] + 1
@@ -111,7 +111,7 @@ func NLSFDelDecQuant( // O    Returns RD value in Q25
 			for j = nStates; j < NLSF_QUANT_DEL_DEC_STATES; j++ {
 				ind[j][i] = ind[j-nStates][i]
 			}
-		} else if i > 0 {
+		} else {
 			// sort lower and upper half of RD_Q25, pairwise
 			for j = 0; j < NLSF_QUANT_DEL_DEC_STATES; j++ {
 				if RD_Q25[j] > RD_Q25[j+NLSF_QUANT_DEL_DEC_STATES] {
@@ -162,8 +162,6 @@ func NLSFDelDecQuant( // O    Returns RD value in Q25
 			for j = 0; j < NLSF_QUANT_DEL_DEC_STATES; j++ {
 				ind[j][i] += int8(RSHIFT(ind_sort[j], NLSF_QUANT_DEL_DEC_STATES_LOG2))
 			}
-		} else { // i == 0
-			break
 		}
 	}
 

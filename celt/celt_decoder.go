@@ -11,10 +11,11 @@ type CELTDecoder struct {
 	channels        int
 	stream_channels int
 
-	downsample int
-	start, end int
-	signalling int
-	arch       int
+	downsample  int
+	start, end  int
+	signalling  int
+	disable_inv int
+	arch        int
 
 	// Everything beyond this point gets cleared on a reset (DECODER_RESET_START)
 	rng                   uint32
@@ -96,11 +97,43 @@ func (st *CELTDecoder) CustomDecoderInit(mode *CELTMode, channels int) int {
 	st.start = 0
 	st.end = st.mode.effEBands
 	st.signalling = 1
+	// ENABLE_UPDATE_DRAFT is not defined.
+	st.disable_inv = 0
 	st.arch = SelectArch()
 
 	st.Ctl(OPUS_RESET_STATE)
 
 	return OPUS_OK
+}
+
+// Special case for stereo with no downsampling and no accumulation. This is
+// quite common and we can make it faster by processing both channels in the
+// same loop, reducing overhead due to the dependency loop in the IIR filter.
+//
+// C: static void deemphasis_stereo_simple(celt_sig *in[], opus_val16 *pcm, int N, const opus_val16 coef0,
+//
+//	celt_sig *mem)
+func deemphasis_stereo_simple(in [][]int32, pcm []int16, N int, coef0 int16,
+	mem []int32) {
+	var x0, x1 []int32
+	var m0, m1 int32
+	var j int
+	x0 = in[0]
+	x1 = in[1]
+	m0 = mem[0]
+	m1 = mem[1]
+	for j = 0; j < N; j++ {
+		var tmp0, tmp1 int32
+		// Add VERY_SMALL to x[] first to reduce dependency chain.
+		tmp0 = x0[j] + VERY_SMALL + m0
+		tmp1 = x1[j] + VERY_SMALL + m1
+		m0 = MULT16_32_Q15(coef0, tmp0)
+		m1 = MULT16_32_Q15(coef0, tmp1)
+		pcm[2*j] = SCALEOUT(SIG2WORD16(tmp0))
+		pcm[2*j+1] = SCALEOUT(SIG2WORD16(tmp1))
+	}
+	mem[0] = m0
+	mem[1] = m1
 }
 
 // C: static void deemphasis(celt_sig *in[], opus_val16 *pcm, int N, int C, int downsample, const opus_val16 *coef,
@@ -112,6 +145,11 @@ func deemphasis(in [][]int32, pcm []int16, N, C, downsample int, coef []int16,
 	var Nd int
 	var apply_downsampling int = 0
 	var coef0 int16
+	// Short version for common case.
+	if downsample == 1 && C == 2 && accum == 0 {
+		deemphasis_stereo_simple(in, pcm, N, coef[0], mem)
+		return
+	}
 	scratch := make([]int32, N)
 	coef0 = coef[0]
 	Nd = N / downsample
@@ -126,7 +164,7 @@ func deemphasis(in [][]int32, pcm []int16, N, C, downsample int, coef []int16,
 		if downsample > 1 {
 			// Shortcut for the standard (non-custom modes) case
 			for j = 0; j < N; j++ {
-				var tmp int32 = x[j] + m + VERY_SMALL
+				var tmp int32 = x[j] + VERY_SMALL + m
 				m = MULT16_32_Q15(coef0, tmp)
 				scratch[j] = tmp
 			}
@@ -135,13 +173,13 @@ func deemphasis(in [][]int32, pcm []int16, N, C, downsample int, coef []int16,
 			// Shortcut for the standard (non-custom modes) case
 			if accum != 0 {
 				for j = 0; j < N; j++ {
-					var tmp int32 = x[j] + m + VERY_SMALL
+					var tmp int32 = x[j] + VERY_SMALL + m
 					m = MULT16_32_Q15(coef0, tmp)
 					y[j*C] = SAT16(ADD32(y[j*C], SCALEOUT(SIG2WORD16(tmp))))
 				}
 			} else {
 				for j = 0; j < N; j++ {
-					var tmp int32 = x[j] + m + VERY_SMALL
+					var tmp int32 = x[j] + VERY_SMALL + m
 					m = MULT16_32_Q15(coef0, tmp)
 					y[j*C] = SCALEOUT(SIG2WORD16(tmp))
 				}
@@ -226,7 +264,7 @@ func celt_synthesis(mode *CELTMode, X []int16, out_syn [][]int32,
 		DenormaliseBands(mode, X[N:], freq2, oldBandE[nbEBands:], start, effEnd, M,
 			downsample, silence)
 		for i = 0; i < N; i++ {
-			freq[i] = HALF32(ADD32(freq[i], freq2[i]))
+			freq[i] = ADD32(HALF32(freq[i]), HALF32(freq2[i]))
 		}
 		for b = 0; b < B; b++ {
 			MdctBackward(&mode.mdct, freq[b:], out_syn[0][NB*b:], mode.window, overlap, shift, B, arch)
@@ -244,6 +282,18 @@ func celt_synthesis(mode *CELTMode, X []int16, out_syn [][]int32,
 			if c >= CC {
 				break
 			}
+		}
+	}
+	// Saturate IMDCT output so that we can't overflow in the pitch postfilter
+	// or in the
+	c = 0
+	for {
+		for i = 0; i < N; i++ {
+			out_syn[c][i] = SATURATE(out_syn[c][i], SIG_SAT)
+		}
+		c++
+		if c >= CC {
+			break
 		}
 	}
 }
@@ -425,7 +475,8 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 		}
 
 		etmp := make([]int32, overlap)
-		exc := make([]int16, MAX_PERIOD)
+		_exc := make([]int16, MAX_PERIOD+LPC_ORDER)
+		exc := _exc[LPC_ORDER:]
 		window = mode.window
 		c = 0
 		for {
@@ -457,6 +508,23 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 					ac[i] -= MULT16_32_Q15(2*i*i, ac[i])
 				}
 				Lpc(lpc[c*LPC_ORDER:], ac[:], LPC_ORDER)
+				// For fixed-point, apply bandwidth expansion until we can guarantee that
+				// no overflow can happen in the IIR filter. This means:
+				// 32768*sum(abs(filter)) < 2^31
+				for {
+					var tmp int16 = Q15ONE
+					var sum int32 = int32(QCONST16(1., SIG_SHIFT))
+					for i = 0; i < LPC_ORDER; i++ {
+						sum += int32(ABS16(lpc[c*LPC_ORDER+i]))
+					}
+					if sum < 65535 {
+						break
+					}
+					for i = 0; i < LPC_ORDER; i++ {
+						tmp = int16(MULT16_16_Q15(QCONST16(.99, 15), tmp))
+						lpc[c*LPC_ORDER+i] = int16(MULT16_16_Q15(lpc[c*LPC_ORDER+i], tmp))
+					}
+				}
 			}
 			// We want the excitation for 2 pitch periods in order to look for a
 			// decaying signal, but we can't get more than MAX_PERIOD.
@@ -464,14 +532,17 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 			// Initialize the LPC history with the samples just before the start
 			// of the region for which we're computing the excitation.
 			{
-				var lpc_mem [LPC_ORDER]int16
+				// (C: exc[MAX_PERIOD-exc_length-LPC_ORDER+i]; exc = _exc+LPC_ORDER, and
+				// the index goes negative when exc_length == MAX_PERIOD.)
 				for i = 0; i < LPC_ORDER; i++ {
-					lpc_mem[i] =
-						ROUND16(buf[DECODE_BUFFER_SIZE-exc_length-1-i], SIG_SHIFT)
+					_exc[MAX_PERIOD-exc_length+i] =
+						ROUND16(buf[DECODE_BUFFER_SIZE-exc_length-LPC_ORDER+i], SIG_SHIFT)
 				}
 				// Compute the excitation for exc_length samples before the loss.
-				Fir(exc[MAX_PERIOD-exc_length:], lpc[c*LPC_ORDER:],
-					exc[MAX_PERIOD-exc_length:], exc_length, LPC_ORDER, lpc_mem[:], st.arch)
+				// (Fir reads LPC_ORDER samples behind its input, so the input
+				// slice starts at exc+MAX_PERIOD-exc_length-LPC_ORDER.)
+				Fir(_exc[MAX_PERIOD-exc_length:], lpc[c*LPC_ORDER:],
+					exc[MAX_PERIOD-exc_length:], exc_length, LPC_ORDER, st.arch)
 			}
 
 			// Check if the waveform is decaying, and if so how fast.
@@ -523,9 +594,8 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 				tmp = ROUND16(
 					buf[DECODE_BUFFER_SIZE-MAX_PERIOD-N+extrapolation_offset+j],
 					SIG_SHIFT)
-				S1 += SHR32(MULT16_16(tmp, tmp), 8)
+				S1 += SHR32(MULT16_16(tmp, tmp), 10)
 			}
-
 			{
 				var lpc_mem [LPC_ORDER]int16
 				// Copy the last decoded samples (prior to the overlap region) to
@@ -538,6 +608,9 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 				Iir(buf[DECODE_BUFFER_SIZE-N:], lpc[c*LPC_ORDER:],
 					buf[DECODE_BUFFER_SIZE-N:], extrapolation_len, LPC_ORDER,
 					lpc_mem[:], st.arch)
+				for i = 0; i < extrapolation_len; i++ {
+					buf[DECODE_BUFFER_SIZE-N+i] = SATURATE(buf[DECODE_BUFFER_SIZE-N+i], SIG_SAT)
+				}
 			}
 
 			// Check if the synthesis energy is higher than expected, which can
@@ -547,7 +620,7 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 				var S2 int32 = 0
 				for i = 0; i < extrapolation_len; i++ {
 					var tmp int16 = ROUND16(buf[DECODE_BUFFER_SIZE-N+i], SIG_SHIFT)
-					S2 += SHR32(MULT16_16(tmp, tmp), 8)
+					S2 += SHR32(MULT16_16(tmp, tmp), 10)
 				}
 				// This checks for an "explosion" in the synthesis.
 				if !(S1 > SHR32(S2, 2)) {
@@ -852,7 +925,8 @@ func (st *CELTDecoder) DecodeWithEc(data []byte, length int, pcm []int16, frame_
 	}
 	QuantAllBands(0, mode, start, end, X, Y, collapse_masks,
 		nil, pulses, shortBlocks, spread_decision, dual_stereo, intensity, tf_res,
-		int32(length*(8<<BITRES)-anti_collapse_rsv), balance, dec, LM, codedBands, &st.rng, st.arch)
+		int32(length*(8<<BITRES)-anti_collapse_rsv), balance, dec, LM, codedBands, &st.rng, 0,
+		st.arch, st.disable_inv)
 
 	if anti_collapse_rsv > 0 {
 		anti_collapse_on = int(dec.DecBits(1))
@@ -1047,6 +1121,18 @@ func (st *CELTDecoder) Ctl(request int, args ...any) int {
 			return OPUS_BAD_ARG
 		}
 		*value = st.rng
+	case OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST:
+		value, ok := argInt32(args, 0)
+		if !ok || value < 0 || value > 1 {
+			return OPUS_BAD_ARG
+		}
+		st.disable_inv = int(value)
+	case OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST:
+		value, ok := args[0].(*int32)
+		if !ok || value == nil {
+			return OPUS_BAD_ARG
+		}
+		*value = int32(st.disable_inv)
 	default:
 		return OPUS_UNIMPLEMENTED
 	}

@@ -119,21 +119,23 @@ const (
 // FrameDuration selects the frame size the encoder uses regardless of the
 // number of samples passed to Encode (OPUS_SET_EXPERT_FRAME_DURATION,
 // libopus 1.1+). With FrameDurationArg (the default) the frame size is the
-// number of samples passed; with FrameDurationVariable the encoder picks
-// the size itself. When the encoder consumes fewer samples than offered,
-// the packet says how many were used (see PacketSamples) and the caller
-// must feed the rest again.
+// number of samples passed. When the encoder consumes fewer samples than
+// offered, the packet says how many were used (see PacketSamples) and the
+// caller must feed the rest again. Frames of 80, 100 and 120 ms are
+// multi-frame packets (libopus 1.2+).
 type FrameDuration int
 
 const (
-	FrameDurationArg      FrameDuration = opus.OPUS_FRAMESIZE_ARG
-	FrameDuration2_5ms    FrameDuration = opus.OPUS_FRAMESIZE_2_5_MS
-	FrameDuration5ms      FrameDuration = opus.OPUS_FRAMESIZE_5_MS
-	FrameDuration10ms     FrameDuration = opus.OPUS_FRAMESIZE_10_MS
-	FrameDuration20ms     FrameDuration = opus.OPUS_FRAMESIZE_20_MS
-	FrameDuration40ms     FrameDuration = opus.OPUS_FRAMESIZE_40_MS
-	FrameDuration60ms     FrameDuration = opus.OPUS_FRAMESIZE_60_MS
-	FrameDurationVariable FrameDuration = opus.OPUS_FRAMESIZE_VARIABLE
+	FrameDurationArg   FrameDuration = opus.OPUS_FRAMESIZE_ARG
+	FrameDuration2_5ms FrameDuration = opus.OPUS_FRAMESIZE_2_5_MS
+	FrameDuration5ms   FrameDuration = opus.OPUS_FRAMESIZE_5_MS
+	FrameDuration10ms  FrameDuration = opus.OPUS_FRAMESIZE_10_MS
+	FrameDuration20ms  FrameDuration = opus.OPUS_FRAMESIZE_20_MS
+	FrameDuration40ms  FrameDuration = opus.OPUS_FRAMESIZE_40_MS
+	FrameDuration60ms  FrameDuration = opus.OPUS_FRAMESIZE_60_MS
+	FrameDuration80ms  FrameDuration = opus.OPUS_FRAMESIZE_80_MS
+	FrameDuration100ms FrameDuration = opus.OPUS_FRAMESIZE_100_MS
+	FrameDuration120ms FrameDuration = opus.OPUS_FRAMESIZE_120_MS
 )
 
 // Auto is the OPUS_AUTO value for settings that accept it (bitrate, forced channels).
@@ -376,6 +378,18 @@ func (e *Encoder) PredictionDisabled() bool {
 	return e.getInt(opus.OPUS_GET_PREDICTION_DISABLED_REQUEST) != 0
 }
 
+// SetPhaseInversionDisabled disables the use of phase inversion for
+// intensity stereo, improving the quality of mono downmixes at the cost
+// of stereo quality (libopus 1.2+).
+func (e *Encoder) SetPhaseInversionDisabled(off bool) error {
+	return e.Ctl(opus.OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST, b2i(off))
+}
+
+// PhaseInversionDisabled reports whether phase inversion is disabled.
+func (e *Encoder) PhaseInversionDisabled() bool {
+	return e.getInt(opus.OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST) != 0
+}
+
 // FinalRange returns the range coder's final state for the last packet
 // (useful for comparing encoder and decoder).
 func (e *Encoder) FinalRange() uint32 {
@@ -475,6 +489,17 @@ func (d *Decoder) FinalRange() uint32 {
 	var v uint32
 	d.st.Ctl(opus.OPUS_GET_FINAL_RANGE_REQUEST, &v)
 	return v
+}
+
+// SetPhaseInversionDisabled disables phase inversion when decoding
+// intensity-stereo frames, for better mono downmixes (libopus 1.2+).
+func (d *Decoder) SetPhaseInversionDisabled(off bool) error {
+	return d.Ctl(opus.OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST, b2i(off))
+}
+
+// PhaseInversionDisabled reports whether phase inversion is disabled.
+func (d *Decoder) PhaseInversionDisabled() bool {
+	return d.getInt(opus.OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST) != 0
 }
 
 // Reset resets the decoder state.
@@ -801,6 +826,11 @@ func (e *MultistreamEncoder) SetPredictionDisabled(off bool) error {
 	return e.Ctl(opus.OPUS_SET_PREDICTION_DISABLED_REQUEST, b2i(off))
 }
 
+// SetPhaseInversionDisabled disables intensity-stereo phase inversion in every stream (libopus 1.2+).
+func (e *MultistreamEncoder) SetPhaseInversionDisabled(off bool) error {
+	return e.Ctl(opus.OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST, b2i(off))
+}
+
 // FinalRange returns the XOR of the streams' final range states.
 func (e *MultistreamEncoder) FinalRange() uint32 {
 	var v uint32
@@ -890,6 +920,11 @@ func (d *MultistreamDecoder) Bandwidth() Bandwidth {
 	var v int32
 	d.st.Ctl(opus.OPUS_GET_BANDWIDTH_REQUEST, &v)
 	return Bandwidth(v)
+}
+
+// SetPhaseInversionDisabled disables phase inversion in every stream decoder (libopus 1.2+).
+func (d *MultistreamDecoder) SetPhaseInversionDisabled(off bool) error {
+	return d.Ctl(opus.OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST, b2i(off))
 }
 
 // Reset resets every stream decoder.

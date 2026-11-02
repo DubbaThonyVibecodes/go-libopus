@@ -216,7 +216,7 @@ func plcConceal(
 			/* Reduce random noise for unvoiced frames with high LPC gain */
 			var invGain_Q30, down_scale_Q30 int32
 
-			invGain_Q30 = LPCInversePredGain(psPLC.prevLPC_Q12[:], psDec.LPC_order)
+			invGain_Q30 = LPCInversePredGain(psPLC.prevLPC_Q12[:], psDec.LPC_order, arch)
 
 			down_scale_Q30 = min_32(RSHIFT(int32(1)<<30, LOG2_INV_LPC_GAIN_HIGH_THRES), invGain_Q30)
 			down_scale_Q30 = max_32(RSHIFT(int32(1)<<30, LOG2_INV_LPC_GAIN_LOW_THRES), down_scale_Q30)
@@ -269,8 +269,10 @@ func plcConceal(
 		for j = 0; j < LTP_ORDER; j++ {
 			B_Q14[j] = int16(RSHIFT(SMULBB(harm_Gain_Q15, B_Q14[j]), 15))
 		}
-		/* Gradually reduce excitation gain */
-		rand_scale_Q14 = int16(RSHIFT(SMULBB(rand_scale_Q14, rand_Gain_Q15), 15))
+		if psDec.indices.signalType != TYPE_NO_VOICE_ACTIVITY {
+			/* Gradually reduce excitation gain */
+			rand_scale_Q14 = int16(RSHIFT(SMULBB(rand_scale_Q14, rand_Gain_Q15), 15))
+		}
 
 		/* Slowly increase pitch lag */
 		psPLC.pitchL_Q8 = SMLAWB(psPLC.pitchL_Q8, psPLC.pitchL_Q8, PITCH_DRIFT_FAC_Q16)

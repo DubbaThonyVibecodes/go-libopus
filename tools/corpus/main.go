@@ -104,6 +104,7 @@ var gain = decVariant{"gain", a("--gain -6000")}
 var gainSched = decVariant{"gainsched", []string{"--gain", "3000", "--sched", "f=40:gain=-12000,f=80:gain=0,f=120:gain=1000"}}
 var asFloat = decVariant{"float", a("--float")}
 var decReset = decVariant{"reset", []string{"--sched", "f=50:reset=1,f=51:reset=1,f=130:reset=1"}}
+var noPhaseInv = decVariant{"nophaseinv", a("--nophaseinv")}
 
 func clip(name string, rate, ch int) input  { return input{"clip:" + name, rate, ch} }
 func synth(spec string, rate, ch int) input { return input{"synth:" + spec, rate, ch} }
@@ -293,17 +294,31 @@ func cases() []encCase {
 	add("piano_48k_sweep_cbr", p48, "--app audio --bitrate 8000 --sweep 3000 --sweep-max 256000 --cbr")
 
 	// ---- libopus 1.1: expert frame duration, prediction disabled, padding ----
-	for _, fd := range []string{"2.5", "5", "10", "20", "40", "60", "variable"} {
+	for _, fd := range []string{"2.5", "5", "10", "20", "40", "60", "80", "100", "120"} {
 		n := strings.ReplaceAll(fd, ".", "p")
 		c := add("mix_48k_audio_framedur"+n, m48, "--app audio --bitrate 64000 --framesize 60 --framedur "+fd, loss(10, 40))
 		c.info = true
 		add("speech_a_16k_voip_framedur"+n, sa16, "--app voip --bitrate 24000 --framesize 60 --framedur "+fd)
 		add("piano_48k_lowdelay_framedur"+n, p48, "--app lowdelay --bitrate 96000 --framesize 40 --framedur "+fd)
 	}
-	add("mix_48k_audio_framedur_variable_fs20", m48, "--app audio --bitrate 48000 --framesize 20 --framedur variable")
-	add("mix_48k_voip_framedur_variable_cplx5", m48, "--app voip --bitrate 32000 --framesize 60 --framedur variable --complexity 5")
-	add("piano_48k_audio_framedur_variable_cbr", p48, "--app audio --bitrate 64000 --cbr --framesize 60 --framedur variable")
-	sch("mix_48k_sched_framedur", m48, "--app audio --bitrate 64000 --framesize 60", "f=10:framedur=10,f=30:framedur=variable,f=60:framedur=60,f=80:framedur=2.5,f=100:framedur=arg,f=120:framedur=40,f=140:framedur=variable")
+	// libopus 1.2: 80/100/120 ms frames (multi-frame packets via the repacketizer)
+	for _, fs := range []string{"80", "100", "120"} {
+		c := add("mix_48k_audio_fs"+fs, m48, "--app audio --bitrate 64000 --framesize "+fs, loss(10, 42))
+		c.info = true
+		c.repack = []string{"split"}
+		add("speech_a_16k_voip_fs"+fs, sa16, "--app voip --bitrate 24000 --framesize "+fs, fecloss(10, 43))
+		add("piano_48k_audio_cbr_fs"+fs, p48, "--app audio --bitrate 96000 --cbr --framesize "+fs)
+		add("mix_48k_voip_dtx_fs"+fs, m48, "--app voip --bitrate 32000 --dtx --framesize "+fs)
+	}
+	add("piano_48k_audio_framedur120_fs60", p48, "--app audio --bitrate 64000 --framesize 60 --framedur 120")
+	sch("mix_48k_sched_framedur", m48, "--app audio --bitrate 64000 --framesize 120", "f=10:framedur=10,f=30:framedur=120,f=60:framedur=60,f=80:framedur=2.5,f=100:framedur=arg,f=120:framedur=40,f=140:framedur=100")
+	sch("mix_48k_sched_framesize_long", m48, "--app audio --bitrate 48000 --framesize 20", "f=10:framesize=80,f=20:framesize=10,f=30:framesize=120,f=40:framesize=2.5,f=50:framesize=100,f=60:framesize=60,f=70:framesize=120", loss(10, 44))
+	// libopus 1.2: phase inversion disabling (encoder and decoder side)
+	add("piano_48k_audio_nophaseinv", p48, "--app audio --bitrate 64000 --nophaseinv", loss(10, 45), noPhaseInv)
+	add("mix_48k_audio_nophaseinv_32k", m48, "--app audio --bitrate 32000 --nophaseinv", noPhaseInv)
+	add("mix_48k_voip_nophaseinv", m48, "--app voip --bitrate 32000 --nophaseinv")
+	add("piano_48k_audio_64k_decnophaseinv", p48, "--app audio --bitrate 64000", noPhaseInv, decVariant{"phaseinvsched", []string{"--sched", "f=30:phaseinv=1,f=60:phaseinv=0,f=90:phaseinv=1"}})
+	sch("mix_48k_sched_phaseinv", m48, "--app audio --bitrate 48000", "f=20:phaseinv=1,f=50:phaseinv=0,f=80:phaseinv=1,f=110:bitrate=24000,f=140:phaseinv=0")
 	add("mix_48k_audio_nopred", m48, "--app audio --bitrate 64000 --nopred", loss(10, 41))
 	add("piano_48k_audio_nopred_fs10", p48, "--app audio --bitrate 96000 --framesize 10 --nopred")
 	add("speech_a_16k_voip_nopred", sa16, "--app voip --bitrate 24000 --nopred")

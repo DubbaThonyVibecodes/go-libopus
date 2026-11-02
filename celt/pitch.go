@@ -271,7 +271,8 @@ func InnerProd(x, y []int16, N int, arch int) int32 {
 // PitchXcorr is the pure C implementation (unrolled version of the pitch
 // correlation). It returns the maximum correlation (fixed-point build).
 //
-// C: opus_val32 celt_pitch_xcorr(const opus_val16 *_x, const opus_val16 *_y, opus_val32 *xcorr, int len, int max_pitch, int arch)
+// C: opus_val32 celt_pitch_xcorr_c(const opus_val16 *_x, const opus_val16 *_y, opus_val32 *xcorr, int len, int max_pitch, int arch)
+// C: #define celt_pitch_xcorr celt_pitch_xcorr_c
 func PitchXcorr(_x, _y []int16, xcorr []int32, len int, max_pitch int, arch int) int32 {
 	var i int
 	// The EDSP version requires that max_pitch is at least 1, and that _x is
@@ -397,7 +398,7 @@ func compute_pitch_gain(xy, xx, yy int32) int16 {
 	sx = int(Ilog2(xx)) - 14
 	sy = int(Ilog2(yy)) - 14
 	shift = sx + sy
-	x2y2 = MULT16_16_Q14(VSHR32(xx, sx), VSHR32(yy, sy))
+	x2y2 = SHR32(MULT16_16(VSHR32(xx, sx), VSHR32(yy, sy)), 14)
 	if shift&1 != 0 {
 		if x2y2 < 32768 {
 			x2y2 <<= 1

@@ -68,10 +68,19 @@ func USUB32(a, b uint32) uint32 { return a - b }
 // Set this if opus_int64 is a native type of the CPU (64-bit host).
 const OPUS_FAST_INT64 = 1
 
+// C: typedef opus_int64 opus_val64;   (FIXED_POINT)
+type opus_val64 = int64
+
+// C: GLOBAL_STACK_SIZE 120000   (unused: the Go port allocates with make)
+const GLOBAL_STACK_SIZE = 120000
+
 // Fixed-point build constants (arch.h, FIXED_POINT branch).
 const (
-	Q15ONE       = int16(32767)
-	SIG_SHIFT    = 12
+	Q15ONE    = int16(32767)
+	SIG_SHIFT = 12
+	// Safe saturation value for 32-bit signals. Should be less than
+	// 2^31*(1-0.85) to avoid blowing up on DC at deemphasis.
+	SIG_SAT      = 300000000
 	NORM_SCALING = 16384
 	DB_SHIFT     = 10
 	EPSILON      = 1

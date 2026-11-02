@@ -100,6 +100,10 @@ float API, so the float code that the fixed-point build compiles
 * `celt.comb_filter` / `celt.comb_filter_const` take explicit `(slice, offset)`
   pairs for `x` and `y` because the C reads up to `T+2` samples *behind* the
   input pointer.
+* `celt.Fir` (1.2+) reads `ord` samples behind its input, so the Go input
+  slice starts `ord` samples *before* the C pointer, like `comb_filter`.
+* `silk.FindLTPFIX` / `silk.FindPredCoefsFIX` (1.2+) take an explicit index
+  of the C pointer inside the base buffer because the C reads behind it.
 * The oracle twin (`internal/oracle`) mirrors two quirks of the C driver:
   the `__opus_check_int` macro evaluates its argument twice (an extra LCG
   draw in `--random-fec`), and `gen info` prints the previous packet's TOC

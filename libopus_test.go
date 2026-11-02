@@ -104,11 +104,17 @@ func TestFrameDurationAndPadding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := enc.SetExpertFrameDuration(FrameDurationVariable); err != nil {
+	if err := enc.SetExpertFrameDuration(FrameDuration120ms); err != nil {
 		t.Fatal(err)
 	}
-	if enc.ExpertFrameDuration() != FrameDurationVariable {
+	if enc.ExpertFrameDuration() != FrameDuration120ms {
 		t.Fatal("frame duration not applied")
+	}
+	if err := enc.SetPhaseInversionDisabled(true); err != nil {
+		t.Fatal(err)
+	}
+	if !enc.PhaseInversionDisabled() {
+		t.Fatal("phase inversion flag not applied")
 	}
 	if err := enc.SetPredictionDisabled(true); err != nil {
 		t.Fatal(err)
@@ -116,17 +122,17 @@ func TestFrameDurationAndPadding(t *testing.T) {
 	if !enc.PredictionDisabled() {
 		t.Fatal("prediction flag not applied")
 	}
-	pcm := make([]int16, 2880)
+	pcm := make([]int16, 5760)
 	for i := range pcm {
 		pcm[i] = int16(8000 * math.Sin(float64(i)*2*math.Pi*440/48000))
 	}
-	pkt := make([]byte, MaxPacket)
+	pkt := make([]byte, 3*1275+7)
 	n, err := enc.Encode(pcm, pkt)
 	if err != nil || n < 1 {
 		t.Fatalf("encode: n=%d err=%v", n, err)
 	}
 	used, err := PacketSamples(pkt[:n], 48000)
-	if err != nil || used < 120 || used > 2880 {
+	if err != nil || used != 5760 {
 		t.Fatalf("packet samples %d err %v", used, err)
 	}
 	padded, err := PacketPad(pkt[:n], n+37)

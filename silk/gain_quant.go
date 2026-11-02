@@ -45,6 +45,7 @@ func GainsQuant(ind []int8, gain_Q16 []int32, prev_ind *int8, conditional int, n
 			/* Accumulate deltas */
 			if int(ind[k]) > double_step_size_threshold {
 				*prev_ind = int8(int(*prev_ind) + int(LSHIFT(ind[k], 1)) - double_step_size_threshold)
+				*prev_ind = int8(min_int(int(*prev_ind), N_LEVELS_QGAIN-1))
 			} else {
 				*prev_ind += ind[k]
 			}

@@ -4,19 +4,33 @@ package celt
 // (celt_encoder.go) and the decoder (celt_decoder.go).
 
 // PACKAGE_VERSION mirrors the upstream version this port tracks.
-const PACKAGE_VERSION = "1.1.5"
+const PACKAGE_VERSION = "1.2.1"
 
 // AnalysisInfo is the C struct AnalysisInfo (celt.h). It is filled by the
 // opus package's analysis code (analysis.c) and passed to the CELT encoder
 // with CELT_SET_ANALYSIS.
+// C: #define LEAK_BANDS 19
+const LEAK_BANDS = 19
+
 type AnalysisInfo struct {
-	Valid          int
-	Tonality       float32
-	Tonality_slope float32
-	Noisiness      float32
-	Activity       float32
-	Music_prob     float32
-	Bandwidth      int
+	Valid                int
+	Tonality             float32
+	Tonality_slope       float32
+	Noisiness            float32
+	Activity             float32
+	Music_prob           float32
+	Vad_prob             float32
+	Bandwidth            int
+	Activity_probability float32
+	// Store as Q6 char to save space.
+	Leak_boost [LEAK_BANDS]uint8
+}
+
+// SILKInfo is the C struct SILKInfo (celt.h), passed to the CELT encoder
+// with CELT_SET_SILK_INFO.
+type SILKInfo struct {
+	SignalType int
+	Offset     int
 }
 
 var trim_icdf = [11]uint8{126, 124, 119, 109, 87, 41, 19, 9, 4, 2, 0}
@@ -78,6 +92,7 @@ func comb_filter_const(y []int32, yOff int, x []int32, xOff int, T, N int,
 			MULT16_32_Q15(g10, x2) +
 			MULT16_32_Q15(g11, ADD32(x1, x3)) +
 			MULT16_32_Q15(g12, ADD32(x0, x4))
+		y[yOff+i] = SATURATE(y[yOff+i], SIG_SAT)
 		x4 = x3
 		x3 = x2
 		x2 = x1
@@ -115,6 +130,10 @@ func comb_filter(y []int32, yOff int, x []int32, xOff int, T0, T1, N int,
 		}
 		return
 	}
+	// When the gain is zero, T0 and/or T1 is set to zero. We need
+	// to have then be at least 2 to avoid processing garbage data.
+	T0 = IMAX(T0, COMBFILTER_MINPERIOD)
+	T1 = IMAX(T1, COMBFILTER_MINPERIOD)
 	g00 = int16(MULT16_16_P15(g0, gains[tapset0][0]))
 	g01 = int16(MULT16_16_P15(g0, gains[tapset0][1]))
 	g02 = int16(MULT16_16_P15(g0, gains[tapset0][2]))
@@ -140,6 +159,7 @@ func comb_filter(y []int32, yOff int, x []int32, xOff int, T0, T1, N int,
 			MULT16_32_Q15(MULT16_16_Q15(f, g10), x2) +
 			MULT16_32_Q15(MULT16_16_Q15(f, g11), ADD32(x1, x3)) +
 			MULT16_32_Q15(MULT16_16_Q15(f, g12), ADD32(x0, x4))
+		y[yOff+i] = SATURATE(y[yOff+i], SIG_SAT)
 		x4 = x3
 		x3 = x2
 		x2 = x1
@@ -158,11 +178,16 @@ func comb_filter(y []int32, yOff int, x []int32, xOff int, T0, T1, N int,
 	comb_filter_const(y, yOff+i, x, xOff+i, T1, N-i, g10, g11, g12, arch)
 }
 
+// TF change table. Positive values mean better frequency resolution (longer
+// effective window), whereas negative values mean better time resolution
+// (shorter effective window). The second index is computed as:
+// 4*isTransient + 2*tf_select + per_band_flag
 var tf_select_table = [4][8]int8{
-	{0, -1, 0, -1, 0, -1, 0, -1},
-	{0, -1, 0, -2, 1, 0, 1, -1},
-	{0, -2, 0, -3, 2, 0, 1, -1},
-	{0, -2, 0, -3, 3, 0, 1, -1},
+	/*isTransient=0     isTransient=1 */
+	{0, -1, 0, -1, 0, -1, 0, -1}, /* 2.5 ms */
+	{0, -1, 0, -2, 1, 0, 1, -1},  /* 5 ms */
+	{0, -2, 0, -3, 2, 0, 1, -1},  /* 10 ms */
+	{0, -2, 0, -3, 3, 0, 1, -1},  /* 20 ms */
 }
 
 // C: void init_caps(const CELTMode *m,int *cap,int LM,int C)

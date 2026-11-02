@@ -3,7 +3,7 @@ package silk
 // C: silk/SigProc_FIX.h — signal processing macros. The functions declared
 // in that header live in their own files (resampler.go, lin2log.go, ...).
 
-const SILK_MAX_ORDER_LPC = 16 // max order of the LPC analysis in schur() and k2a()
+const SILK_MAX_ORDER_LPC = 24 // max order of the LPC analysis in schur() and k2a()
 
 // Rotate a32 right by 'rot' bits. Negative rot values result in rotating
 // left. Output is 32bit int.
@@ -216,22 +216,13 @@ func ADD_POS_SAT16[A, B integer](a A, b B) int16 {
 	return int16(s)
 }
 
-// C: silk_ADD_POS_SAT32(a, b) ((((a)+(b)) & 0x80000000) ? silk_int32_MAX : ((a)+(b)))
+// C: silk_ADD_POS_SAT32(a, b) ((((opus_uint32)(a)+(opus_uint32)(b)) & 0x80000000) ? silk_int32_MAX : ((a)+(b)))
 func ADD_POS_SAT32[A, B integer](a A, b B) int32 {
 	s := uint32(a) + uint32(b)
 	if s&0x80000000 != 0 {
 		return int32_MAX
 	}
 	return int32(s)
-}
-
-// C: silk_ADD_POS_SAT64(a, b) ((((a)+(b)) & 0x8000000000000000LL) ? silk_int64_MAX : ((a)+(b)))
-func ADD_POS_SAT64[A, B integer](a A, b B) int64 {
-	s := uint64(a) + uint64(b)
-	if s&0x8000000000000000 != 0 {
-		return int64_MAX
-	}
-	return int64(s)
 }
 
 // C: silk_LSHIFT8(a, shift) ((opus_int8)((opus_uint8)(a)<<(shift)))   shift >= 0, shift < 8
@@ -434,8 +425,13 @@ func sign[T integer](a T) int {
 // frames), otherwise result won't be random at all. When only using some of the
 // bits, take the most significant bits by right-shifting.
 //
-// C: silk_RAND(seed) (silk_MLA_ovflw(907633515, (seed), 196314165))
-func RAND(seed int32) int32 { return MLA_ovflw(907633515, seed, 196314165) }
+// C: #define RAND_MULTIPLIER 196314165
+// C: #define RAND_INCREMENT  907633515
+// C: silk_RAND(seed) (silk_MLA_ovflw((RAND_INCREMENT), (seed), (RAND_MULTIPLIER)))
+const RAND_MULTIPLIER = 196314165
+const RAND_INCREMENT = 907633515
+
+func RAND(seed int32) int32 { return MLA_ovflw(RAND_INCREMENT, seed, RAND_MULTIPLIER) }
 
 // silk_SMMUL: Signed top word multiply.
 //

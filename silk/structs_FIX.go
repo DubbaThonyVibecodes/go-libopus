@@ -10,27 +10,15 @@ type ShapeStateFIX struct {
 	Tilt_smth_Q16          int32
 }
 
-// PrefilterStateFIX is the C silk_prefilter_state_FIX.
-type PrefilterStateFIX struct {
-	sLTP_shp         [LTP_BUF_LENGTH]int16
-	sAR_shp          [MAX_SHAPE_LPC_ORDER + 1]int32
-	sLTP_shp_buf_idx int
-	sLF_AR_shp_Q12   int32
-	sLF_MA_shp_Q12   int32
-	sHarmHP_Q2       int32
-	rand_seed        int32
-	lagPrev          int
-}
-
 // EncoderStateFIX is the C silk_encoder_state_FIX.
 type EncoderStateFIX struct {
-	sCmn     EncoderState      // Common struct, shared with floating-point code
-	sShape   ShapeStateFIX     // Shape state
-	sPrefilt PrefilterStateFIX // Prefilter State
+	sCmn   EncoderState  // Common struct, shared with floating-point code
+	sShape ShapeStateFIX // Shape state
 
 	// Buffer for find pitch and noise shape analysis
 	x_buf       [2*MAX_FRAME_LENGTH + LA_SHAPE_MAX]int16 // Buffer for find pitch and noise shape analysis
 	LTPCorr_Q15 int                                      // Normalized correlation from pitch lag estimator
+	resNrgSmth  int32
 }
 
 // EncoderControlFIX is the C silk_encoder_control_FIX.
@@ -44,11 +32,8 @@ type EncoderControlFIX struct {
 
 	// Noise shaping parameters
 	// Testing
-	AR1_Q13            [MAX_NB_SUBFR * MAX_SHAPE_LPC_ORDER]int16
-	AR2_Q13            [MAX_NB_SUBFR * MAX_SHAPE_LPC_ORDER]int16
+	AR_Q13             [MAX_NB_SUBFR * MAX_SHAPE_LPC_ORDER]int16
 	LF_shp_Q14         [MAX_NB_SUBFR]int32 // Packs two int16 coefficients per int32 value
-	GainsPre_Q14       [MAX_NB_SUBFR]int
-	HarmBoost_Q14      [MAX_NB_SUBFR]int
 	Tilt_Q14           [MAX_NB_SUBFR]int
 	HarmShapeGain_Q14  [MAX_NB_SUBFR]int
 	Lambda_Q10         int
@@ -56,7 +41,6 @@ type EncoderControlFIX struct {
 	coding_quality_Q14 int
 
 	// measures
-	sparseness_Q8    int
 	predGain_Q16     int32
 	LTPredCodGain_Q7 int
 	ResNrg           [MAX_NB_SUBFR]int32 // Residual energy per subframe

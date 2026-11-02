@@ -11,15 +11,18 @@ package silk
 //	opus_int                        condCoding                              /* I    The type of conditional coding to use                                       */
 //
 // )
-func (psEnc *EncoderStateFIX) FindPredCoefsFIX(psEncCtrl *EncoderControlFIX, res_pitch []int16, x []int16, condCoding int) {
+//
+// The C res_pitch pointer (res_pitch_frame in the caller) is read behind by
+// silk_find_LTP_FIX, so it is passed as the base slice plus the index
+// res_pitch_idx of the C pointer within it.
+func (psEnc *EncoderStateFIX) FindPredCoefsFIX(psEncCtrl *EncoderControlFIX, res_pitch []int16, res_pitch_idx int, x []int16, condCoding int) {
 	var i int
-	var invGains_Q16, local_gains, Wght_Q15 [MAX_NB_SUBFR]int32
+	var invGains_Q16, local_gains [MAX_NB_SUBFR]int32
 	var NLSF_Q15 [MAX_LPC_ORDER]int16
 	var x_ptr []int16
 	var x_pre_ptr []int16
 	var LPC_in_pre []int16
-	var tmp, min_gain_Q16, minInvGain_Q30 int32
-	var LTP_corrs_rshift [MAX_NB_SUBFR]int
+	var min_gain_Q16, minInvGain_Q30 int32
 
 	/* C reads x - psEnc->sCmn.predictLPCOrder (and, inside silk_LTP_analysis_filter_FIX, further */
 	/* behind by the pitch lag). The caller (encode_frame_FIX.c) passes                            */
@@ -39,13 +42,11 @@ func (psEnc *EncoderStateFIX) FindPredCoefsFIX(psEncCtrl *EncoderControlFIX, res
 		/* Invert and normalize gains, and ensure that maximum invGains_Q16 is within range of a 16 bit int */
 		invGains_Q16[i] = DIV32_varQ(min_gain_Q16, psEncCtrl.Gains_Q16[i], 16-2)
 
-		/* Ensure Wght_Q15 a minimum value 1 */
-		invGains_Q16[i] = max(invGains_Q16[i], 363)
+		/* Limit inverse */
+		invGains_Q16[i] = max(invGains_Q16[i], 100)
 
 		/* Square the inverted gains */
 		silk_assert(invGains_Q16[i] == SAT16(invGains_Q16[i]))
-		tmp = SMULWB(invGains_Q16[i], invGains_Q16[i])
-		Wght_Q15[i] = RSHIFT(tmp, 1)
 
 		/* Invert the inverted and normalized gains */
 		local_gains[i] = DIV32((int32(1) << 16), invGains_Q16[i])
@@ -54,24 +55,24 @@ func (psEnc *EncoderStateFIX) FindPredCoefsFIX(psEncCtrl *EncoderControlFIX, res
 	LPC_in_pre = make([]int16, psEnc.sCmn.nb_subfr*psEnc.sCmn.predictLPCOrder+
 		psEnc.sCmn.frame_length)
 	if psEnc.sCmn.indices.signalType == TYPE_VOICED {
-		var WLTP []int32
+		var xXLTP_Q17 []int32
+		var XXLTP_Q17 []int32
 
 		/**********/
 		/* VOICED */
 		/**********/
 		silk_assert(psEnc.sCmn.ltp_mem_length-psEnc.sCmn.predictLPCOrder >= psEncCtrl.pitchL[0]+LTP_ORDER/2)
 
-		WLTP = make([]int32, psEnc.sCmn.nb_subfr*LTP_ORDER*LTP_ORDER)
+		xXLTP_Q17 = make([]int32, psEnc.sCmn.nb_subfr*LTP_ORDER)
+		XXLTP_Q17 = make([]int32, psEnc.sCmn.nb_subfr*LTP_ORDER*LTP_ORDER)
 
 		/* LTP analysis */
-		FindLTPFIX(psEncCtrl.LTPCoef_Q14[:], WLTP, &psEncCtrl.LTPredCodGain_Q7,
-			res_pitch, psEncCtrl.pitchL[:], Wght_Q15[:], psEnc.sCmn.subfr_length,
-			psEnc.sCmn.nb_subfr, psEnc.sCmn.ltp_mem_length, LTP_corrs_rshift[:], psEnc.sCmn.arch)
+		FindLTPFIX(XXLTP_Q17, xXLTP_Q17, res_pitch, res_pitch_idx,
+			psEncCtrl.pitchL[:], psEnc.sCmn.subfr_length, psEnc.sCmn.nb_subfr, psEnc.sCmn.arch)
 
 		/* Quantize LTP gain parameters */
 		QuantLTPGains(psEncCtrl.LTPCoef_Q14[:], psEnc.sCmn.indices.LTPIndex[:], &psEnc.sCmn.indices.PERIndex,
-			&psEnc.sCmn.sum_log_gain_Q7, WLTP, psEnc.sCmn.mu_LTP_Q9, psEnc.sCmn.LTPQuantLowComplexity, psEnc.sCmn.nb_subfr,
-			psEnc.sCmn.arch)
+			&psEnc.sCmn.sum_log_gain_Q7, &psEncCtrl.LTPredCodGain_Q7, XXLTP_Q17, xXLTP_Q17, psEnc.sCmn.subfr_length, psEnc.sCmn.nb_subfr, psEnc.sCmn.arch)
 
 		/* Control LTP scaling */
 		psEnc.LTPScaleCtrlFIX(psEncCtrl, condCoding)

@@ -55,15 +55,15 @@ func S_MUL(a int32, b int16) int32 { return MULT16_32_Q15(b, a) }
 
 // C: C_MUL(m,a,b)
 func C_MUL(a KissFftCpx, b kiss_twiddle_cpx) (m KissFftCpx) {
-	m.R = SUB32(S_MUL(a.R, b.r), S_MUL(a.I, b.i))
-	m.I = ADD32(S_MUL(a.R, b.i), S_MUL(a.I, b.r))
+	m.R = SUB32_ovflw(S_MUL(a.R, b.r), S_MUL(a.I, b.i))
+	m.I = ADD32_ovflw(S_MUL(a.R, b.i), S_MUL(a.I, b.r))
 	return
 }
 
 // C: C_MULC(m,a,b)
 func C_MULC(a KissFftCpx, b kiss_twiddle_cpx) (m KissFftCpx) {
-	m.R = ADD32(S_MUL(a.R, b.r), S_MUL(a.I, b.i))
-	m.I = SUB32(S_MUL(a.I, b.r), S_MUL(a.R, b.i))
+	m.R = ADD32_ovflw(S_MUL(a.R, b.r), S_MUL(a.I, b.i))
+	m.I = SUB32_ovflw(S_MUL(a.I, b.r), S_MUL(a.R, b.i))
 	return
 }
 
@@ -84,28 +84,28 @@ func C_FIXDIV(c *KissFftCpx, div int) {
 
 // C: C_ADD( res, a,b)
 func C_ADD(a, b KissFftCpx) (res KissFftCpx) {
-	res.R = ADD32(a.R, b.R)
-	res.I = ADD32(a.I, b.I)
+	res.R = ADD32_ovflw(a.R, b.R)
+	res.I = ADD32_ovflw(a.I, b.I)
 	return
 }
 
 // C: C_SUB( res, a,b)
 func C_SUB(a, b KissFftCpx) (res KissFftCpx) {
-	res.R = SUB32(a.R, b.R)
-	res.I = SUB32(a.I, b.I)
+	res.R = SUB32_ovflw(a.R, b.R)
+	res.I = SUB32_ovflw(a.I, b.I)
 	return
 }
 
 // C: C_ADDTO( res , a)
 func C_ADDTO(res *KissFftCpx, a KissFftCpx) {
-	res.R = ADD32(res.R, a.R)
-	res.I = ADD32(res.I, a.I)
+	res.R = ADD32_ovflw(res.R, a.R)
+	res.I = ADD32_ovflw(res.I, a.I)
 }
 
 // C: C_SUBFROM( res , a)
 func C_SUBFROM(res *KissFftCpx, a KissFftCpx) {
-	res.R = ADD32(res.R, a.R)
-	res.I = SUB32(res.I, a.I)
+	res.R = ADD32_ovflw(res.R, a.R)
+	res.I = SUB32_ovflw(res.I, a.I)
 }
 
 // C: HALF_OF(x) ((x)>>1)
@@ -129,8 +129,8 @@ func kf_bfly2(Fout []KissFftCpx, m int, N int) {
 			Fout2[0] = C_SUB(Fout[fo+0], t)
 			C_ADDTO(&Fout[fo+0], t)
 
-			t.R = S_MUL(Fout2[1].R+Fout2[1].I, tw)
-			t.I = S_MUL(Fout2[1].I-Fout2[1].R, tw)
+			t.R = S_MUL(ADD32_ovflw(Fout2[1].R, Fout2[1].I), tw)
+			t.I = S_MUL(SUB32_ovflw(Fout2[1].I, Fout2[1].R), tw)
 			Fout2[1] = C_SUB(Fout[fo+1], t)
 			C_ADDTO(&Fout[fo+1], t)
 
@@ -139,8 +139,8 @@ func kf_bfly2(Fout []KissFftCpx, m int, N int) {
 			Fout2[2] = C_SUB(Fout[fo+2], t)
 			C_ADDTO(&Fout[fo+2], t)
 
-			t.R = S_MUL(Fout2[3].I-Fout2[3].R, tw)
-			t.I = S_MUL(-Fout2[3].I-Fout2[3].R, tw)
+			t.R = S_MUL(SUB32_ovflw(Fout2[3].I, Fout2[3].R), tw)
+			t.I = S_MUL(NEG32_ovflw(ADD32_ovflw(Fout2[3].I, Fout2[3].R)), tw)
 			Fout2[3] = C_SUB(Fout[fo+3], t)
 			C_ADDTO(&Fout[fo+3], t)
 			fo += 8
@@ -166,10 +166,10 @@ func kf_bfly4(Fout_beg []KissFftCpx, fstride int, st *kiss_fft_state, m, N, mm i
 			C_ADDTO(&Fout[0], scratch1)
 			scratch1 = C_SUB(Fout[1], Fout[3])
 
-			Fout[1].R = scratch0.R + scratch1.I
-			Fout[1].I = scratch0.I - scratch1.R
-			Fout[3].R = scratch0.R - scratch1.I
-			Fout[3].I = scratch0.I + scratch1.R
+			Fout[1].R = ADD32_ovflw(scratch0.R, scratch1.I)
+			Fout[1].I = SUB32_ovflw(scratch0.I, scratch1.R)
+			Fout[3].R = SUB32_ovflw(scratch0.R, scratch1.I)
+			Fout[3].I = ADD32_ovflw(scratch0.I, scratch1.R)
 			fo += 4
 		}
 	} else {
@@ -196,10 +196,10 @@ func kf_bfly4(Fout_beg []KissFftCpx, fstride int, st *kiss_fft_state, m, N, mm i
 				tw3 += fstride * 3
 				C_ADDTO(&Fout[j], scratch[3])
 
-				Fout[j+m].R = scratch[5].R + scratch[4].I
-				Fout[j+m].I = scratch[5].I - scratch[4].R
-				Fout[j+m3].R = scratch[5].R - scratch[4].I
-				Fout[j+m3].I = scratch[5].I + scratch[4].R
+				Fout[j+m].R = ADD32_ovflw(scratch[5].R, scratch[4].I)
+				Fout[j+m].I = SUB32_ovflw(scratch[5].I, scratch[4].R)
+				Fout[j+m3].R = SUB32_ovflw(scratch[5].R, scratch[4].I)
+				Fout[j+m3].I = ADD32_ovflw(scratch[5].I, scratch[4].R)
 			}
 		}
 	}
@@ -230,18 +230,18 @@ func kf_bfly3(Fout_beg []KissFftCpx, fstride int, st *kiss_fft_state, m, N, mm i
 			tw1 += fstride
 			tw2 += fstride * 2
 
-			Fout[j+m].R = Fout[j].R - HALF_OF(scratch[3].R)
-			Fout[j+m].I = Fout[j].I - HALF_OF(scratch[3].I)
+			Fout[j+m].R = SUB32_ovflw(Fout[j].R, HALF_OF(scratch[3].R))
+			Fout[j+m].I = SUB32_ovflw(Fout[j].I, HALF_OF(scratch[3].I))
 
 			C_MULBYSCALAR(&scratch[0], epi3.i)
 
 			C_ADDTO(&Fout[j], scratch[3])
 
-			Fout[j+m2].R = Fout[j+m].R + scratch[0].I
-			Fout[j+m2].I = Fout[j+m].I - scratch[0].R
+			Fout[j+m2].R = ADD32_ovflw(Fout[j+m].R, scratch[0].I)
+			Fout[j+m2].I = SUB32_ovflw(Fout[j+m].I, scratch[0].R)
 
-			Fout[j+m].R -= scratch[0].I
-			Fout[j+m].I += scratch[0].R
+			Fout[j+m].R = SUB32_ovflw(Fout[j+m].R, scratch[0].I)
+			Fout[j+m].I = ADD32_ovflw(Fout[j+m].I, scratch[0].R)
 
 			j++
 			k--
@@ -287,22 +287,22 @@ func kf_bfly5(Fout_beg []KissFftCpx, fstride int, st *kiss_fft_state, m, N, mm i
 			scratch[8] = C_ADD(scratch[2], scratch[3])
 			scratch[9] = C_SUB(scratch[2], scratch[3])
 
-			Fout0[u].R += scratch[7].R + scratch[8].R
-			Fout0[u].I += scratch[7].I + scratch[8].I
+			Fout0[u].R = ADD32_ovflw(Fout0[u].R, ADD32_ovflw(scratch[7].R, scratch[8].R))
+			Fout0[u].I = ADD32_ovflw(Fout0[u].I, ADD32_ovflw(scratch[7].I, scratch[8].I))
 
-			scratch[5].R = scratch[0].R + S_MUL(scratch[7].R, ya.r) + S_MUL(scratch[8].R, yb.r)
-			scratch[5].I = scratch[0].I + S_MUL(scratch[7].I, ya.r) + S_MUL(scratch[8].I, yb.r)
+			scratch[5].R = ADD32_ovflw(scratch[0].R, ADD32_ovflw(S_MUL(scratch[7].R, ya.r), S_MUL(scratch[8].R, yb.r)))
+			scratch[5].I = ADD32_ovflw(scratch[0].I, ADD32_ovflw(S_MUL(scratch[7].I, ya.r), S_MUL(scratch[8].I, yb.r)))
 
-			scratch[6].R = S_MUL(scratch[10].I, ya.i) + S_MUL(scratch[9].I, yb.i)
-			scratch[6].I = -S_MUL(scratch[10].R, ya.i) - S_MUL(scratch[9].R, yb.i)
+			scratch[6].R = ADD32_ovflw(S_MUL(scratch[10].I, ya.i), S_MUL(scratch[9].I, yb.i))
+			scratch[6].I = NEG32_ovflw(ADD32_ovflw(S_MUL(scratch[10].R, ya.i), S_MUL(scratch[9].R, yb.i)))
 
 			Fout1[u] = C_SUB(scratch[5], scratch[6])
 			Fout4[u] = C_ADD(scratch[5], scratch[6])
 
-			scratch[11].R = scratch[0].R + S_MUL(scratch[7].R, yb.r) + S_MUL(scratch[8].R, ya.r)
-			scratch[11].I = scratch[0].I + S_MUL(scratch[7].I, yb.r) + S_MUL(scratch[8].I, ya.r)
-			scratch[12].R = -S_MUL(scratch[10].I, yb.i) + S_MUL(scratch[9].I, ya.i)
-			scratch[12].I = S_MUL(scratch[10].R, yb.i) - S_MUL(scratch[9].R, ya.i)
+			scratch[11].R = ADD32_ovflw(scratch[0].R, ADD32_ovflw(S_MUL(scratch[7].R, yb.r), S_MUL(scratch[8].R, ya.r)))
+			scratch[11].I = ADD32_ovflw(scratch[0].I, ADD32_ovflw(S_MUL(scratch[7].I, yb.r), S_MUL(scratch[8].I, ya.r)))
+			scratch[12].R = SUB32_ovflw(S_MUL(scratch[9].I, ya.i), S_MUL(scratch[10].I, yb.i))
+			scratch[12].I = SUB32_ovflw(S_MUL(scratch[10].R, yb.i), S_MUL(scratch[9].R, ya.i))
 
 			Fout2[u] = C_ADD(scratch[11], scratch[12])
 			Fout3[u] = C_SUB(scratch[11], scratch[12])

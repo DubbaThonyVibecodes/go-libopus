@@ -22,7 +22,7 @@ func BurgModified(
 	const MAX_FRAME_SIZE = 384 // subfr_length * nb_subfr = ( 0.005 * 16000 + 16 ) * 4 = 384
 
 	const QA = 25
-	const N_BITS_HEAD_ROOM = 2
+	const N_BITS_HEAD_ROOM = 3
 	const MIN_RSHIFTS = -16
 	const MAX_RSHIFTS = (32 - QA)
 

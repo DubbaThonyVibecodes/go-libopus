@@ -30,7 +30,7 @@ type peStage3Vals [PE_NB_STAGE3_LAGS]int32
 
 // C: opus_int silk_pitch_analysis_core(                  /* O    Voicing estimate: 0 voiced, 1 unvoiced                      */
 //
-//	const opus_int16            *frame,             /* I    Signal of length PE_FRAME_LENGTH_MS*Fs_kHz                  */
+//	const opus_int16            *frame_unscaled,    /* I    Signal of length PE_FRAME_LENGTH_MS*Fs_kHz                  */
 //	opus_int                    *pitch_out,         /* O    4 pitch lag values                                          */
 //	opus_int16                  *lagIndex,          /* O    Lag Index                                                   */
 //	opus_int8                   *contourIndex,      /* O    Pitch contour Index                                         */
@@ -50,15 +50,16 @@ type peStage3Vals [PE_NB_STAGE3_LAGS]int32
 // table, so they are represented here as the rows of the Go 2-D arrays and
 // matrix_ptr( ptr, r, c, N ) becomes ptr[ r ][ c ]. The flat C matrix is a
 // slice indexed as C[ row*stride + col ].
-func PitchAnalysisCore(frame []int16, pitch_out []int, lagIndex *int16, contourIndex *int8, LTPCorr_Q15 *int, prevLag int, search_thres1_Q16 int32, search_thres2_Q13 int, Fs_kHz int, complexity int, nb_subfr int, arch int) int {
-	var frame_8kHz []int16
+func PitchAnalysisCore(frame_unscaled []int16, pitch_out []int, lagIndex *int16, contourIndex *int8, LTPCorr_Q15 *int, prevLag int, search_thres1_Q16 int32, search_thres2_Q13 int, Fs_kHz int, complexity int, nb_subfr int, arch int) int {
+	var frame_8kHz_buf []int16
 	var frame_4kHz []int16
+	var frame_scaled []int16
 	var filt_state [6]int32
-	var input_frame_ptr []int16
+	var frame, frame_8kHz []int16
 	var i, k, d, j int
 	var C []int16
 	var xcorr32 []int32
-	/* target_ptr and basis_ptr are indices into frame_4kHz / frame_8kHz / input_frame_ptr */
+	/* target_ptr and basis_ptr are indices into frame_4kHz / frame_8kHz / frame */
 	var target_ptr, basis_ptr int
 	var cross_corr, normalizer, energy, energy_basis, energy_target int32
 	var shift int
@@ -97,17 +98,37 @@ func PitchAnalysisCore(frame []int16, pitch_out []int, lagIndex *int16, contourI
 	min_lag = PE_MIN_LAG_MS * Fs_kHz
 	max_lag = PE_MAX_LAG_MS*Fs_kHz - 1
 
+	/* Downscale input if necessary */
+	SumSqrShift(&energy, &shift, frame_unscaled, frame_length)
+	shift += 3 - int(CLZ32(energy)) /* at least two bits headroom */
+	frame_scaled = make([]int16, frame_length)
+	if shift > 0 {
+		shift = RSHIFT(shift+1, 1)
+		for i = 0; i < frame_length; i++ {
+			frame_scaled[i] = RSHIFT(frame_unscaled[i], shift)
+		}
+		frame = frame_scaled
+	} else {
+		frame = frame_unscaled
+	}
+
+	if Fs_kHz == 8 {
+		frame_8kHz_buf = make([]int16, 1)
+	} else {
+		frame_8kHz_buf = make([]int16, frame_length_8kHz)
+	}
 	/* Resample from input sampled at Fs_kHz to 8 kHz */
-	frame_8kHz = make([]int16, frame_length_8kHz)
 	if Fs_kHz == 16 {
 		clear(filt_state[:2])
-		ResamplerDown2(filt_state[:], frame_8kHz, frame, int32(frame_length))
+		ResamplerDown2(filt_state[:], frame_8kHz_buf, frame, int32(frame_length))
+		frame_8kHz = frame_8kHz_buf
 	} else if Fs_kHz == 12 {
 		clear(filt_state[:6])
-		ResamplerDown23(filt_state[:], frame_8kHz, frame, int32(frame_length))
+		ResamplerDown23(filt_state[:], frame_8kHz_buf, frame, int32(frame_length))
+		frame_8kHz = frame_8kHz_buf
 	} else {
 		silk_assert(Fs_kHz == 8)
-		copy(frame_8kHz[:frame_length_8kHz], frame[:frame_length_8kHz])
+		frame_8kHz = frame
 	}
 
 	/* Decimate again to 4 kHz */
@@ -118,20 +139,6 @@ func PitchAnalysisCore(frame []int16, pitch_out []int, lagIndex *int16, contourI
 	/* Low-pass filter */
 	for i = frame_length_4kHz - 1; i > 0; i-- {
 		frame_4kHz[i] = ADD_SAT16(frame_4kHz[i], frame_4kHz[i-1])
-	}
-
-	/*******************************************************************************
-	** Scale 4 kHz signal down to prevent correlations measures from overflowing
-	** find scaling as max scaling for each 8kHz(?) subframe
-	*******************************************************************************/
-
-	/* Inner product is calculated with different lengths, so scale for the worst case */
-	SumSqrShift(&energy, &shift, frame_4kHz, frame_length_4kHz)
-	if shift > 0 {
-		shift = RSHIFT(shift, 1)
-		for i = 0; i < frame_length_4kHz; i++ {
-			frame_4kHz[i] = RSHIFT(frame_4kHz[i], shift)
-		}
 	}
 
 	/******************************************************************************
@@ -270,18 +277,6 @@ func PitchAnalysisCore(frame []int16, pitch_out []int, lagIndex *int16, contourI
 	** SECOND STAGE, operating at 8 kHz, on lag sections with high correlation
 	*************************************************************************************/
 
-	/******************************************************************************
-	** Scale signal down to avoid correlations measures from overflowing
-	*******************************************************************************/
-	/* find scaling as max scaling for each subframe */
-	SumSqrShift(&energy, &shift, frame_8kHz, frame_length_8kHz)
-	if shift > 0 {
-		shift = RSHIFT(shift, 1)
-		for i = 0; i < frame_length_8kHz; i++ {
-			frame_8kHz[i] = RSHIFT(frame_8kHz[i], shift)
-		}
-	}
-
 	/*********************************************************************************
 	* Find energy of each subframe projected onto its history, for a range of delays
 	*********************************************************************************/
@@ -419,26 +414,6 @@ func PitchAnalysisCore(frame []int16, pitch_out []int, lagIndex *int16, contourI
 	silk_assert(*LTPCorr_Q15 >= 0)
 
 	if Fs_kHz > 8 {
-		var scratch_mem []int16
-		/***************************************************************************/
-		/* Scale input signal down to avoid correlations measures from overflowing */
-		/***************************************************************************/
-		/* find scaling as max scaling for each subframe */
-		SumSqrShift(&energy, &shift, frame, frame_length)
-		if shift > 0 {
-			scratch_mem = make([]int16, frame_length)
-		}
-		if shift > 0 {
-			/* Move signal to scratch mem because the input signal should be unchanged */
-			shift = RSHIFT(shift, 1)
-			for i = 0; i < frame_length; i++ {
-				scratch_mem[i] = RSHIFT(frame[i], shift)
-			}
-			input_frame_ptr = scratch_mem
-		} else {
-			input_frame_ptr = frame
-		}
-
 		/* Search in original signal */
 
 		CBimax_old = CBimax
@@ -478,15 +453,15 @@ func PitchAnalysisCore(frame []int16, pitch_out []int, lagIndex *int16, contourI
 		/* Calculate the correlations and energies needed in stage 3 */
 		energies_st3 = make([]peStage3Vals, nb_subfr*nb_cbk_search)
 		cross_corr_st3 = make([]peStage3Vals, nb_subfr*nb_cbk_search)
-		pAnaCalcCorrSt3(cross_corr_st3, input_frame_ptr, start_lag, sf_length, nb_subfr, complexity, arch)
-		pAnaCalcEnergySt3(energies_st3, input_frame_ptr, start_lag, sf_length, nb_subfr, complexity, arch)
+		pAnaCalcCorrSt3(cross_corr_st3, frame, start_lag, sf_length, nb_subfr, complexity, arch)
+		pAnaCalcEnergySt3(energies_st3, frame, start_lag, sf_length, nb_subfr, complexity, arch)
 
 		lag_counter = 0
 		silk_assert(lag == int(SAT16(lag)))
 		contour_bias_Q15 = DIV32_16(SILK_FIX_CONST(PE_FLATCONTOUR_BIAS, 15), lag)
 
 		target_ptr = PE_LTP_MEM_LENGTH_MS * Fs_kHz
-		energy_target = ADD32(InnerProdAligned(input_frame_ptr[target_ptr:], input_frame_ptr[target_ptr:], nb_subfr*sf_length, arch), 1)
+		energy_target = ADD32(InnerProdAligned(frame[target_ptr:], frame[target_ptr:], nb_subfr*sf_length, arch), 1)
 		for d = start_lag; d <= end_lag; d++ {
 			for j = 0; j < nb_cbk_search; j++ {
 				cross_corr = 0

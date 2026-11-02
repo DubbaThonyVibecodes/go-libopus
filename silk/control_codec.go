@@ -4,8 +4,8 @@ package silk
 
 // Control encoder
 //
-// C: opus_int silk_control_encoder(silk_encoder_state_Fxx *psEnc, silk_EncControlStruct *encControl, const opus_int32 TargetRate_bps, const opus_int allow_bw_switch, const opus_int channelNb, const opus_int force_fs_kHz)
-func (psEnc *EncoderStateFIX) ControlEncoder(encControl *EncControlStruct, TargetRate_bps int32, allow_bw_switch int, channelNb int, force_fs_kHz int) int {
+// C: opus_int silk_control_encoder(silk_encoder_state_Fxx *psEnc, silk_EncControlStruct *encControl, const opus_int allow_bw_switch, const opus_int channelNb, const opus_int force_fs_kHz)
+func (psEnc *EncoderStateFIX) ControlEncoder(encControl *EncControlStruct, allow_bw_switch int, channelNb int, force_fs_kHz int) int {
 	var fs_kHz, ret int = 0, 0
 
 	psEnc.sCmn.useDTX = encControl.UseDTX
@@ -60,7 +60,7 @@ func (psEnc *EncoderStateFIX) ControlEncoder(encControl *EncControlStruct, Targe
 	/********************************************/
 	/* Set LBRR usage                           */
 	/********************************************/
-	ret += setupLBRR(&psEnc.sCmn, TargetRate_bps)
+	ret += setupLBRR(&psEnc.sCmn, encControl)
 
 	psEnc.sCmn.controlled_since_last_payload = 1
 
@@ -157,7 +157,6 @@ func setupFs(psEnc *EncoderStateFIX, fs_kHz int, PacketSize_ms int) int {
 	if psEnc.sCmn.fs_kHz != fs_kHz {
 		/* reset part of the state */
 		psEnc.sShape = ShapeStateFIX{}
-		psEnc.sPrefilt = PrefilterStateFIX{}
 		psEnc.sCmn.sNSQ = NsqState{}
 		clear(psEnc.sCmn.prev_NLSFq_Q15[:])
 		clear(psEnc.sCmn.sLP.In_LP_State[:])
@@ -168,7 +167,6 @@ func setupFs(psEnc *EncoderStateFIX, fs_kHz int, PacketSize_ms int) int {
 		/* Initialize non-zero parameters */
 		psEnc.sCmn.prevLag = 100
 		psEnc.sCmn.first_frame_after_reset = 1
-		psEnc.sPrefilt.lagPrev = 100
 		psEnc.sShape.LastGainIndex = 10
 		psEnc.sCmn.sNSQ.lagPrev = 100
 		psEnc.sCmn.sNSQ.prev_gain_Q16 = 65536
@@ -206,13 +204,10 @@ func setupFs(psEnc *EncoderStateFIX, fs_kHz int, PacketSize_ms int) int {
 			psEnc.sCmn.pitch_LPC_win_length = int(SMULBB(FIND_PITCH_LPC_WIN_MS_2_SF, fs_kHz))
 		}
 		if psEnc.sCmn.fs_kHz == 16 {
-			psEnc.sCmn.mu_LTP_Q9 = int(SILK_FIX_CONST(MU_LTP_QUANT_WB, 9))
 			psEnc.sCmn.pitch_lag_low_bits_iCDF = uniform8_iCDF[:]
 		} else if psEnc.sCmn.fs_kHz == 12 {
-			psEnc.sCmn.mu_LTP_Q9 = int(SILK_FIX_CONST(MU_LTP_QUANT_MB, 9))
 			psEnc.sCmn.pitch_lag_low_bits_iCDF = uniform6_iCDF[:]
 		} else {
-			psEnc.sCmn.mu_LTP_Q9 = int(SILK_FIX_CONST(MU_LTP_QUANT_NB, 9))
 			psEnc.sCmn.pitch_lag_low_bits_iCDF = uniform4_iCDF[:]
 		}
 	}
@@ -229,60 +224,75 @@ func setupComplexity(psEncC *EncoderState, Complexity int) int {
 
 	/* Set encoding complexity */
 	silk_assert(Complexity >= 0 && Complexity <= 10)
-	if Complexity < 2 {
+	if Complexity < 1 {
 		psEncC.pitchEstimationComplexity = SILK_PE_MIN_COMPLEX
 		psEncC.pitchEstimationThreshold_Q16 = SILK_FIX_CONST(0.8, 16)
 		psEncC.pitchEstimationLPCOrder = 6
-		psEncC.shapingLPCOrder = 8
+		psEncC.shapingLPCOrder = 12
 		psEncC.la_shape = 3 * psEncC.fs_kHz
 		psEncC.nStatesDelayedDecision = 1
 		psEncC.useInterpolatedNLSFs = 0
-		psEncC.LTPQuantLowComplexity = 1
+		psEncC.NLSF_MSVQ_Survivors = 2
+		psEncC.warping_Q16 = 0
+	} else if Complexity < 2 {
+		psEncC.pitchEstimationComplexity = SILK_PE_MID_COMPLEX
+		psEncC.pitchEstimationThreshold_Q16 = SILK_FIX_CONST(0.76, 16)
+		psEncC.pitchEstimationLPCOrder = 8
+		psEncC.shapingLPCOrder = 14
+		psEncC.la_shape = 5 * psEncC.fs_kHz
+		psEncC.nStatesDelayedDecision = 1
+		psEncC.useInterpolatedNLSFs = 0
+		psEncC.NLSF_MSVQ_Survivors = 3
+		psEncC.warping_Q16 = 0
+	} else if Complexity < 3 {
+		psEncC.pitchEstimationComplexity = SILK_PE_MIN_COMPLEX
+		psEncC.pitchEstimationThreshold_Q16 = SILK_FIX_CONST(0.8, 16)
+		psEncC.pitchEstimationLPCOrder = 6
+		psEncC.shapingLPCOrder = 12
+		psEncC.la_shape = 3 * psEncC.fs_kHz
+		psEncC.nStatesDelayedDecision = 2
+		psEncC.useInterpolatedNLSFs = 0
 		psEncC.NLSF_MSVQ_Survivors = 2
 		psEncC.warping_Q16 = 0
 	} else if Complexity < 4 {
 		psEncC.pitchEstimationComplexity = SILK_PE_MID_COMPLEX
 		psEncC.pitchEstimationThreshold_Q16 = SILK_FIX_CONST(0.76, 16)
 		psEncC.pitchEstimationLPCOrder = 8
-		psEncC.shapingLPCOrder = 10
+		psEncC.shapingLPCOrder = 14
 		psEncC.la_shape = 5 * psEncC.fs_kHz
-		psEncC.nStatesDelayedDecision = 1
+		psEncC.nStatesDelayedDecision = 2
 		psEncC.useInterpolatedNLSFs = 0
-		psEncC.LTPQuantLowComplexity = 0
 		psEncC.NLSF_MSVQ_Survivors = 4
 		psEncC.warping_Q16 = 0
 	} else if Complexity < 6 {
 		psEncC.pitchEstimationComplexity = SILK_PE_MID_COMPLEX
 		psEncC.pitchEstimationThreshold_Q16 = SILK_FIX_CONST(0.74, 16)
 		psEncC.pitchEstimationLPCOrder = 10
-		psEncC.shapingLPCOrder = 12
+		psEncC.shapingLPCOrder = 16
 		psEncC.la_shape = 5 * psEncC.fs_kHz
 		psEncC.nStatesDelayedDecision = 2
 		psEncC.useInterpolatedNLSFs = 1
-		psEncC.LTPQuantLowComplexity = 0
-		psEncC.NLSF_MSVQ_Survivors = 8
+		psEncC.NLSF_MSVQ_Survivors = 6
 		psEncC.warping_Q16 = psEncC.fs_kHz * int(SILK_FIX_CONST(WARPING_MULTIPLIER, 16))
 	} else if Complexity < 8 {
 		psEncC.pitchEstimationComplexity = SILK_PE_MID_COMPLEX
 		psEncC.pitchEstimationThreshold_Q16 = SILK_FIX_CONST(0.72, 16)
 		psEncC.pitchEstimationLPCOrder = 12
-		psEncC.shapingLPCOrder = 14
+		psEncC.shapingLPCOrder = 20
 		psEncC.la_shape = 5 * psEncC.fs_kHz
 		psEncC.nStatesDelayedDecision = 3
 		psEncC.useInterpolatedNLSFs = 1
-		psEncC.LTPQuantLowComplexity = 0
-		psEncC.NLSF_MSVQ_Survivors = 16
+		psEncC.NLSF_MSVQ_Survivors = 8
 		psEncC.warping_Q16 = psEncC.fs_kHz * int(SILK_FIX_CONST(WARPING_MULTIPLIER, 16))
 	} else {
 		psEncC.pitchEstimationComplexity = SILK_PE_MAX_COMPLEX
 		psEncC.pitchEstimationThreshold_Q16 = SILK_FIX_CONST(0.7, 16)
 		psEncC.pitchEstimationLPCOrder = 16
-		psEncC.shapingLPCOrder = 16
+		psEncC.shapingLPCOrder = 24
 		psEncC.la_shape = 5 * psEncC.fs_kHz
 		psEncC.nStatesDelayedDecision = MAX_DEL_DEC_STATES
 		psEncC.useInterpolatedNLSFs = 1
-		psEncC.LTPQuantLowComplexity = 0
-		psEncC.NLSF_MSVQ_Survivors = 32
+		psEncC.NLSF_MSVQ_Survivors = 16
 		psEncC.warping_Q16 = psEncC.fs_kHz * int(SILK_FIX_CONST(WARPING_MULTIPLIER, 16))
 	}
 
@@ -297,38 +307,24 @@ func setupComplexity(psEncC *EncoderState, Complexity int) int {
 	silk_assert(psEncC.warping_Q16 <= 32767)
 	silk_assert(psEncC.la_shape <= LA_SHAPE_MAX)
 	silk_assert(psEncC.shapeWinLength <= SHAPE_LPC_WIN_MAX)
-	silk_assert(psEncC.NLSF_MSVQ_Survivors <= NLSF_VQ_MAX_SURVIVORS)
 
 	return ret
 }
 
-// C: static OPUS_INLINE opus_int silk_setup_LBRR(silk_encoder_state *psEncC, const opus_int32 TargetRate_bps)
-func setupLBRR(psEncC *EncoderState, TargetRate_bps int32) int {
+// C: static OPUS_INLINE opus_int silk_setup_LBRR(silk_encoder_state *psEncC, const silk_EncControlStruct *encControl)
+func setupLBRR(psEncC *EncoderState, encControl *EncControlStruct) int {
 	var LBRR_in_previous_packet int
 	var ret int = SILK_NO_ERROR
-	var LBRR_rate_thres_bps int32
 
 	LBRR_in_previous_packet = psEncC.LBRR_enabled
-	psEncC.LBRR_enabled = 0
-	if psEncC.useInBandFEC != 0 && psEncC.PacketLoss_perc > 0 {
-		if psEncC.fs_kHz == 8 {
-			LBRR_rate_thres_bps = LBRR_NB_MIN_RATE_BPS
-		} else if psEncC.fs_kHz == 12 {
-			LBRR_rate_thres_bps = LBRR_MB_MIN_RATE_BPS
+	psEncC.LBRR_enabled = encControl.LBRR_coded
+	if psEncC.LBRR_enabled != 0 {
+		/* Set gain increase for coding LBRR excitation */
+		if LBRR_in_previous_packet == 0 {
+			/* Previous packet did not have LBRR, and was therefore coded at a higher bitrate */
+			psEncC.LBRR_GainIncreases = 7
 		} else {
-			LBRR_rate_thres_bps = LBRR_WB_MIN_RATE_BPS
-		}
-		LBRR_rate_thres_bps = SMULWB(MUL(LBRR_rate_thres_bps, 125-min(psEncC.PacketLoss_perc, 25)), SILK_FIX_CONST(0.01, 16))
-
-		if TargetRate_bps > LBRR_rate_thres_bps {
-			/* Set gain increase for coding LBRR excitation */
-			if LBRR_in_previous_packet == 0 {
-				/* Previous packet did not have LBRR, and was therefore coded at a higher bitrate */
-				psEncC.LBRR_GainIncreases = 7
-			} else {
-				psEncC.LBRR_GainIncreases = max_int(7-int(SMULWB(int32(psEncC.PacketLoss_perc), SILK_FIX_CONST(0.4, 16))), 2)
-			}
-			psEncC.LBRR_enabled = 1
+			psEncC.LBRR_GainIncreases = max_int(7-int(SMULWB(int32(psEncC.PacketLoss_perc), SILK_FIX_CONST(0.4, 16))), 2)
 		}
 	}
 

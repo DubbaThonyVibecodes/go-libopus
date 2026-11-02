@@ -10,7 +10,7 @@ package silk
 
 // Number of binary divisions, when not in low complexity mode
 const BIN_DIV_STEPS_A2NLSF_FIX = 3 // must be no higher than 16 - log2( LSF_COS_TAB_SZ_FIX )
-const MAX_ITERATIONS_A2NLSF_FIX = 30
+const MAX_ITERATIONS_A2NLSF_FIX = 16
 
 // Helper function for A2NLSF(..)
 // Transforms polynomials from cos(n*f) to cos(f)^n
@@ -210,13 +210,13 @@ func A2NLSF(
 					// Set NLSFs to white spectrum and exit
 					NLSF[0] = int16(DIV32_16(1<<15, d+1))
 					for k = 1; k < d; k++ {
-						NLSF[k] = int16(SMULBB(k+1, NLSF[0]))
+						NLSF[k] = int16(ADD16(NLSF[k-1], NLSF[0]))
 					}
 					return
 				}
 
 				// Error: Apply progressively more bandwidth expansion and run again
-				Bwexpander32(a_Q16, d, 65536-SMULBB(10+i, i)) // 10_Q16 = 0.00015
+				Bwexpander32(a_Q16, d, 65536-LSHIFT(1, i))
 
 				a2NLSFInit(a_Q16, P[:], Q[:], dd)
 				p = P[:]                          // Pointer to polynomial

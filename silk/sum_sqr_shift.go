@@ -13,43 +13,40 @@ func SumSqrShift(
 	len int, // I   Length of input vector
 ) {
 	var i, shft int
-	var nrg_tmp, nrg int32
+	var nrg_tmp uint32
+	var nrg int32
 
-	nrg = 0
-	shft = 0
-	len--
-	for i = 0; i < len; i += 2 {
-		nrg = SMLABB_ovflw(nrg, x[i], x[i])
-		nrg = SMLABB_ovflw(nrg, x[i+1], x[i+1])
-		if nrg < 0 {
-			// Scale down
-			nrg = int32(RSHIFT_uint(uint32(nrg), 2))
-			shft = 2
-			i += 2
-			break
-		}
+	// Do a first run with the maximum shift we could have.
+	shft = int(31 - CLZ32(int32(len)))
+	// Let's be conservative with rounding and start with nrg=len.
+	nrg = int32(len)
+	for i = 0; i < len-1; i += 2 {
+		nrg_tmp = uint32(SMULBB(x[i], x[i]))
+		nrg_tmp = uint32(SMLABB_ovflw(nrg_tmp, x[i+1], x[i+1]))
+		nrg = int32(ADD_RSHIFT_uint(nrg, nrg_tmp, shft))
 	}
-	for ; i < len; i += 2 {
-		nrg_tmp = SMULBB(x[i], x[i])
-		nrg_tmp = SMLABB_ovflw(nrg_tmp, x[i+1], x[i+1])
-		nrg = int32(ADD_RSHIFT_uint(nrg, uint32(nrg_tmp), shft))
-		if nrg < 0 {
-			// Scale down
-			nrg = int32(RSHIFT_uint(uint32(nrg), 2))
-			shft += 2
-		}
-	}
-	if i == len {
+	if i < len {
 		// One sample left to process
-		nrg_tmp = SMULBB(x[i], x[i])
+		nrg_tmp = uint32(SMULBB(x[i], x[i]))
+		nrg = int32(ADD_RSHIFT_uint(nrg, nrg_tmp, shft))
+	}
+	silk_assert(nrg >= 0)
+	// Make sure the result will fit in a 32-bit signed integer with two bits
+	// of headroom.
+	shft = int(max_32(0, int32(shft)+3-CLZ32(nrg)))
+	nrg = 0
+	for i = 0; i < len-1; i += 2 {
+		nrg_tmp = uint32(SMULBB(x[i], x[i]))
+		nrg_tmp = uint32(SMLABB_ovflw(nrg_tmp, x[i+1], x[i+1]))
+		nrg = int32(ADD_RSHIFT_uint(nrg, nrg_tmp, shft))
+	}
+	if i < len {
+		// One sample left to process
+		nrg_tmp = uint32(SMULBB(x[i], x[i]))
 		nrg = int32(ADD_RSHIFT_uint(nrg, nrg_tmp, shft))
 	}
 
-	// Make sure to have at least one extra leading zero (two leading zeros in total)
-	if uint32(nrg)&0xC0000000 != 0 {
-		nrg = int32(RSHIFT_uint(uint32(nrg), 2))
-		shft += 2
-	}
+	silk_assert(nrg >= 0)
 
 	// Output arguments
 	*shift = shft

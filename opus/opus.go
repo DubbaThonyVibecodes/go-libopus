@@ -83,7 +83,7 @@ func PcmSoftClip(_x []float32, N int, C int, declip_mem []float32) {
 			// Slightly boost "a" by 2^-22. This is just enough to ensure -ffast-math
 			// does not cause output values larger than +/-1, but small enough not
 			// to matter even for 24-bit output.
-			a = float32(float64(a) + float64(float64(a)*2.4e-7))
+			a = a + float32(a*2.4e-7)
 			if x[i*C] > 0 {
 				a = -a
 			}

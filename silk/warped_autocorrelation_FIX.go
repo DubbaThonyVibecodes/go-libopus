@@ -2,12 +2,14 @@ package silk
 
 // C: silk/fixed/warped_autocorrelation_FIX.c
 
+// C: silk/fixed/main_FIX.h: #define QC 10, #define QS 13
 const QC = 10
-const QS = 14
+const QS = 13
 
 // Autocorrelations for a warped frequency axis
 //
-// C: void silk_warped_autocorrelation_FIX(opus_int32 *corr, opus_int *scale, const opus_int16 *input, const opus_int warping_Q16, const opus_int length, const opus_int order)
+// C: void silk_warped_autocorrelation_FIX_c(opus_int32 *corr, opus_int *scale, const opus_int16 *input, const opus_int warping_Q16, const opus_int length, const opus_int order)
+// C: #define silk_warped_autocorrelation_FIX(corr, scale, input, warping_Q16, length, order, arch) ((void)(arch), silk_warped_autocorrelation_FIX_c(corr, scale, input, warping_Q16, length, order))
 func WarpedAutocorrelationFIX(
 	corr []int32, // O    Result [order + 1]
 	scale *int, // O    Scaling of the correlation vector
@@ -15,6 +17,7 @@ func WarpedAutocorrelationFIX(
 	warping_Q16 int, // I    Warping coefficient
 	length int, // I    Length of input
 	order int, // I    Correlation order (even)
+	arch int, // I    Run-time architecture
 ) {
 	var n, i, lsh int
 	var tmp1_QS, tmp2_QS int32

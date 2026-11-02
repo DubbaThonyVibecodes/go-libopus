@@ -37,12 +37,14 @@ func noiseShapeQuantizerShortPrediction(buf32 []int32, buf32_idx int, coef16 []i
 
 // C: static OPUS_INLINE opus_int32 silk_NSQ_noise_shape_feedback_loop_c(const opus_int32 *data0, opus_int32 *data1, const opus_int16 *coef, opus_int order)
 // C: #define silk_NSQ_noise_shape_feedback_loop(data0, data1, coef, order, arch)  ((void)arch,silk_NSQ_noise_shape_feedback_loop_c(data0, data1, coef, order))
-func nsqNoiseShapeFeedbackLoop(data0 []int32, data1 []int32, coef []int16, order int, arch int) int32 {
+//
+// data0 points at a single value (the caller passes &NSQ->sDiff_shp_Q14).
+func nsqNoiseShapeFeedbackLoop(data0 *int32, data1 []int32, coef []int16, order int, arch int) int32 {
 	var out int32
 	var tmp1, tmp2 int32
 	var j int
 
-	tmp2 = data0[0]
+	tmp2 = *data0
 	tmp1 = data1[0]
 	data1[0] = tmp2
 

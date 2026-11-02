@@ -34,8 +34,8 @@ func LcgRand(seed uint32) uint32 {
 // This is a cos() approximation designed to be bit-exact on any platform. Bit exactness
 // with this approximation is important because it has an impact on the bit allocation.
 //
-// C: static opus_int16 bitexact_cos(opus_int16 x)
-func bitexact_cos(x int16) int16 {
+// C: opus_int16 bitexact_cos(opus_int16 x)
+func BitexactCos(x int16) int16 {
 	var tmp int32
 	var x2 int16
 	tmp = (4096 + int32(x)*int32(x)) >> 13
@@ -46,8 +46,8 @@ func bitexact_cos(x int16) int16 {
 	return 1 + x2
 }
 
-// C: static int bitexact_log2tan(int isin,int icos)
-func bitexact_log2tan(isin, icos int) int {
+// C: int bitexact_log2tan(int isin,int icos)
+func BitexactLog2tan(isin, icos int) int {
 	var lc, ls int
 	lc = EC_ILOG(uint32(icos))
 	ls = EC_ILOG(uint32(isin))
@@ -60,10 +60,11 @@ func bitexact_log2tan(isin, icos int) int {
 
 // ComputeBandEnergies computes the amplitude (sqrt energy) in each of the bands.
 //
-// C: void compute_band_energies(const CELTMode *m, const celt_sig *X, celt_ener *bandE, int end, int C, int LM)
-func ComputeBandEnergies(m *CELTMode, X []int32, bandE []int32, end, C, LM int) {
+// C: void compute_band_energies(const CELTMode *m, const celt_sig *X, celt_ener *bandE, int end, int C, int LM, int arch)
+func ComputeBandEnergies(m *CELTMode, X []int32, bandE []int32, end, C, LM int, arch int) {
 	var i, c, N int
 	eBands := m.eBands
+	_ = arch
 	N = m.shortMdctSize << uint(LM)
 	c = 0
 	for {
@@ -183,7 +184,7 @@ func DenormaliseBands(m *CELTMode, X []int16, freq []int32, bandLogE []int16, st
 		var shift int
 		j = M * int(eBands[i])
 		band_end = M * int(eBands[i+1])
-		lg = ADD16(bandLogE[i], SHL16(int16(eMeans[i]), 6))
+		lg = SATURATE16(ADD32(bandLogE[i], SHL32(int32(eMeans[i]), 6)))
 		// Handle the integer part of the log energy
 		shift = 16 - int(lg>>DB_SHIFT)
 		if shift > 31 {
@@ -195,11 +196,11 @@ func DenormaliseBands(m *CELTMode, X []int16, freq []int32, bandLogE []int16, st
 		}
 		// Handle extreme gains with negative shift.
 		if shift < 0 {
-			// For shift < -2 we'd be likely to overflow, so we're capping
-			// the gain here. This shouldn't happen unless the bitstream is
-			// already corrupted.
-			if shift < -2 {
-				g = 32767
+			// For shift <= -2 and g > 16384 we'd be likely to overflow, so we're
+			// capping the gain here, which is equivalent to a cap of 18 on lg.
+			// This shouldn't trigger unless the bitstream is already corrupted.
+			if shift <= -2 {
+				g = 16384
 				shift = -2
 			}
 			for {
@@ -315,6 +316,27 @@ func AntiCollapse(m *CELTMode, X_ []int16, collapse_masks []uint8, LM, C, size i
 			}
 		}
 	}
+}
+
+// Compute the weights to use for optimizing normalized distortion across
+// channels. We use the amplitude to weight square distortion, which means
+// that we use the square root of the value we would have been using if we
+// wanted to minimize the MSE in the non-normalized domain. This roughly
+// corresponds to some quick-and-dirty perceptual experiments I ran to
+// measure inter-aural masking (there doesn't seem to be any published data
+// on the topic).
+//
+// C: static void compute_channel_weights(celt_ener Ex, celt_ener Ey, opus_val16 w[2])
+func compute_channel_weights(Ex, Ey int32, w *[2]int16) {
+	var minE int32
+	var shift int
+	minE = MIN32(Ex, Ey)
+	// Adjustment to make the weights a bit more conservative.
+	Ex = ADD32(Ex, minE/3)
+	Ey = ADD32(Ey, minE/3)
+	shift = int(Ilog2(EPSILON+MAX32(Ex, Ey))) - 14
+	w[0] = int16(VSHR32(Ex, shift))
+	w[1] = int16(VSHR32(Ey, shift))
 }
 
 // C: static void intensity_stereo(const CELTMode *m, celt_norm * OPUS_RESTRICT X, const celt_norm * OPUS_RESTRICT Y, const celt_ener *bandE, int bandID, int N)
@@ -606,17 +628,21 @@ func compute_qn(N, b, offset, pulse_cap, stereo int) int {
 
 // C: struct band_ctx
 type band_ctx struct {
-	encode         int
-	m              *CELTMode
-	i              int
-	intensity      int
-	spread         int
-	tf_change      int
-	ec             *EcCtx
-	remaining_bits int32
-	bandE          []int32
-	seed           uint32
-	arch           int
+	encode            int
+	resynth           int
+	m                 *CELTMode
+	i                 int
+	intensity         int
+	spread            int
+	tf_change         int
+	ec                *EcCtx
+	remaining_bits    int32
+	bandE             []int32
+	seed              uint32
+	arch              int
+	theta_round       int
+	disable_inv       int
+	avoid_split_noise int
 }
 
 // C: struct split_ctx
@@ -682,9 +708,39 @@ func compute_theta(ctx *band_ctx, sctx *split_ctx,
 	tell = int32(ec.TellFrac())
 	if qn != 1 {
 		if encode != 0 {
-			itheta = int((int32(itheta)*int32(qn) + 8192) >> 14)
+			if stereo == 0 || ctx.theta_round == 0 {
+				itheta = int((int32(itheta)*int32(qn) + 8192) >> 14)
+				if stereo == 0 && ctx.avoid_split_noise != 0 && itheta > 0 && itheta < qn {
+					// Check if the selected value of theta will cause the bit allocation
+					// to inject noise on one side. If so, make sure the energy of that side
+					// is zero.
+					var unquantized int = int(Udiv(uint32(int32(itheta)*16384), uint32(qn)))
+					imid = int(BitexactCos(int16(unquantized)))
+					iside = int(BitexactCos(int16(16384 - unquantized)))
+					delta = int(FRAC_MUL16((N-1)<<7, BitexactLog2tan(iside, imid)))
+					if delta > *b {
+						itheta = qn
+					} else if delta < -*b {
+						itheta = 0
+					}
+				}
+			} else {
+				var down int
+				// Bias quantization towards itheta=0 and itheta=16384.
+				var bias int
+				if itheta > 8192 {
+					bias = 32767 / qn
+				} else {
+					bias = -32767 / qn
+				}
+				down = IMIN(qn-1, IMAX(0, int((int32(itheta)*int32(qn)+int32(bias))>>14)))
+				if ctx.theta_round < 0 {
+					itheta = down
+				} else {
+					itheta = down + 1
+				}
+			}
 		}
-
 		// Entropy coding of the angle. We use a uniform pdf for the
 		// time split, a step for stereo, and a triangular one for the rest.
 		if stereo != 0 && N > 2 {
@@ -779,7 +835,7 @@ func compute_theta(ctx *band_ctx, sctx *split_ctx,
 		// Let's do that at higher complexity
 	} else if stereo != 0 {
 		if encode != 0 {
-			inv = b2i(itheta > 8192)
+			inv = b2i(itheta > 8192 && ctx.disable_inv == 0)
 			if inv != 0 {
 				var j int
 				for j = 0; j < N; j++ {
@@ -795,6 +851,10 @@ func compute_theta(ctx *band_ctx, sctx *split_ctx,
 				inv = ec.DecBitLogp(2)
 			}
 		} else {
+			inv = 0
+		}
+		// inv flag override to avoid problems with downmixing.
+		if ctx.disable_inv != 0 {
 			inv = 0
 		}
 		itheta = 0
@@ -813,11 +873,11 @@ func compute_theta(ctx *band_ctx, sctx *split_ctx,
 		*fill &= ((1 << uint(B)) - 1) << uint(B)
 		delta = 16384
 	} else {
-		imid = int(bitexact_cos(int16(itheta)))
-		iside = int(bitexact_cos(int16(16384 - itheta)))
+		imid = int(BitexactCos(int16(itheta)))
+		iside = int(BitexactCos(int16(16384 - itheta)))
 		// This is the mid vs side allocation that minimizes squared error
 		// in that band.
-		delta = int(FRAC_MUL16((N-1)<<7, bitexact_log2tan(iside, imid)))
+		delta = int(FRAC_MUL16((N-1)<<7, BitexactLog2tan(iside, imid)))
 	}
 
 	sctx.inv = inv
@@ -830,7 +890,6 @@ func compute_theta(ctx *band_ctx, sctx *split_ctx,
 
 // C: static unsigned quant_band_n1(struct band_ctx *ctx, celt_norm *X, celt_norm *Y, int b, celt_norm *lowband_out)
 func quant_band_n1(ctx *band_ctx, X, Y []int16, b int, lowband_out []int16) uint32 {
-	resynth := b2i(ctx.encode == 0)
 	var c int
 	var stereo int
 	x := X
@@ -854,7 +913,7 @@ func quant_band_n1(ctx *band_ctx, X, Y []int16, b int, lowband_out []int16) uint
 			ctx.remaining_bits -= 1 << BITRES
 			b -= 1 << BITRES
 		}
-		if resynth != 0 {
+		if ctx.resynth != 0 {
 			if sign != 0 {
 				x[0] = -NORM_SCALING
 			} else {
@@ -894,7 +953,6 @@ func quant_partition(ctx *band_ctx, X []int16,
 	B0 := B
 	var mid, side int16 = 0, 0
 	var cm uint32 = 0
-	resynth := b2i(ctx.encode == 0)
 	var Y []int16 = nil
 	var encode int
 	var m *CELTMode
@@ -926,8 +984,7 @@ func quant_partition(ctx *band_ctx, X []int16,
 		}
 		B = (B + 1) >> 1
 
-		compute_theta(ctx, &sctx, X, Y, N, &b, B, B0,
-			LM, 0, &fill)
+		compute_theta(ctx, &sctx, X, Y, N, &b, B, B0, LM, 0, &fill)
 		imid = sctx.imid
 		iside = sctx.iside
 		delta = sctx.delta
@@ -956,26 +1013,22 @@ func quant_partition(ctx *band_ctx, X []int16,
 
 		rebalance = ctx.remaining_bits
 		if mbits >= sbits {
-			cm = quant_partition(ctx, X, N, mbits, B,
-				lowband, LM,
+			cm = quant_partition(ctx, X, N, mbits, B, lowband, LM,
 				int16(MULT16_16_P15(gain, mid)), fill)
 			rebalance = int32(mbits) - (rebalance - ctx.remaining_bits)
 			if rebalance > 3<<BITRES && itheta != 0 {
 				sbits += int(rebalance) - (3 << BITRES)
 			}
-			cm |= quant_partition(ctx, Y, N, sbits, B,
-				next_lowband2, LM,
+			cm |= quant_partition(ctx, Y, N, sbits, B, next_lowband2, LM,
 				int16(MULT16_16_P15(gain, side)), fill>>uint(B)) << uint(B0>>1)
 		} else {
-			cm = quant_partition(ctx, Y, N, sbits, B,
-				next_lowband2, LM,
+			cm = quant_partition(ctx, Y, N, sbits, B, next_lowband2, LM,
 				int16(MULT16_16_P15(gain, side)), fill>>uint(B)) << uint(B0>>1)
 			rebalance = int32(sbits) - (rebalance - ctx.remaining_bits)
 			if rebalance > 3<<BITRES && itheta != 16384 {
 				mbits += int(rebalance) - (3 << BITRES)
 			}
-			cm |= quant_partition(ctx, X, N, mbits, B,
-				lowband, LM,
+			cm |= quant_partition(ctx, X, N, mbits, B, lowband, LM,
 				int16(MULT16_16_P15(gain, mid)), fill)
 		}
 	} else {
@@ -997,14 +1050,14 @@ func quant_partition(ctx *band_ctx, X []int16,
 
 			// Finally do the actual quantization
 			if encode != 0 {
-				cm = AlgQuant(X, N, K, spread, B, ec)
+				cm = AlgQuant(X, N, K, spread, B, ec, gain, ctx.resynth, ctx.arch)
 			} else {
 				cm = AlgUnquant(X, N, K, spread, B, ec, gain)
 			}
 		} else {
 			// If there's no pulse, fill the band anyway
 			var j int
-			if resynth != 0 {
+			if ctx.resynth != 0 {
 				var cm_mask uint32
 				// B can be as large as 16, so this shift might overflow an int on a
 				// 16-bit platform; use a long to get defined behavior.
@@ -1062,7 +1115,6 @@ func quant_band(ctx *band_ctx, X []int16,
 	var recombine int = 0
 	var longBlocks int
 	var cm uint32 = 0
-	resynth := b2i(ctx.encode == 0)
 	var k int
 	var encode int
 	var tf_change int
@@ -1128,11 +1180,10 @@ func quant_band(ctx *band_ctx, X []int16,
 		}
 	}
 
-	cm = quant_partition(ctx, X, N, b, B, lowband,
-		LM, gain, fill)
+	cm = quant_partition(ctx, X, N, b, B, lowband, LM, gain, fill)
 
 	// This code is used by the decoder and by the resynthesis-enabled encoder
-	if resynth != 0 {
+	if ctx.resynth != 0 {
 		// Undo the sample reorganization going from time order to frequency order
 		if B0 > 1 {
 			interleave_hadamard(X, N_B>>uint(recombine), B0<<uint(recombine), longBlocks)
@@ -1192,7 +1243,6 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 	var inv int = 0
 	var mid, side int16 = 0, 0
 	var cm uint32 = 0
-	resynth := b2i(ctx.encode == 0)
 	var mbits, sbits, delta int
 	var itheta int
 	var qalloc int
@@ -1211,8 +1261,7 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 
 	orig_fill = fill
 
-	compute_theta(ctx, &sctx, X, Y, N, &b, B, B,
-		LM, 1, &fill)
+	compute_theta(ctx, &sctx, X, Y, N, &b, B, B, LM, 1, &fill)
 	inv = sctx.inv
 	imid = sctx.imid
 	iside = sctx.iside
@@ -1258,13 +1307,13 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 		sign = 1 - 2*sign
 		// We use orig_fill here because we want to fold the side, but if
 		// itheta==16384, we'll have cleared the low bits of fill.
-		cm = quant_band(ctx, x2, N, mbits, B, lowband,
-			LM, lowband_out, Q15ONE, lowband_scratch, orig_fill)
+		cm = quant_band(ctx, x2, N, mbits, B, lowband, LM, lowband_out, Q15ONE,
+			lowband_scratch, orig_fill)
 		// We don't split N=2 bands, so cm is either 1 or 0 (for a fold-collapse),
 		// and there's no need to worry about mixing with the other channel.
 		y2[0] = int16(-sign) * x2[1]
 		y2[1] = int16(sign) * x2[0]
-		if resynth != 0 {
+		if ctx.resynth != 0 {
 			var tmp int16
 			X[0] = int16(MULT16_16_Q15(mid, X[0]))
 			X[1] = int16(MULT16_16_Q15(mid, X[1]))
@@ -1289,9 +1338,8 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 		if mbits >= sbits {
 			// In stereo mode, we do not apply a scaling to the mid because we need the normalized
 			// mid for folding later.
-			cm = quant_band(ctx, X, N, mbits, B,
-				lowband, LM, lowband_out,
-				Q15ONE, lowband_scratch, fill)
+			cm = quant_band(ctx, X, N, mbits, B, lowband, LM, lowband_out, Q15ONE,
+				lowband_scratch, fill)
 			rebalance = int32(mbits) - (rebalance - ctx.remaining_bits)
 			if rebalance > 3<<BITRES && itheta != 0 {
 				sbits += int(rebalance) - (3 << BITRES)
@@ -1299,29 +1347,24 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 
 			// For a stereo split, the high bits of fill are always zero, so no
 			// folding will be done to the side.
-			cm |= quant_band(ctx, Y, N, sbits, B,
-				nil, LM, nil,
-				side, nil, fill>>uint(B))
+			cm |= quant_band(ctx, Y, N, sbits, B, nil, LM, nil, side, nil, fill>>uint(B))
 		} else {
 			// For a stereo split, the high bits of fill are always zero, so no
 			// folding will be done to the side.
-			cm = quant_band(ctx, Y, N, sbits, B,
-				nil, LM, nil,
-				side, nil, fill>>uint(B))
+			cm = quant_band(ctx, Y, N, sbits, B, nil, LM, nil, side, nil, fill>>uint(B))
 			rebalance = int32(sbits) - (rebalance - ctx.remaining_bits)
 			if rebalance > 3<<BITRES && itheta != 16384 {
 				mbits += int(rebalance) - (3 << BITRES)
 			}
 			// In stereo mode, we do not apply a scaling to the mid because we need the normalized
 			// mid for folding later.
-			cm |= quant_band(ctx, X, N, mbits, B,
-				lowband, LM, lowband_out,
-				Q15ONE, lowband_scratch, fill)
+			cm |= quant_band(ctx, X, N, mbits, B, lowband, LM, lowband_out, Q15ONE,
+				lowband_scratch, fill)
 		}
 	}
 
 	// This code is used by the decoder and by the resynthesis-enabled encoder
-	if resynth != 0 {
+	if ctx.resynth != 0 {
 		if N != 2 {
 			stereo_merge(X, Y, mid, N, ctx.arch)
 		}
@@ -1335,6 +1378,20 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 	return cm
 }
 
+// C: static void special_hybrid_folding(const CELTMode *m, celt_norm *norm, celt_norm *norm2, int start, int M, int dual_stereo)
+func special_hybrid_folding(m *CELTMode, norm, norm2 []int16, start, M, dual_stereo int) {
+	var n1, n2 int
+	eBands := m.eBands
+	n1 = M * int(eBands[start+1]-eBands[start])
+	n2 = M * int(eBands[start+2]-eBands[start+1])
+	// Duplicate enough of the first band folding data to be able to fold the second band.
+	// Copies no data for CELT-only mode.
+	copy(norm[n1:n1+(n2-n1)], norm[2*n1-n2:2*n1-n2+(n2-n1)])
+	if dual_stereo != 0 {
+		copy(norm2[n1:n1+(n2-n1)], norm2[2*n1-n2:2*n1-n2+(n2-n1)])
+	}
+}
+
 // QuantAllBands performs quantisation/encoding (or decoding) of the residual spectrum.
 //
 // C: void quant_all_bands(int encode, const CELTMode *m, int start, int end,
@@ -1343,17 +1400,19 @@ func quant_band_stereo(ctx *band_ctx, X, Y []int16,
 //	const celt_ener *bandE, int *pulses, int shortBlocks, int spread,
 //	int dual_stereo, int intensity, int *tf_res, opus_int32 total_bits,
 //	opus_int32 balance, ec_ctx *ec, int LM, int codedBands,
-//	opus_uint32 *seed, int arch)
+//	opus_uint32 *seed, int complexity, int arch, int disable_inv)
 func QuantAllBands(encode int, m *CELTMode, start, end int,
 	X_, Y_ []int16, collapse_masks []uint8,
 	bandE []int32, pulses []int, shortBlocks, spread int,
 	dual_stereo, intensity int, tf_res []int, total_bits int32,
 	balance int32, ec *EcCtx, LM, codedBands int,
-	seed *uint32, arch int) {
+	seed *uint32, complexity int, arch int, disable_inv int) {
 	var i int
 	var remaining_bits int32
 	eBands := m.eBands
 	var norm, norm2 []int16
+	var X_save, Y_save, X_save2, Y_save2, norm_save2 []int16
+	var resynth_alloc int
 	var lowband_scratch []int16
 	var B int
 	var M int
@@ -1364,7 +1423,8 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 		C = 2
 	}
 	var norm_offset int
-	resynth := b2i(encode == 0)
+	theta_rdo := b2i(encode != 0 && Y_ != nil && dual_stereo == 0 && complexity >= 8)
+	resynth := b2i(encode == 0 || theta_rdo != 0)
 	var ctx band_ctx
 
 	M = 1 << uint(LM)
@@ -1379,9 +1439,26 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 	_norm := make([]int16, C*(M*int(eBands[m.nbEBands-1])-norm_offset))
 	norm = _norm
 	norm2 = norm[M*int(eBands[m.nbEBands-1])-norm_offset:]
-	// We can use the last band as scratch space because we don't need that
-	// scratch space for the last band.
-	lowband_scratch = X_[M*int(eBands[m.nbEBands-1]):]
+
+	// For decoding, we can use the last band as scratch space because we don't need that
+	// scratch space for the last band and we don't care about the data there until we're
+	// decoding the last band.
+	if encode != 0 && resynth != 0 {
+		resynth_alloc = M * int(eBands[m.nbEBands]-eBands[m.nbEBands-1])
+	} else {
+		resynth_alloc = 0 // ALLOC_NONE
+	}
+	_lowband_scratch := make([]int16, resynth_alloc)
+	if encode != 0 && resynth != 0 {
+		lowband_scratch = _lowband_scratch
+	} else {
+		lowband_scratch = X_[M*int(eBands[m.nbEBands-1]):]
+	}
+	X_save = make([]int16, resynth_alloc)
+	Y_save = make([]int16, resynth_alloc)
+	X_save2 = make([]int16, resynth_alloc)
+	Y_save2 = make([]int16, resynth_alloc)
+	norm_save2 = make([]int16, resynth_alloc)
 
 	lowband_offset = 0
 	ctx.bandE = bandE
@@ -1392,6 +1469,11 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 	ctx.seed = *seed
 	ctx.spread = spread
 	ctx.arch = arch
+	ctx.disable_inv = disable_inv
+	ctx.resynth = resynth
+	ctx.theta_round = 0
+	// Avoid injecting noise in the first band on transients.
+	ctx.avoid_split_noise = b2i(B > 1)
 	for i = start; i < end; i++ {
 		var tell int32
 		var b int
@@ -1442,7 +1524,7 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 			}
 			lowband_scratch = nil
 		}
-		if i == end-1 {
+		if last != 0 && theta_rdo == 0 {
 			lowband_scratch = nil
 		}
 
@@ -1519,9 +1601,75 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 				lo2, Q15ONE, lowband_scratch, int(y_cm))
 		} else {
 			if Y != nil {
-				x_cm = quant_band_stereo(&ctx, X, Y, N, b, B,
-					lb, LM,
-					lo, lowband_scratch, int(x_cm|y_cm))
+				if theta_rdo != 0 && i < intensity {
+					var ec_save, ec_save2 EcCtx
+					var ctx_save, ctx_save2 band_ctx
+					var dist0, dist1 int32
+					var cm, cm2 uint32
+					var nstart_bytes, nend_bytes, save_bytes int
+					var bytes_buf []byte
+					var bytes_save [1275]byte
+					var w [2]int16
+					compute_channel_weights(bandE[i], bandE[i+m.nbEBands], &w)
+					// Make a copy.
+					cm = x_cm | y_cm
+					ec_save = *ec
+					ctx_save = ctx
+					copy(X_save[:N], X[:N])
+					copy(Y_save[:N], Y[:N])
+					// Encode and round down.
+					ctx.theta_round = -1
+					x_cm = quant_band_stereo(&ctx, X, Y, N, b, B,
+						lb, LM,
+						lo, lowband_scratch, int(cm))
+					dist0 = MULT16_32_Q15(w[0], InnerProd(X_save, X, N, arch)) + MULT16_32_Q15(w[1], InnerProd(Y_save, Y, N, arch))
+
+					// Save first result.
+					cm2 = x_cm
+					ec_save2 = *ec
+					ctx_save2 = ctx
+					copy(X_save2[:N], X[:N])
+					copy(Y_save2[:N], Y[:N])
+					if last == 0 {
+						copy(norm_save2[:N], norm[M*int(eBands[i])-norm_offset:][:N])
+					}
+					nstart_bytes = int(ec_save.offs)
+					nend_bytes = int(ec_save.storage)
+					bytes_buf = ec_save.buf[nstart_bytes:]
+					save_bytes = nend_bytes - nstart_bytes
+					copy(bytes_save[:save_bytes], bytes_buf[:save_bytes])
+
+					// Restore
+					*ec = ec_save
+					ctx = ctx_save
+					copy(X[:N], X_save[:N])
+					copy(Y[:N], Y_save[:N])
+					if i == start+1 {
+						special_hybrid_folding(m, norm, norm2, start, M, dual_stereo)
+					}
+					// Encode and round up.
+					ctx.theta_round = 1
+					x_cm = quant_band_stereo(&ctx, X, Y, N, b, B,
+						lb, LM,
+						lo, lowband_scratch, int(cm))
+					dist1 = MULT16_32_Q15(w[0], InnerProd(X_save, X, N, arch)) + MULT16_32_Q15(w[1], InnerProd(Y_save, Y, N, arch))
+					if dist0 >= dist1 {
+						x_cm = cm2
+						*ec = ec_save2
+						ctx = ctx_save2
+						copy(X[:N], X_save2[:N])
+						copy(Y[:N], Y_save2[:N])
+						if last == 0 {
+							copy(norm[M*int(eBands[i])-norm_offset:][:N], norm_save2[:N])
+						}
+						copy(bytes_buf[:save_bytes], bytes_save[:save_bytes])
+					}
+				} else {
+					ctx.theta_round = 0
+					x_cm = quant_band_stereo(&ctx, X, Y, N, b, B,
+						lb, LM,
+						lo, lowband_scratch, int(x_cm|y_cm))
+				}
 			} else {
 				x_cm = quant_band(&ctx, X, N, b, B,
 					lb, LM,
@@ -1535,6 +1683,9 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 
 		// Update the folding position only as long as we have 1 bit/sample depth.
 		update_lowband = b2i(b > (N << BITRES))
+		// We only need to avoid noise on a split for the first band. After that, we
+		// have folding.
+		ctx.avoid_split_noise = 0
 	}
 	*seed = ctx.seed
 }

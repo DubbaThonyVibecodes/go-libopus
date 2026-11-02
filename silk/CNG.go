@@ -107,7 +107,7 @@ func (psDec *DecoderState) CNG(psDecCtrl *DecoderControl, frame []int16, length 
 		cngExc(CNG_sig_Q14[MAX_LPC_ORDER:], psCNG.CNG_exc_buf_Q14[:], length, &psCNG.rand_seed)
 
 		/* Convert CNG NLSF to filter representation */
-		NLSF2A(A_Q12[:], psCNG.CNG_smth_NLSF_Q15[:], psDec.LPC_order)
+		NLSF2A(A_Q12[:], psCNG.CNG_smth_NLSF_Q15[:], psDec.LPC_order, psDec.arch)
 
 		/* Generate CNG signal, by synthesis filtering */
 		copy(CNG_sig_Q14[:MAX_LPC_ORDER], psCNG.CNG_synth_state[:])
@@ -135,7 +135,7 @@ func (psDec *DecoderState) CNG(psDecCtrl *DecoderControl, frame []int16, length 
 			}
 
 			/* Update states */
-			CNG_sig_Q14[MAX_LPC_ORDER+i] = ADD_LSHIFT(CNG_sig_Q14[MAX_LPC_ORDER+i], LPC_pred_Q10, 4)
+			CNG_sig_Q14[MAX_LPC_ORDER+i] = ADD_SAT32(CNG_sig_Q14[MAX_LPC_ORDER+i], LSHIFT_SAT32(LPC_pred_Q10, 4))
 
 			/* Scale with Gain and add to input signal */
 			frame[i] = int16(ADD_SAT16(frame[i], SAT16(RSHIFT_ROUND(SMULWW(CNG_sig_Q14[MAX_LPC_ORDER+i], gain_Q10), 8))))

@@ -33,6 +33,8 @@ type EncControlStruct struct {
 	Complexity int
 	// I:   Flag to enable in-band Forward Error Correction (FEC); 0/1
 	UseInBandFEC int
+	// I:   Flag to actually code in-band Forward Error Correction (FEC) in the current packet; 0/1
+	LBRR_coded int
 	// I:   Flag to enable discontinuous transmission (DTX); 0/1
 	UseDTX int
 	// I:   Flag to use constant bitrate
@@ -55,6 +57,10 @@ type EncControlStruct struct {
 	StereoWidth_Q14 int
 	// O:   Tells the Opus encoder we're ready to switch
 	SwitchReady int
+	// O: SILK Signal type
+	SignalType int
+	// O: SILK offset (dithering)
+	Offset int
 }
 
 // DecControlStruct is the C silk_DecControlStruct: structure for controlling

@@ -264,7 +264,8 @@ func (st *OpusMSDecoder) Ctl(request int, args ...any) int {
 	case OPUS_GET_BANDWIDTH_REQUEST,
 		OPUS_GET_SAMPLE_RATE_REQUEST,
 		OPUS_GET_GAIN_REQUEST,
-		OPUS_GET_LAST_PACKET_DURATION_REQUEST:
+		OPUS_GET_LAST_PACKET_DURATION_REQUEST,
+		OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST:
 		var dec *OpusDecoder
 		// For int32* GET params, just query the first stream
 		value, ok := args[0].(*int32)
@@ -316,7 +317,8 @@ func (st *OpusMSDecoder) Ctl(request int, args ...any) int {
 		if ret == OPUS_OK {
 			*value = st.decoders[stream_id]
 		}
-	case OPUS_SET_GAIN_REQUEST:
+	case OPUS_SET_GAIN_REQUEST,
+		OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST:
 		var s int
 		// This works for int32 params
 		value, ok := argInt32(args, 0)

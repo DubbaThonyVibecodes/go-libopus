@@ -43,11 +43,12 @@ var ordering10 = [10]uint8{
 
 // compute whitening filter coefficients from normalized line spectral frequencies
 //
-// C: void silk_NLSF2A(opus_int16 *a_Q12, const opus_int16 *NLSF, const opus_int d)
+// C: void silk_NLSF2A(opus_int16 *a_Q12, const opus_int16 *NLSF, const opus_int d, int arch)
 func NLSF2A(
 	a_Q12 []int16, // O    monic whitening filter coefficients in Q12,  [ d ]
 	NLSF []int16, // I    normalized line spectral frequencies in Q15, [ d ]
 	d int, // I    filter order (should be even)
+	arch int, // I    Run-time architecture
 ) {
 	const QA = 16
 	var ordering []uint8
@@ -56,7 +57,6 @@ func NLSF2A(
 	var P, Q [SILK_MAX_ORDER_LPC/2 + 1]int32
 	var Ptmp, Qtmp, f_int, f_frac, cos_val, delta int32
 	var a32_QA1 [SILK_MAX_ORDER_LPC]int32
-	var maxabs, absval, idx, sc_Q16 int32
 
 	silk_assert(LSF_COS_TAB_SZ_FIX == 128)
 	silk_assert(d == 10 || d == 16)
@@ -103,53 +103,15 @@ func NLSF2A(
 		a32_QA1[d-k-1] = Qtmp - Ptmp // QA+1
 	}
 
-	// Limit the maximum absolute value of the prediction coefficients, so that they'll fit in int16
-	for i = 0; i < 10; i++ {
-		// Find maximum absolute value and its index
-		maxabs = 0
-		for k = 0; k < d; k++ {
-			absval = abs(a32_QA1[k])
-			if absval > maxabs {
-				maxabs = absval
-				idx = int32(k)
-			}
-		}
-		maxabs = RSHIFT_ROUND(maxabs, QA+1-12) // QA+1 -> Q12
+	// Convert int32 coefficients to Q12 int16 coefs
+	LPCFit(a_Q12, a32_QA1[:], 12, QA+1, d)
 
-		if maxabs > int32(int16_MAX) {
-			// Reduce magnitude of prediction coefficients
-			maxabs = min(maxabs, 163838) // ( silk_int32_MAX >> 14 ) + silk_int16_MAX = 163838
-			sc_Q16 = SILK_FIX_CONST(0.999, 16) - DIV32(LSHIFT(maxabs-int32(int16_MAX), 14),
-				RSHIFT32(MUL(maxabs, idx+1), 2))
-			Bwexpander32(a32_QA1[:], d, sc_Q16)
-		} else {
-			break
-		}
-	}
-
-	if i == 10 {
-		// Reached the last iteration, clip the coefficients
-		for k = 0; k < d; k++ {
-			a_Q12[k] = int16(SAT16(RSHIFT_ROUND(a32_QA1[k], QA+1-12))) // QA+1 -> Q12
-			a32_QA1[k] = LSHIFT(int32(a_Q12[k]), QA+1-12)
-		}
-	} else {
+	for i = 0; LPCInversePredGain(a_Q12, d, arch) == 0 && i < MAX_LPC_STABILIZE_ITERATIONS; i++ {
+		// Prediction coefficients are (too close to) unstable; apply bandwidth expansion
+		// on the unscaled coefficients, convert to Q12 and measure again
+		Bwexpander32(a32_QA1[:], d, 65536-LSHIFT(2, i))
 		for k = 0; k < d; k++ {
 			a_Q12[k] = int16(RSHIFT_ROUND(a32_QA1[k], QA+1-12)) // QA+1 -> Q12
-		}
-	}
-
-	for i = 0; i < MAX_LPC_STABILIZE_ITERATIONS; i++ {
-		// C: 1.0 / MAX_PREDICTION_POWER_GAIN is double / float -> double
-		if LPCInversePredGain(a_Q12, d) < SILK_FIX_CONST(1.0/float64(MAX_PREDICTION_POWER_GAIN), 30) {
-			// Prediction coefficients are (too close to) unstable; apply bandwidth expansion
-			// on the unscaled coefficients, convert to Q12 and measure again
-			Bwexpander32(a32_QA1[:], d, 65536-LSHIFT(2, i))
-			for k = 0; k < d; k++ {
-				a_Q12[k] = int16(RSHIFT_ROUND(a32_QA1[k], QA+1-12)) // QA+1 -> Q12
-			}
-		} else {
-			break
 		}
 	}
 }

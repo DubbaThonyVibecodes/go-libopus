@@ -15,15 +15,15 @@ type CELTEncoder struct {
 	upsample    int
 	start, end  int
 
-	bitrate           int32
-	vbr               int
-	signalling        int
-	constrained_vbr   int // If zero, VBR can do whatever it likes with the rate
-	loss_rate         int
-	lsb_depth         int
-	variable_duration int
-	lfe               int
-	arch              int
+	bitrate         int32
+	vbr             int
+	signalling      int
+	constrained_vbr int // If zero, VBR can do whatever it likes with the rate
+	loss_rate       int
+	lsb_depth       int
+	lfe             int
+	disable_inv     int
+	arch            int
 
 	// Everything beyond this point gets cleared on a reset (ENCODER_RESET_START)
 	rng             uint32
@@ -39,6 +39,7 @@ type CELTEncoder struct {
 	prefilter_tapset int
 	consec_transient int
 	analysis         AnalysisInfo
+	silk_info        SILKInfo
 
 	preemph_memE [2]int32
 	preemph_memD [2]int32
@@ -59,6 +60,7 @@ type CELTEncoder struct {
 	oldBandE      []int16 // Size = channels*mode->nbEBands
 	oldLogE       []int16 // Size = channels*mode->nbEBands
 	oldLogE2      []int16 // Size = channels*mode->nbEBands
+	energyError   []int16 // Size = channels*mode->nbEBands
 }
 
 // C: int celt_encoder_get_size(int channels)
@@ -75,7 +77,7 @@ func CustomEncoderGetSize(mode *CELTMode, channels int) int {
 	size := 240 + // sizeof(struct CELTEncoder) excluding in_mem[1], approximate
 		channels*mode.overlap*4 + // celt_sig in_mem[channels*mode->overlap];
 		channels*COMBFILTER_MAXPERIOD*4 + // celt_sig prefilter_mem[channels*COMBFILTER_MAXPERIOD];
-		3*channels*mode.nbEBands*2 // opus_val16 oldBandE/oldLogE/oldLogE2[channels*mode->nbEBands];
+		4*channels*mode.nbEBands*2 // opus_val16 oldBandE/oldLogE/oldLogE2/energyError[channels*mode->nbEBands];
 	return size
 }
 
@@ -100,12 +102,12 @@ func (st *CELTEncoder) customEncoderInitArch(mode *CELTMode, channels int, arch 
 	st.oldBandE = make([]int16, channels*mode.nbEBands)
 	st.oldLogE = make([]int16, channels*mode.nbEBands)
 	st.oldLogE2 = make([]int16, channels*mode.nbEBands)
+	st.energyError = make([]int16, channels*mode.nbEBands)
 
 	st.upsample = 1
 	st.start = 0
 	st.end = st.mode.effEBands
 	st.signalling = 1
-
 	st.arch = arch
 
 	st.constrained_vbr = 1
@@ -147,8 +149,10 @@ var transient_inv_table = [128]uint8{
 
 // C: static int transient_analysis(const opus_val32 * OPUS_RESTRICT in, int len, int C,
 //
-//	opus_val16 *tf_estimate, int *tf_chan)
-func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int) int {
+//	opus_val16 *tf_estimate, int *tf_chan, int allow_weak_transients,
+//	int *weak_transient)
+func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int, allow_weak_transients int,
+	weak_transient *int) int {
 	var i int
 	var mem0, mem1 int32
 	var is_transient int = 0
@@ -156,9 +160,19 @@ func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int
 	var c int
 	var tf_max int16
 	var len2 int
+	// Forward masking: 6.7 dB/ms.
+	var forward_shift int = 4
 	inv_table := &transient_inv_table
 	tmp := make([]int16, len)
 
+	*weak_transient = 0
+	// For lower bitrates, let's be more conservative and have a forward masking
+	// decay of 3.3 dB/ms. This avoids having to code transients at very low
+	// bitrate (mostly for hybrid), which can result in unstable energy and/or
+	// partial collapse.
+	if allow_weak_transients != 0 {
+		forward_shift = 5
+	}
 	len2 = len / 2
 	for c = 0; c < C; c++ {
 		var mean int32
@@ -174,7 +188,7 @@ func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int
 			y = ADD32(mem0, x)
 			mem0 = mem1 + y - SHL32(x, 1)
 			mem1 = x - SHR32(y, 1)
-			tmp[i] = EXTRACT16(SHR32(y, 2))
+			tmp[i] = SROUND16(y, 2)
 			// printf("%f ", tmp[i]);
 		}
 		// printf("\n");
@@ -184,7 +198,7 @@ func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int
 		// Normalize tmp to max range
 		{
 			var shift int = 0
-			shift = 14 - int(Ilog2(1+Maxabs16(tmp, len)))
+			shift = 14 - int(Ilog2(MAX16(1, Maxabs16(tmp, len))))
 			if shift != 0 {
 				for i = 0; i < len; i++ {
 					tmp[i] = SHL16(tmp[i], shift)
@@ -200,7 +214,7 @@ func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int
 			var x2 int16 = int16(PSHR32(MULT16_16(tmp[2*i], tmp[2*i])+MULT16_16(tmp[2*i+1], tmp[2*i+1]), 16))
 			mean += int32(x2)
 			// FIXME: Use PSHR16() instead
-			tmp[i] = int16(mem0 + PSHR32(int32(x2)-mem0, 4))
+			tmp[i] = int16(mem0 + PSHR32(int32(x2)-mem0, forward_shift))
 			mem0 = int32(tmp[i])
 		}
 
@@ -208,6 +222,7 @@ func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int
 		maxE = 0
 		// Backward pass to compute the pre-echo threshold
 		for i = len2 - 1; i >= 0; i-- {
+			// Backward masking: 13.9 dB/ms.
 			// FIXME: Use PSHR16() instead
 			tmp[i] = int16(mem0 + PSHR32(int32(tmp[i])-mem0, 3))
 			mem0 = int32(tmp[i])
@@ -242,7 +257,12 @@ func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int
 		}
 	}
 	is_transient = b2i(mask_metric > 200)
-
+	// For low bitrates, define "weak transients" that need to be
+	// handled differently to avoid partial collapse.
+	if allow_weak_transients != 0 && is_transient != 0 && mask_metric < 600 {
+		is_transient = 0
+		*weak_transient = 1
+	}
 	// Arbitrary metric for VBR boost
 	tf_max = int16(MAX16(0, Sqrt(27*mask_metric)-42))
 	// *tf_estimate = 1 + MIN16(1, sqrt(MAX16(0, tf_max-30))/20);
@@ -419,10 +439,10 @@ func l1_metric(tmp []int16, N, LM int, bias int16) int32 {
 // C: static int tf_analysis(const CELTMode *m, int len, int isTransient,
 //
 //	int *tf_res, int lambda, celt_norm *X, int N0, int LM,
-//	int *tf_sum, opus_val16 tf_estimate, int tf_chan)
+//	opus_val16 tf_estimate, int tf_chan)
 func tf_analysis(m *CELTMode, len, isTransient int,
 	tf_res []int, lambda int, X []int16, N0, LM int,
-	tf_sum *int, tf_estimate int16, tf_chan int) int {
+	tf_estimate int16, tf_chan int) int {
 	var i int
 	var cost0 int
 	var cost1 int
@@ -440,7 +460,6 @@ func tf_analysis(m *CELTMode, len, isTransient int,
 	path0 := make([]int, len)
 	path1 := make([]int, len)
 
-	*tf_sum = 0
 	for i = 0; i < len; i++ {
 		var k, N int
 		var narrow int
@@ -495,11 +514,6 @@ func tf_analysis(m *CELTMode, len, isTransient int,
 			metric[i] = 2 * best_level
 		} else {
 			metric[i] = -2 * best_level
-		}
-		if isTransient != 0 {
-			*tf_sum += LM - metric[i]/2
-		} else {
-			*tf_sum += 0 - metric[i]/2
 		}
 		// For bands that can't be split to -1, set the metric to the half-way point to avoid
 		// biasing the decision
@@ -636,17 +650,25 @@ func tf_encode(start, end, isTransient int, tf_res []int, LM, tf_select int, enc
 //
 //	const opus_val16 *bandLogE, int end, int LM, int C, int N0,
 //	AnalysisInfo *analysis, opus_val16 *stereo_saving, opus_val16 tf_estimate,
-//	int intensity, opus_val16 surround_trim, int arch)
+//	int intensity, opus_val16 surround_trim, opus_int32 equiv_rate, int arch)
 func alloc_trim_analysis(m *CELTMode, X []int16,
 	bandLogE []int16, end, LM, C, N0 int,
 	analysis *AnalysisInfo, stereo_saving *int16, tf_estimate int16,
-	intensity int, surround_trim int16, arch int) int {
+	intensity int, surround_trim int16, equiv_rate int32, arch int) int {
 	var i int
 	var diff int32 = 0
 	var c int
 	var trim_index int
 	var trim int16 = QCONST16(5.0, 8)
 	var logXC, logXC2 int16
+	// At low bitrate, reducing the trim seems to help. At higher bitrates, it's less
+	// clear what's best, so we're keeping it as it was before, at least for now.
+	if equiv_rate < 64000 {
+		trim = QCONST16(4.0, 8)
+	} else if equiv_rate < 80000 {
+		var frac int32 = (equiv_rate - 64000) >> 10
+		trim = int16(int32(QCONST16(4.0, 8)) + int32(QCONST16(1.0/16.0, 8))*frac)
+	}
 	if C == 2 {
 		var sum int16 = 0 // Q10
 		var minXC int16   // Q10
@@ -693,7 +715,7 @@ func alloc_trim_analysis(m *CELTMode, X []int16,
 	}
 	diff /= int32(C * (end - 1))
 	// printf("%f\n", diff);
-	trim = int16(int32(trim) - MAX16(int32(-QCONST16(2.0, 8)), MIN16(int32(QCONST16(2.0, 8)), SHR16(diff+int32(QCONST16(1.0, DB_SHIFT)), DB_SHIFT-8)/6)))
+	trim = int16(int32(trim) - MAX32(int32(-QCONST16(2.0, 8)), MIN32(int32(QCONST16(2.0, 8)), SHR32(diff+int32(QCONST16(1.0, DB_SHIFT)), DB_SHIFT-8)/6)))
 	trim = int16(int32(trim) - SHR16(surround_trim, DB_SHIFT-8))
 	trim = int16(int32(trim) - 2*SHR16(tf_estimate, 14-8))
 	if analysis.Valid != 0 {
@@ -794,11 +816,11 @@ func median_of_3(x []int16) int16 {
 //
 //	int nbEBands, int start, int end, int C, int *offsets, int lsb_depth, const opus_int16 *logN,
 //	int isTransient, int vbr, int constrained_vbr, const opus_int16 *eBands, int LM,
-//	int effectiveBytes, opus_int32 *tot_boost_, int lfe, opus_val16 *surround_dynalloc)
+//	int effectiveBytes, opus_int32 *tot_boost_, int lfe, opus_val16 *surround_dynalloc, AnalysisInfo *analysis)
 func dynalloc_analysis(bandLogE, bandLogE2 []int16,
 	nbEBands, start, end, C int, offsets []int, lsb_depth int, logN []int16,
 	isTransient, vbr, constrained_vbr int, eBands []int16, LM int,
-	effectiveBytes int, tot_boost_ *int32, lfe int, surround_dynalloc []int16) int16 {
+	effectiveBytes int, tot_boost_ *int32, lfe int, surround_dynalloc []int16, analysis *AnalysisInfo) int16 {
 	var i, c int
 	var tot_boost int32 = 0
 	var maxDepth int16
@@ -891,16 +913,23 @@ func dynalloc_analysis(bandLogE, bandLogE2 []int16,
 			}
 		}
 		for i = start; i < end; i++ {
-			var width int
-			var boost int
-			var boost_bits int
-
 			if i < 8 {
 				follower[i] *= 2
 			}
 			if i >= 12 {
 				follower[i] = int16(HALF16(follower[i]))
 			}
+		}
+		if analysis.Valid != 0 {
+			for i = start; i < IMIN(LEAK_BANDS, end); i++ {
+				follower[i] = int16(int32(follower[i]) + int32(QCONST16(1.0/64.0, DB_SHIFT))*int32(analysis.Leak_boost[i]))
+			}
+		}
+		for i = start; i < end; i++ {
+			var width int
+			var boost int
+			var boost_bits int
+
 			follower[i] = MIN16(follower[i], QCONST16(4, DB_SHIFT))
 
 			width = C * int(eBands[i+1]-eBands[i]) << uint(LM)
@@ -914,10 +943,10 @@ func dynalloc_analysis(bandLogE, bandLogE2 []int16,
 				boost = int(SHR32(EXTEND32(follower[i])*int32(width)/6, DB_SHIFT))
 				boost_bits = boost * 6 << BITRES
 			}
-			// For CBR and non-transient CVBR frames, limit dynalloc to 1/4 of the bits
+			// For CBR and non-transient CVBR frames, limit dynalloc to 2/3 of the bits
 			if (vbr == 0 || (constrained_vbr != 0 && isTransient == 0)) &&
-				(tot_boost+int32(boost_bits))>>BITRES>>3 > int32(effectiveBytes/4) {
-				var cap int32 = int32((effectiveBytes / 4) << BITRES << 3)
+				(tot_boost+int32(boost_bits))>>BITRES>>3 > int32(2*effectiveBytes/3) {
+				var cap int32 = int32((2 * effectiveBytes / 3) << BITRES << 3)
 				offsets[i] = int(cap - tot_boost)
 				tot_boost = cap
 				break
@@ -1074,13 +1103,13 @@ func run_prefilter(st *CELTEncoder, in []int32, prefilter_mem []int32, CC, N int
 //	int LM, opus_int32 bitrate, int lastCodedBands, int C, int intensity,
 //	int constrained_vbr, opus_val16 stereo_saving, int tot_boost,
 //	opus_val16 tf_estimate, int pitch_change, opus_val16 maxDepth,
-//	int variable_duration, int lfe, int has_surround_mask, opus_val16 surround_masking,
+//	int lfe, int has_surround_mask, opus_val16 surround_masking,
 //	opus_val16 temporal_vbr)
 func compute_vbr(mode *CELTMode, analysis *AnalysisInfo, base_target int32,
 	LM int, bitrate int32, lastCodedBands, C, intensity int,
 	constrained_vbr int, stereo_saving int16, tot_boost int,
 	tf_estimate int16, pitch_change int, maxDepth int16,
-	variable_duration, lfe, has_surround_mask int, surround_masking int16,
+	lfe, has_surround_mask int, surround_masking int16,
 	temporal_vbr int16) int32 {
 	// The target rate in 8th bits per frame
 	var target int32
@@ -1124,13 +1153,9 @@ func compute_vbr(mode *CELTMode, analysis *AnalysisInfo, base_target int32,
 			SHR32(MULT16_16(int32(stereo_saving)-int32(QCONST16(0.1, 8)), (coded_stereo_dof<<BITRES)), 8)))
 	}
 	// Boost the rate according to dynalloc (minus the dynalloc average for calibration).
-	target += int32(tot_boost - (16 << uint(LM)))
+	target += int32(tot_boost - (19 << uint(LM)))
 	// Apply transient boost, compensating for average boost.
-	if variable_duration == OPUS_FRAMESIZE_VARIABLE {
-		tf_calibration = QCONST16(0.02, 14)
-	} else {
-		tf_calibration = QCONST16(0.04, 14)
-	}
+	tf_calibration = QCONST16(0.044, 14)
 	target += int32(SHL32(MULT16_32_Q15(int32(tf_estimate)-int32(tf_calibration), target), 1))
 
 	// Apply tonality boost
@@ -1139,7 +1164,7 @@ func compute_vbr(mode *CELTMode, analysis *AnalysisInfo, base_target int32,
 		var tonal float32
 
 		// Tonality boost (compensating for the average).
-		tonal = max(float32(0.0), analysis.Tonality-0.15) - 0.09
+		tonal = max(float32(0.0), analysis.Tonality-0.15) - 0.12
 		tonal_target = target + int32(float32(coded_bins<<BITRES)*1.2*tonal)
 		if pitch_change != 0 {
 			tonal_target += int32(float32(coded_bins<<BITRES) * .8)
@@ -1165,16 +1190,10 @@ func compute_vbr(mode *CELTMode, analysis *AnalysisInfo, base_target int32,
 		// printf("%f %d\n", maxDepth, floor_depth);
 	}
 
-	if (has_surround_mask == 0 || lfe != 0) && (constrained_vbr != 0 || bitrate < 64000) {
-		var rate_factor int16 = Q15ONE
-		if bitrate < 64000 {
-			rate_factor = int16(MAX16(0, (bitrate - 32000)))
-		}
-		if constrained_vbr != 0 {
-			rate_factor = MIN16(rate_factor, QCONST16(0.67, 15))
-		}
-		target = base_target + int32(MULT16_32_Q15(rate_factor, target-base_target))
-
+	// Make VBR less aggressive for constrained VBR because we can't keep a higher bitrate
+	// for long. Needs tuning.
+	if (has_surround_mask == 0 || lfe != 0) && constrained_vbr != 0 {
+		target = base_target + int32(MULT16_32_Q15(QCONST16(0.67, 15), target-base_target))
 	}
 
 	if has_surround_mask == 0 && tf_estimate < QCONST16(.2, 14) {
@@ -1206,7 +1225,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	var bits int32
 	var _enc EcEnc
 	var prefilter_mem []int32
-	var oldBandE, oldLogE, oldLogE2 []int16
+	var oldBandE, oldLogE, oldLogE2, energyError []int16
 	var shortBlocks int = 0
 	var isTransient int = 0
 	CC := st.channels
@@ -1218,7 +1237,6 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	var end int
 	var effEnd int
 	var codedBands int
-	var tf_sum int
 	var alloc_trim int
 	var pitch_index int = COMBFILTER_MINPERIOD
 	var gain1 int16 = 0
@@ -1230,6 +1248,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	var total_boost int32
 	var balance int32
 	var tell int32
+	var tell0_frac int32
 	var prefilter_tapset int = 0
 	var pf_on int
 	var anti_collapse_rsv int
@@ -1251,7 +1270,9 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	var surround_masking int16 = 0
 	var temporal_vbr int16 = 0
 	var surround_trim int16 = 0
-	var equiv_rate int32 = 510000
+	var equiv_rate int32
+	var hybrid int
+	var weak_transient int = 0
 
 	mode = st.mode
 	nbEBands = mode.nbEBands
@@ -1259,6 +1280,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	eBands = mode.eBands
 	start = st.start
 	end = st.end
+	hybrid = b2i(start != 0)
 	tf_estimate = 0
 	if nbCompressedBytes < 2 || pcm == nil {
 		return OPUS_BAD_ARG
@@ -1280,11 +1302,15 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	oldBandE = st.oldBandE
 	oldLogE = st.oldLogE
 	oldLogE2 = st.oldLogE2
+	energyError = st.energyError
 
 	if enc == nil {
 		tell = 1
+		tell0_frac = tell
 		nbFilledBytes = 0
 	} else {
+		tell = int32(enc.TellFrac())
+		tell0_frac = tell
 		tell = int32(enc.Tell())
 		nbFilledBytes = int((tell + 4) >> 3)
 	}
@@ -1310,10 +1336,11 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 			nbCompressedBytes = IMAX(2, IMIN(nbCompressedBytes,
 				int((tmp+4*mode.Fs)/(8*mode.Fs))-b2i(st.signalling != 0)))
 		}
-		effectiveBytes = nbCompressedBytes
+		effectiveBytes = nbCompressedBytes - nbFilledBytes
 	}
+	equiv_rate = (int32(nbCompressedBytes) * 8 * 50 >> uint(3-LM)) - int32((40*C+20)*((400>>uint(LM))-50))
 	if st.bitrate != OPUS_BITRATE_MAX {
-		equiv_rate = st.bitrate - int32((40*C+20)*((400>>uint(LM))-50))
+		equiv_rate = IMIN(equiv_rate, st.bitrate-int32((40*C+20)*((400>>uint(LM))-50)))
 	}
 
 	if enc == nil {
@@ -1395,8 +1422,8 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	{
 		var enabled int
 		var qg int
-		enabled = b2i(((st.lfe != 0 && nbAvailableBytes > 3) || nbAvailableBytes > 12*C) && start == 0 && silence == 0 && st.disable_pf == 0 &&
-			st.complexity >= 5 && !(st.consec_transient != 0 && LM != 3 && st.variable_duration == OPUS_FRAMESIZE_VARIABLE))
+		enabled = b2i(((st.lfe != 0 && nbAvailableBytes > 3) || nbAvailableBytes > 12*C) && hybrid == 0 && silence == 0 && st.disable_pf == 0 &&
+			st.complexity >= 5)
 
 		prefilter_tapset = st.tapset_decision
 		pf_on = run_prefilter(st, in, prefilter_mem, CC, N, prefilter_tapset, &pitch_index, &gain1, &qg, enabled, nbAvailableBytes)
@@ -1405,7 +1432,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 			pitch_change = 1
 		}
 		if pf_on == 0 {
-			if start == 0 && tell+16 <= total_bits {
+			if hybrid == 0 && tell+16 <= total_bits {
 				enc.EncBitLogp(0, 1)
 			}
 		} else {
@@ -1426,8 +1453,12 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	isTransient = 0
 	shortBlocks = 0
 	if st.complexity >= 1 && st.lfe == 0 {
+		// Reduces the likelihood of energy instability on fricatives at low bitrate
+		// in hybrid mode. It seems like we still want to have real transients on vowels
+		// though (small SILK quantization offset value).
+		var allow_weak_transients int = b2i(hybrid != 0 && effectiveBytes < 15 && st.silk_info.Offset >= 100)
 		isTransient = transient_analysis(in, N+overlap, CC,
-			&tf_estimate, &tf_chan)
+			&tf_estimate, &tf_chan, allow_weak_transients, &weak_transient)
 	}
 	if LM > 0 && enc.Tell()+3 <= int(total_bits) {
 		if isTransient != 0 {
@@ -1446,7 +1477,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	bandLogE2 := make([]int16, C*nbEBands)
 	if secondMdct != 0 {
 		compute_mdcts(mode, 0, in, freq, C, CC, LM, st.upsample, st.arch)
-		ComputeBandEnergies(mode, freq, bandE, effEnd, C, LM)
+		ComputeBandEnergies(mode, freq, bandE, effEnd, C, LM, st.arch)
 		Amp2Log2(mode, effEnd, end, bandE, bandLogE2, C)
 		for i = 0; i < C*nbEBands; i++ {
 			bandLogE2[i] += int16(HALF16(SHL16(LM, DB_SHIFT)))
@@ -1457,7 +1488,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	if CC == 2 && C == 1 {
 		tf_chan = 0
 	}
-	ComputeBandEnergies(mode, freq, bandE, effEnd, C, LM)
+	ComputeBandEnergies(mode, freq, bandE, effEnd, C, LM, st.arch)
 
 	if st.lfe != 0 {
 		for i = 2; i < end; i++ {
@@ -1470,7 +1501,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	surround_dynalloc := make([]int16, C*nbEBands)
 	clear(surround_dynalloc[:end])
 	// This computes how much masking takes place between surround channels
-	if start == 0 && st.energy_mask != nil && st.lfe == 0 {
+	if hybrid == 0 && st.energy_mask != nil && st.lfe == 0 {
 		var mask_end int
 		var midband int
 		var count_dynalloc int
@@ -1572,12 +1603,12 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 
 	// Last chance to catch any transient we might have missed in the
 	// time-domain analysis
-	if LM > 0 && enc.Tell()+3 <= int(total_bits) && isTransient == 0 && st.complexity >= 5 && st.lfe == 0 {
+	if LM > 0 && enc.Tell()+3 <= int(total_bits) && isTransient == 0 && st.complexity >= 5 && st.lfe == 0 && hybrid == 0 {
 		if patch_transient_decision(bandLogE, oldBandE, nbEBands, start, end, C) != 0 {
 			isTransient = 1
 			shortBlocks = M
 			compute_mdcts(mode, shortBlocks, in, freq, C, CC, LM, st.upsample, st.arch)
-			ComputeBandEnergies(mode, freq, bandE, effEnd, C, LM)
+			ComputeBandEnergies(mode, freq, bandE, effEnd, C, LM, st.arch)
 			Amp2Log2(mode, effEnd, end, bandE, bandLogE, C)
 			// Compensate for the scaling of short vs long mdcts
 			for i = 0; i < C*nbEBands; i++ {
@@ -1598,32 +1629,50 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 
 	tf_res := make([]int, nbEBands)
 	// Disable variable tf resolution for hybrid and at very low bitrate
-	if effectiveBytes >= 15*C && start == 0 && st.complexity >= 2 && st.lfe == 0 {
+	if effectiveBytes >= 15*C && hybrid == 0 && st.complexity >= 2 && st.lfe == 0 {
 		var lambda int
-		if effectiveBytes < 40 {
-			lambda = 12
-		} else if effectiveBytes < 60 {
-			lambda = 6
-		} else if effectiveBytes < 100 {
-			lambda = 4
-		} else {
-			lambda = 3
-		}
-		lambda *= 2
-		tf_select = tf_analysis(mode, effEnd, isTransient, tf_res, lambda, X, N, LM, &tf_sum, tf_estimate, tf_chan)
+		lambda = IMAX(5, 1280/effectiveBytes+2)
+		tf_select = tf_analysis(mode, effEnd, isTransient, tf_res, lambda, X, N, LM, tf_estimate, tf_chan)
 		for i = effEnd; i < end; i++ {
 			tf_res[i] = tf_res[effEnd-1]
 		}
+	} else if hybrid != 0 && weak_transient != 0 {
+		// For weak transients, we rely on the fact that improving time resolution using
+		// TF on a long window is imperfect and will not result in an energy collapse at
+		// low bitrate.
+		for i = 0; i < end; i++ {
+			tf_res[i] = 1
+		}
+		tf_select = 0
+	} else if hybrid != 0 && effectiveBytes < 15 {
+		// For low bitrate hybrid, we force temporal resolution to 5 ms rather than 2.5 ms.
+		for i = 0; i < end; i++ {
+			tf_res[i] = 0
+		}
+		tf_select = isTransient
 	} else {
-		tf_sum = 0
 		for i = 0; i < end; i++ {
 			tf_res[i] = isTransient
 		}
 		tf_select = 0
 	}
-	_ = tf_sum
 
 	error := make([]int16, C*nbEBands)
+	c = 0
+	for {
+		for i = start; i < end; i++ {
+			// When the energy is stable, slightly bias energy quantization towards
+			// the previous error to make the gain more stable (a constant offset is
+			// better than fluctuations).
+			if ABS32(SUB32(bandLogE[i+c*nbEBands], oldBandE[i+c*nbEBands])) < int32(QCONST16(2.0, DB_SHIFT)) {
+				bandLogE[i+c*nbEBands] = int16(int32(bandLogE[i+c*nbEBands]) - MULT16_16_Q15(energyError[i+c*nbEBands], QCONST16(0.25, 15)))
+			}
+		}
+		c++
+		if c >= C {
+			break
+		}
+	}
 	QuantCoarseEnergy(mode, start, end, effEnd, bandLogE,
 		oldBandE, uint32(total_bits), error, enc,
 		C, LM, nbAvailableBytes, st.force_intra,
@@ -1635,7 +1684,15 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		if st.lfe != 0 {
 			st.tapset_decision = 0
 			st.spread_decision = SPREAD_NORMAL
-		} else if shortBlocks != 0 || st.complexity < 3 || nbAvailableBytes < 10*C || start != 0 {
+		} else if hybrid != 0 {
+			if st.complexity == 0 {
+				st.spread_decision = SPREAD_NONE
+			} else if isTransient != 0 {
+				st.spread_decision = SPREAD_NORMAL
+			} else {
+				st.spread_decision = SPREAD_AGGRESSIVE
+			}
+		} else if shortBlocks != 0 || st.complexity < 3 || nbAvailableBytes < 10*C {
 			if st.complexity == 0 {
 				st.spread_decision = SPREAD_NONE
 			} else {
@@ -1660,7 +1717,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 
 	maxDepth = dynalloc_analysis(bandLogE, bandLogE2, nbEBands, start, end, C, offsets,
 		st.lsb_depth, mode.logN, isTransient, st.vbr, st.constrained_vbr,
-		eBands, LM, effectiveBytes, &tot_boost, st.lfe, surround_dynalloc)
+		eBands, LM, effectiveBytes, &tot_boost, st.lfe, surround_dynalloc, &st.analysis)
 	// For LFE, everything interesting is in the first band
 	if st.lfe != 0 {
 		offsets[0] = IMIN(8, effectiveBytes/3)
@@ -1716,12 +1773,13 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 
 	alloc_trim = 5
 	if tell+(6<<BITRES) <= total_bits-total_boost {
-		if st.lfe != 0 {
+		if start > 0 || st.lfe != 0 {
+			st.stereo_saving = 0
 			alloc_trim = 5
 		} else {
 			alloc_trim = alloc_trim_analysis(mode, X, bandLogE,
 				end, LM, C, N, &st.analysis, &st.stereo_saving, tf_estimate,
-				st.intensity, surround_trim, st.arch)
+				st.intensity, surround_trim, equiv_rate, st.arch)
 		}
 		enc.EncIcdf(alloc_trim, trim_icdf[:], 7)
 		tell = int32(enc.TellFrac())
@@ -1739,18 +1797,40 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		// Don't attempt to use more than 510 kb/s, even for frames smaller than 20 ms.
 		// The CELT allocator will just not be able to use more than that anyway.
 		nbCompressedBytes = IMIN(nbCompressedBytes, 1275>>uint(3-LM))
-		base_target = vbr_rate - int32((40*C+20)<<BITRES)
+		if hybrid == 0 {
+			base_target = vbr_rate - int32((40*C+20)<<BITRES)
+		} else {
+			base_target = IMAX(0, vbr_rate-int32((9*C+4)<<BITRES))
+		}
 
 		if st.constrained_vbr != 0 {
 			base_target += (st.vbr_offset >> uint(lm_diff))
 		}
 
-		target = compute_vbr(mode, &st.analysis, base_target, LM, equiv_rate,
-			st.lastCodedBands, C, st.intensity, st.constrained_vbr,
-			st.stereo_saving, int(tot_boost), tf_estimate, pitch_change, maxDepth,
-			st.variable_duration, st.lfe, b2i(st.energy_mask != nil), surround_masking,
-			temporal_vbr)
-
+		if hybrid == 0 {
+			target = compute_vbr(mode, &st.analysis, base_target, LM, equiv_rate,
+				st.lastCodedBands, C, st.intensity, st.constrained_vbr,
+				st.stereo_saving, int(tot_boost), tf_estimate, pitch_change, maxDepth,
+				st.lfe, b2i(st.energy_mask != nil), surround_masking,
+				temporal_vbr)
+		} else {
+			target = base_target
+			// Tonal frames (offset<100) need more bits than noisy (offset>100) ones.
+			if st.silk_info.Offset < 100 {
+				target += 12 << BITRES >> uint(3-LM)
+			}
+			if st.silk_info.Offset > 100 {
+				target -= 18 << BITRES >> uint(3-LM)
+			}
+			// Boosting bitrate on transients and vowels with significant temporal
+			// spikes.
+			target += int32(MULT16_16_Q14(int32(tf_estimate)-int32(QCONST16(.25, 14)), (50 << BITRES)))
+			// If we have a strong transient, let's make sure it has enough bits to code
+			// the first two bands, so that it can use folding rather than noise.
+			if tf_estimate > QCONST16(.7, 14) {
+				target = IMAX(target, 50<<BITRES)
+			}
+		}
 		// The current offset is removed from the target and the space used
 		// so far is added
 		target = target + tell
@@ -1758,11 +1838,17 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		// result in the encoder running out of bits.
 		// The margin of 2 bytes ensures that none of the bust-prevention logic
 		// in the decoder will have triggered so far.
-		min_allowed = ((tell + total_boost + (1 << (BITRES + 3)) - 1) >> (BITRES + 3)) + 2 - int32(nbFilledBytes)
+		min_allowed = ((tell + total_boost + (1 << (BITRES + 3)) - 1) >> (BITRES + 3)) + 2
+		// Take into account the 37 bits we need to have left in the packet to
+		// signal a redundant frame in hybrid mode. Creating a shorter packet would
+		// create an entropy coder desync.
+		if hybrid != 0 {
+			min_allowed = IMAX(min_allowed, (tell0_frac+(37<<BITRES)+total_boost+(1<<(BITRES+3))-1)>>(BITRES+3))
+		}
 
 		nbAvailableBytes = int((target + (1 << (BITRES + 2))) >> (BITRES + 3))
 		nbAvailableBytes = IMAX(int(min_allowed), nbAvailableBytes)
-		nbAvailableBytes = IMIN(nbCompressedBytes, nbAvailableBytes+nbFilledBytes) - nbFilledBytes
+		nbAvailableBytes = IMIN(nbCompressedBytes, nbAvailableBytes)
 
 		// By how much did we "miss" the target on that frame
 		delta = target - vbr_rate
@@ -1809,7 +1895,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 			st.vbr_reservoir = 0
 			// printf ("+%d\n", adjust);
 		}
-		nbCompressedBytes = IMIN(nbCompressedBytes, nbAvailableBytes+nbFilledBytes)
+		nbCompressedBytes = IMIN(nbCompressedBytes, nbAvailableBytes)
 		// printf("%d\n", nbCompressedBytes*50*8);
 		// This moves the raw bits to take into account the new compressed size
 		enc.EncShrink(uint32(nbCompressedBytes))
@@ -1867,13 +1953,24 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	QuantAllBands(1, mode, start, end, X, Y, collapse_masks,
 		bandE, pulses, shortBlocks, st.spread_decision,
 		dual_stereo, st.intensity, tf_res, int32(nbCompressedBytes*(8<<BITRES)-anti_collapse_rsv),
-		balance, enc, LM, codedBands, &st.rng, st.arch)
+		balance, enc, LM, codedBands, &st.rng, st.complexity, st.arch, st.disable_inv)
 
 	if anti_collapse_rsv > 0 {
 		anti_collapse_on = b2i(st.consec_transient < 2)
 		enc.EncBits(uint32(anti_collapse_on), 1)
 	}
 	QuantEnergyFinalise(mode, start, end, oldBandE, error, fine_quant, fine_priority, nbCompressedBytes*8-enc.Tell(), enc, C)
+	clear(energyError[:nbEBands*CC])
+	c = 0
+	for {
+		for i = start; i < end; i++ {
+			energyError[i+c*nbEBands] = MAX16(-QCONST16(0.5, 15), MIN16(QCONST16(0.5, 15), error[i+c*nbEBands]))
+		}
+		c++
+		if c >= C {
+			break
+		}
+	}
 
 	if silence != 0 {
 		for i = 0; i < C*nbEBands; i++ {
@@ -1936,7 +2033,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 // Ctl is the C opus_custom_encoder_ctl / celt_encoder_ctl. Value arguments
 // are int32 (int is accepted), output arguments are *int32, *uint32 or
 // **CELTMode; CELT_SET_ANALYSIS takes *AnalysisInfo and OPUS_SET_ENERGY_MASK
-// takes []int16 (nil for NULL).
+// takes []int16 (nil for NULL), CELT_SET_SILK_INFO takes *SILKInfo.
 //
 // C: int opus_custom_encoder_ctl(CELTEncoder * OPUS_RESTRICT st, int request, ...)
 func (st *CELTEncoder) Ctl(request int, args ...any) int {
@@ -2009,12 +2106,18 @@ func (st *CELTEncoder) Ctl(request int, args ...any) int {
 			return OPUS_BAD_ARG
 		}
 		*value = int32(st.lsb_depth)
-	case OPUS_SET_EXPERT_FRAME_DURATION_REQUEST:
+	case OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST:
 		value, ok := argInt32(args, 0)
-		if !ok {
+		if !ok || value < 0 || value > 1 {
 			return OPUS_BAD_ARG
 		}
-		st.variable_duration = int(value)
+		st.disable_inv = int(value)
+	case OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST:
+		value, ok := args[0].(*int32)
+		if !ok || value == nil {
+			return OPUS_BAD_ARG
+		}
+		*value = int32(st.disable_inv)
 	case OPUS_RESET_STATE:
 		var i int
 		// OPUS_CLEAR from ENCODER_RESET_START (rng) to the end of the state.
@@ -2030,6 +2133,7 @@ func (st *CELTEncoder) Ctl(request int, args ...any) int {
 		st.prefilter_tapset = 0
 		st.consec_transient = 0
 		st.analysis = AnalysisInfo{}
+		st.silk_info = SILKInfo{}
 		st.preemph_memE = [2]int32{}
 		st.preemph_memD = [2]int32{}
 		st.vbr_reservoir = 0
@@ -2046,6 +2150,7 @@ func (st *CELTEncoder) Ctl(request int, args ...any) int {
 		clear(st.oldBandE)
 		clear(st.oldLogE)
 		clear(st.oldLogE2)
+		clear(st.energyError)
 		for i = 0; i < st.channels*st.mode.nbEBands; i++ {
 			st.oldLogE[i] = -QCONST16(28.0, DB_SHIFT)
 			st.oldLogE2[i] = -QCONST16(28.0, DB_SHIFT)
@@ -2069,6 +2174,14 @@ func (st *CELTEncoder) Ctl(request int, args ...any) int {
 		}
 		if info != nil {
 			st.analysis = *info
+		}
+	case CELT_SET_SILK_INFO_REQUEST:
+		info, ok := args[0].(*SILKInfo)
+		if !ok {
+			return OPUS_BAD_ARG
+		}
+		if info != nil {
+			st.silk_info = *info
 		}
 	case CELT_GET_MODE_REQUEST:
 		value, ok := args[0].(**CELTMode)

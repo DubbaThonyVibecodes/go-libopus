@@ -83,10 +83,11 @@ def main():
                         f'\tnVectors: {fields[0]},\n\torder: {fields[1]},\n'
                         f'\tquantStepSize_Q16: int16({fx(fields[2])}),\n'
                         f'\tinvQuantStepSize_Q6: int16({fx(fields[3])}),\n'
-                        f'\tCB1_NLSF_Q8: {goname(fields[4])}[:],\n\tCB1_iCDF: {goname(fields[5])}[:],\n'
-                        f'\tpred_Q8: {goname(fields[6])}[:],\n\tec_sel: {goname(fields[7])}[:],\n'
-                        f'\tec_iCDF: {goname(fields[8])}[:],\n\tec_Rates_Q5: {goname(fields[9])}[:],\n'
-                        f'\tdeltaMin_Q15: {goname(fields[10])}[:],\n}}\n')
+                        f'\tCB1_NLSF_Q8: {goname(fields[4])}[:],\n\tCB1_Wght_Q9: {goname(fields[5])}[:],\n'
+                        f'\tCB1_iCDF: {goname(fields[6])}[:],\n'
+                        f'\tpred_Q8: {goname(fields[7])}[:],\n\tec_sel: {goname(fields[8])}[:],\n'
+                        f'\tec_iCDF: {goname(fields[9])}[:],\n\tec_Rates_Q5: {goname(fields[10])}[:],\n'
+                        f'\tdeltaMin_Q15: {goname(fields[11])}[:],\n}}\n')
             continue
         gotype = TYPES[ctype]
         if ptr:

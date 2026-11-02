@@ -12,6 +12,7 @@ type nsqDelDecStruct struct {
 	Shape_Q14 [DECISION_DELAY]int32
 	sAR2_Q14  [MAX_SHAPE_LPC_ORDER]int32
 	LF_AR_Q14 int32
+	Diff_Q14  int32
 	Seed      int32
 	SeedInit  int32
 	RD_Q10    int32
@@ -23,6 +24,7 @@ type nsqSampleStruct struct {
 	RD_Q10       int32
 	xq_Q14       int32
 	LF_AR_Q14    int32
+	Diff_Q14     int32
 	sLTP_shp_Q14 int32
 	LPC_exc_Q14  int32
 }
@@ -32,14 +34,14 @@ type nsqSamplePair [2]nsqSampleStruct
 
 // C: void silk_NSQ_del_dec_c(
 //
-//	const silk_encoder_state    *psEncC,                                    /* I/O  Encoder State                   */
+//	const silk_encoder_state    *psEncC,                                    /* I    Encoder State                   */
 //	silk_nsq_state              *NSQ,                                       /* I/O  NSQ state                       */
 //	SideInfoIndices             *psIndices,                                 /* I/O  Quantization Indices            */
-//	const opus_int32            x_Q3[],                                     /* I    Prefiltered input signal        */
+//	const opus_int16            x16[],                                      /* I    Input                           */
 //	opus_int8                   pulses[],                                   /* O    Quantized pulse signal          */
 //	const opus_int16            PredCoef_Q12[ 2 * MAX_LPC_ORDER ],          /* I    Short term prediction coefs     */
 //	const opus_int16            LTPCoef_Q14[ LTP_ORDER * MAX_NB_SUBFR ],    /* I    Long term prediction coefs      */
-//	const opus_int16            AR2_Q13[ MAX_NB_SUBFR * MAX_SHAPE_LPC_ORDER ], /* I Noise shaping coefs             */
+//	const opus_int16            AR_Q13[ MAX_NB_SUBFR * MAX_SHAPE_LPC_ORDER ], /* I  Noise shaping coefs             */
 //	const opus_int              HarmShapeGain_Q14[ MAX_NB_SUBFR ],          /* I    Long term shaping coefs         */
 //	const opus_int              Tilt_Q14[ MAX_NB_SUBFR ],                   /* I    Spectral tilt                   */
 //	const opus_int32            LF_shp_Q14[ MAX_NB_SUBFR ],                 /* I    Low frequency shaping coefs     */
@@ -49,8 +51,8 @@ type nsqSamplePair [2]nsqSampleStruct
 //	const opus_int              LTP_scale_Q14                               /* I    LTP state scaling               */
 //
 // )
-// C: #define silk_NSQ_del_dec(psEncC, NSQ, psIndices, x_Q3, pulses, PredCoef_Q12, LTPCoef_Q14, AR2_Q13, HarmShapeGain_Q14, Tilt_Q14, LF_shp_Q14, Gains_Q16, pitchL, Lambda_Q10, LTP_scale_Q14, arch) ((void)(arch),silk_NSQ_del_dec_c(...))
-func (psEncC *EncoderState) NSQDelDec(NSQ *NsqState, psIndices *SideInfoIndices, x_Q3 []int32, pulses []int8, PredCoef_Q12 []int16, LTPCoef_Q14 []int16, AR2_Q13 []int16, HarmShapeGain_Q14 []int, Tilt_Q14 []int, LF_shp_Q14 []int32, Gains_Q16 []int32, pitchL []int, Lambda_Q10 int, LTP_scale_Q14 int, arch int) {
+// C: #define silk_NSQ_del_dec(psEncC, NSQ, psIndices, x16, pulses, PredCoef_Q12, LTPCoef_Q14, AR_Q13, HarmShapeGain_Q14, Tilt_Q14, LF_shp_Q14, Gains_Q16, pitchL, Lambda_Q10, LTP_scale_Q14, arch) ((void)(arch),silk_NSQ_del_dec_c(...))
+func (psEncC *EncoderState) NSQDelDec(NSQ *NsqState, psIndices *SideInfoIndices, x16 []int16, pulses []int8, PredCoef_Q12 []int16, LTPCoef_Q14 []int16, AR_Q13 []int16, HarmShapeGain_Q14 []int, Tilt_Q14 []int, LF_shp_Q14 []int32, Gains_Q16 []int32, pitchL []int, Lambda_Q10 int, LTP_scale_Q14 int, arch int) {
 	var i, k, lag, start_idx, LSF_interpolation_flag, Winner_ind, subfr int
 	var last_smple_idx, smpl_buf_idx, decisionDelay int
 	var A_Q12, B_Q14, AR_shp_Q13 []int16
@@ -82,6 +84,7 @@ func (psEncC *EncoderState) NSQDelDec(NSQ *NsqState, psIndices *SideInfoIndices,
 		psDD.SeedInit = psDD.Seed
 		psDD.RD_Q10 = 0
 		psDD.LF_AR_Q14 = NSQ.sLF_AR_shp_Q14
+		psDD.Diff_Q14 = NSQ.sDiff_shp_Q14
 		psDD.Shape_Q14[0] = NSQ.sLTP_shp_Q14[psEncC.ltp_mem_length-1]
 		copy(psDD.sLPC_Q14[:NSQ_LPC_BUF_LENGTH], NSQ.sLPC_Q14[:NSQ_LPC_BUF_LENGTH])
 		psDD.sAR2_Q14 = NSQ.sAR2_Q14
@@ -121,7 +124,7 @@ func (psEncC *EncoderState) NSQDelDec(NSQ *NsqState, psIndices *SideInfoIndices,
 	for k = 0; k < psEncC.nb_subfr; k++ {
 		A_Q12 = PredCoef_Q12[((k>>1)|(1-LSF_interpolation_flag))*MAX_LPC_ORDER:]
 		B_Q14 = LTPCoef_Q14[k*LTP_ORDER:]
-		AR_shp_Q13 = AR2_Q13[k*MAX_SHAPE_LPC_ORDER:]
+		AR_shp_Q13 = AR_Q13[k*MAX_SHAPE_LPC_ORDER:]
 
 		/* Noise shape parameters */
 		silk_assert(HarmShapeGain_Q14[k] >= 0)
@@ -157,7 +160,10 @@ func (psEncC *EncoderState) NSQDelDec(NSQ *NsqState, psIndices *SideInfoIndices,
 					psDD = &psDelDec[Winner_ind]
 					last_smple_idx = smpl_buf_idx + decisionDelay
 					for i = 0; i < decisionDelay; i++ {
-						last_smple_idx = (last_smple_idx - 1) & DECISION_DELAY_MASK
+						last_smple_idx = (last_smple_idx - 1) % DECISION_DELAY
+						if last_smple_idx < 0 {
+							last_smple_idx += DECISION_DELAY
+						}
 						pulses[pulses_idx+i-decisionDelay] = int8(RSHIFT_ROUND(psDD.Q_Q10[last_smple_idx], 10))
 						NSQ.xq[pxq+i-decisionDelay] = int16(SAT16(RSHIFT_ROUND(
 							SMULWW(psDD.Xq_Q14[last_smple_idx], Gains_Q16[1]), 14)))
@@ -179,7 +185,7 @@ func (psEncC *EncoderState) NSQDelDec(NSQ *NsqState, psIndices *SideInfoIndices,
 			}
 		}
 
-		nsqDelDecScaleStates(psEncC, NSQ, psDelDec, x_Q3, x_sc_Q10, sLTP, sLTP_Q15, k,
+		nsqDelDecScaleStates(psEncC, NSQ, psDelDec, x16, x_sc_Q10, sLTP, sLTP_Q15, k,
 			psEncC.nStatesDelayedDecision, LTP_scale_Q14, Gains_Q16, pitchL, int(psIndices.signalType), decisionDelay)
 
 		noiseShapeQuantizerDelDec(NSQ, psDelDec, int(psIndices.signalType), x_sc_Q10, pulses, pulses_idx, NSQ.xq[:], pxq, sLTP_Q15,
@@ -188,7 +194,7 @@ func (psEncC *EncoderState) NSQDelDec(NSQ *NsqState, psIndices *SideInfoIndices,
 			psEncC.predictLPCOrder, psEncC.warping_Q16, psEncC.nStatesDelayedDecision, &smpl_buf_idx, decisionDelay, psEncC.arch)
 		subfr++
 
-		x_Q3 = x_Q3[psEncC.subfr_length:]
+		x16 = x16[psEncC.subfr_length:]
 		pulses_idx += psEncC.subfr_length
 		pxq += psEncC.subfr_length
 	}
@@ -209,7 +215,11 @@ func (psEncC *EncoderState) NSQDelDec(NSQ *NsqState, psIndices *SideInfoIndices,
 	last_smple_idx = smpl_buf_idx + decisionDelay
 	Gain_Q10 = RSHIFT32(Gains_Q16[psEncC.nb_subfr-1], 6)
 	for i = 0; i < decisionDelay; i++ {
-		last_smple_idx = (last_smple_idx - 1) & DECISION_DELAY_MASK
+		last_smple_idx = (last_smple_idx - 1) % DECISION_DELAY
+		if last_smple_idx < 0 {
+			last_smple_idx += DECISION_DELAY
+		}
+
 		pulses[pulses_idx+i-decisionDelay] = int8(RSHIFT_ROUND(psDD.Q_Q10[last_smple_idx], 10))
 		NSQ.xq[pxq+i-decisionDelay] = int16(SAT16(RSHIFT_ROUND(
 			SMULWW(psDD.Xq_Q14[last_smple_idx], Gain_Q10), 8)))
@@ -220,10 +230,10 @@ func (psEncC *EncoderState) NSQDelDec(NSQ *NsqState, psIndices *SideInfoIndices,
 
 	/* Update states */
 	NSQ.sLF_AR_shp_Q14 = psDD.LF_AR_Q14
+	NSQ.sDiff_shp_Q14 = psDD.Diff_Q14
 	NSQ.lagPrev = pitchL[psEncC.nb_subfr-1]
 
 	/* Save quantized speech signal */
-	/* DEBUG_STORE_DATA( enc.pcm, &NSQ->xq[psEncC->ltp_mem_length], psEncC->frame_length * sizeof( opus_int16 ) ) */
 	copy(NSQ.xq[:psEncC.ltp_mem_length], NSQ.xq[psEncC.frame_length:psEncC.frame_length+psEncC.ltp_mem_length])
 	copy(NSQ.sLTP_shp_Q14[:psEncC.ltp_mem_length], NSQ.sLTP_shp_Q14[psEncC.frame_length:psEncC.frame_length+psEncC.ltp_mem_length])
 }
@@ -258,7 +268,7 @@ func (psEncC *EncoderState) NSQDelDec(NSQ *NsqState, psIndices *SideInfoIndices,
 //	opus_int            predictLPCOrder,        /* I    Prediction filter order             */
 //	opus_int            warping_Q16,            /* I                                        */
 //	opus_int            nStatesDelayedDecision, /* I    Number of states in decision tree   */
-//	opus_int            *smpl_buf_idx,          /* I    Index to newest samples in buffers  */
+//	opus_int            *smpl_buf_idx,          /* I/O  Index to newest samples in buffers  */
 //	opus_int            decisionDelay,          /* I                                        */
 //	int                 arch                    /* I                                        */
 //
@@ -338,7 +348,7 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 			/* Noise shape feedback */
 			silk_assert((shapingLPCOrder & 1) == 0) /* check that order is even */
 			/* Output of lowpass section */
-			tmp2 = SMLAWB(psDD.sLPC_Q14[psLPC_Q14], psDD.sAR2_Q14[0], warping_Q16)
+			tmp2 = SMLAWB(psDD.Diff_Q14, psDD.sAR2_Q14[0], warping_Q16)
 			/* Output of allpass section */
 			tmp1 = SMLAWB(psDD.sAR2_Q14[0], psDD.sAR2_Q14[1]-tmp2, warping_Q16)
 			psDD.sAR2_Q14[0] = tmp2
@@ -384,6 +394,19 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 			/* Find two quantization level candidates and measure their rate-distortion */
 			q1_Q10 = SUB32(r_Q10, offset_Q10)
 			q1_Q0 = RSHIFT(q1_Q10, 10)
+			if Lambda_Q10 > 2048 {
+				/* For aggressive RDO, the bias becomes more than one pulse. */
+				var rdo_offset int = Lambda_Q10/2 - 512
+				if q1_Q10 > int32(rdo_offset) {
+					q1_Q0 = RSHIFT(q1_Q10-int32(rdo_offset), 10)
+				} else if q1_Q10 < int32(-rdo_offset) {
+					q1_Q0 = RSHIFT(q1_Q10+int32(rdo_offset), 10)
+				} else if q1_Q10 < 0 {
+					q1_Q0 = -1
+				} else {
+					q1_Q0 = 0
+				}
+			}
 			if q1_Q0 > 0 {
 				q1_Q10 = SUB32(LSHIFT(q1_Q0, 10), QUANT_LEVEL_ADJUST_Q10)
 				q1_Q10 = ADD32(q1_Q10, offset_Q10)
@@ -437,7 +460,8 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 			xq_Q14 = ADD32(LPC_exc_Q14, LPC_pred_Q14)
 
 			/* Update states */
-			sLF_AR_shp_Q14 = SUB32(xq_Q14, n_AR_Q14)
+			psSS[0].Diff_Q14 = SUB_LSHIFT32(xq_Q14, x_Q10[i], 4)
+			sLF_AR_shp_Q14 = SUB32(psSS[0].Diff_Q14, n_AR_Q14)
 			psSS[0].sLTP_shp_Q14 = SUB32(sLF_AR_shp_Q14, n_LF_Q14)
 			psSS[0].LF_AR_Q14 = sLF_AR_shp_Q14
 			psSS[0].LPC_exc_Q14 = LPC_exc_Q14
@@ -456,15 +480,19 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 			xq_Q14 = ADD32(LPC_exc_Q14, LPC_pred_Q14)
 
 			/* Update states */
-			sLF_AR_shp_Q14 = SUB32(xq_Q14, n_AR_Q14)
+			psSS[1].Diff_Q14 = SUB_LSHIFT32(xq_Q14, x_Q10[i], 4)
+			sLF_AR_shp_Q14 = SUB32(psSS[1].Diff_Q14, n_AR_Q14)
 			psSS[1].sLTP_shp_Q14 = SUB32(sLF_AR_shp_Q14, n_LF_Q14)
 			psSS[1].LF_AR_Q14 = sLF_AR_shp_Q14
 			psSS[1].LPC_exc_Q14 = LPC_exc_Q14
 			psSS[1].xq_Q14 = xq_Q14
 		}
 
-		*smpl_buf_idx = (*smpl_buf_idx - 1) & DECISION_DELAY_MASK              /* Index to newest samples              */
-		last_smple_idx = (*smpl_buf_idx + decisionDelay) & DECISION_DELAY_MASK /* Index to decisionDelay old samples   */
+		*smpl_buf_idx = (*smpl_buf_idx - 1) % DECISION_DELAY
+		if *smpl_buf_idx < 0 {
+			*smpl_buf_idx += DECISION_DELAY
+		}
+		last_smple_idx = (*smpl_buf_idx + decisionDelay) % DECISION_DELAY
 
 		/* Find winner */
 		RDmin_Q10 = psSampleState[0][0].RD_Q10
@@ -520,6 +548,7 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 			psDDmax.Shape_Q14 = psDDmin.Shape_Q14
 			psDDmax.sAR2_Q14 = psDDmin.sAR2_Q14
 			psDDmax.LF_AR_Q14 = psDDmin.LF_AR_Q14
+			psDDmax.Diff_Q14 = psDDmin.Diff_Q14
 			psDDmax.Seed = psDDmin.Seed
 			psDDmax.SeedInit = psDDmin.SeedInit
 			psDDmax.RD_Q10 = psDDmin.RD_Q10
@@ -543,6 +572,7 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 			psDD = &psDelDec[k]
 			psSS := &psSampleState[k][0]
 			psDD.LF_AR_Q14 = psSS.LF_AR_Q14
+			psDD.Diff_Q14 = psSS.Diff_Q14
 			psDD.sLPC_Q14[NSQ_LPC_BUF_LENGTH+i] = psSS.xq_Q14
 			psDD.Xq_Q14[*smpl_buf_idx] = psSS.xq_Q14
 			psDD.Q_Q10[*smpl_buf_idx] = psSS.Q_Q10
@@ -566,7 +596,7 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 //	const silk_encoder_state *psEncC,               /* I    Encoder State                       */
 //	silk_nsq_state      *NSQ,                       /* I/O  NSQ state                           */
 //	NSQ_del_dec_struct  psDelDec[],                 /* I/O  Delayed decision states             */
-//	const opus_int32    x_Q3[],                     /* I    Input in Q3                         */
+//	const opus_int16    x16[],                      /* I    Input                               */
 //	opus_int32          x_sc_Q10[],                 /* O    Input scaled with 1/Gain in Q10     */
 //	const opus_int16    sLTP[],                     /* I    Re-whitened LTP state in Q0         */
 //	opus_int32          sLTP_Q15[],                 /* O    LTP state matching scaled input     */
@@ -579,30 +609,20 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 //	const opus_int      decisionDelay               /* I    Decision delay                      */
 //
 // )
-func nsqDelDecScaleStates(psEncC *EncoderState, NSQ *NsqState, psDelDec []nsqDelDecStruct, x_Q3 []int32, x_sc_Q10 []int32, sLTP []int16, sLTP_Q15 []int32, subfr int, nStatesDelayedDecision int, LTP_scale_Q14 int, Gains_Q16 []int32, pitchL []int, signal_type int, decisionDelay int) {
+func nsqDelDecScaleStates(psEncC *EncoderState, NSQ *NsqState, psDelDec []nsqDelDecStruct, x16 []int16, x_sc_Q10 []int32, sLTP []int16, sLTP_Q15 []int32, subfr int, nStatesDelayedDecision int, LTP_scale_Q14 int, Gains_Q16 []int32, pitchL []int, signal_type int, decisionDelay int) {
 	var i, k, lag int
-	var gain_adj_Q16, inv_gain_Q31, inv_gain_Q23 int32
+	var gain_adj_Q16, inv_gain_Q31, inv_gain_Q26 int32
 	var psDD *nsqDelDecStruct
 
 	lag = pitchL[subfr]
 	inv_gain_Q31 = INVERSE32_varQ(max(Gains_Q16[subfr], 1), 47)
 	silk_assert(inv_gain_Q31 != 0)
 
-	/* Calculate gain adjustment factor */
-	if Gains_Q16[subfr] != NSQ.prev_gain_Q16 {
-		gain_adj_Q16 = DIV32_varQ(NSQ.prev_gain_Q16, Gains_Q16[subfr], 16)
-	} else {
-		gain_adj_Q16 = int32(1) << 16
-	}
-
 	/* Scale input */
-	inv_gain_Q23 = RSHIFT_ROUND(inv_gain_Q31, 8)
+	inv_gain_Q26 = RSHIFT_ROUND(inv_gain_Q31, 5)
 	for i = 0; i < psEncC.subfr_length; i++ {
-		x_sc_Q10[i] = SMULWW(x_Q3[i], inv_gain_Q23)
+		x_sc_Q10[i] = SMULWW(x16[i], inv_gain_Q26)
 	}
-
-	/* Save inverse gain */
-	NSQ.prev_gain_Q16 = Gains_Q16[subfr]
 
 	/* After rewhitening the LTP state is un-scaled, so scale with inv_gain_Q16 */
 	if NSQ.rewhite_flag != 0 {
@@ -617,7 +637,9 @@ func nsqDelDecScaleStates(psEncC *EncoderState, NSQ *NsqState, psDelDec []nsqDel
 	}
 
 	/* Adjust for changing gain */
-	if gain_adj_Q16 != int32(1)<<16 {
+	if Gains_Q16[subfr] != NSQ.prev_gain_Q16 {
+		gain_adj_Q16 = DIV32_varQ(NSQ.prev_gain_Q16, Gains_Q16[subfr], 16)
+
 		/* Scale long-term shaping state */
 		for i = NSQ.sLTP_shp_buf_idx - psEncC.ltp_mem_length; i < NSQ.sLTP_shp_buf_idx; i++ {
 			NSQ.sLTP_shp_Q14[i] = SMULWW(gain_adj_Q16, NSQ.sLTP_shp_Q14[i])
@@ -635,6 +657,7 @@ func nsqDelDecScaleStates(psEncC *EncoderState, NSQ *NsqState, psDelDec []nsqDel
 
 			/* Scale scalar states */
 			psDD.LF_AR_Q14 = SMULWW(gain_adj_Q16, psDD.LF_AR_Q14)
+			psDD.Diff_Q14 = SMULWW(gain_adj_Q16, psDD.Diff_Q14)
 
 			/* Scale short-term prediction and shaping states */
 			for i = 0; i < NSQ_LPC_BUF_LENGTH; i++ {
@@ -648,5 +671,8 @@ func nsqDelDecScaleStates(psEncC *EncoderState, NSQ *NsqState, psDelDec []nsqDel
 				psDD.Shape_Q14[i] = SMULWW(gain_adj_Q16, psDD.Shape_Q14[i])
 			}
 		}
+
+		/* Save inverse gain */
+		NSQ.prev_gain_Q16 = Gains_Q16[subfr]
 	}
 }

@@ -14,5 +14,5 @@ func Lin2log(
 	CLZ_FRAC(inLin, &lz, &frac_Q7)
 
 	// Piece-wise parabolic approximation
-	return LSHIFT(31-lz, 7) + SMLAWB(frac_Q7, MUL(frac_Q7, 128-frac_Q7), 179)
+	return ADD_LSHIFT32(SMLAWB(frac_Q7, MUL(frac_Q7, 128-frac_Q7), 179), 31-lz, 7)
 }

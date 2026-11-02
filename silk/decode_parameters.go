@@ -20,7 +20,7 @@ func (psDec *DecoderState) DecodeParameters(psDecCtrl *DecoderControl, condCodin
 	NLSFDecode(pNLSF_Q15[:], psDec.indices.NLSFIndices[:], psDec.psNLSF_CB)
 
 	/* Convert NLSF parameters to AR prediction filter coefficients */
-	NLSF2A(psDecCtrl.PredCoef_Q12[1][:], pNLSF_Q15[:], psDec.LPC_order)
+	NLSF2A(psDecCtrl.PredCoef_Q12[1][:], pNLSF_Q15[:], psDec.LPC_order, psDec.arch)
 
 	/* If just reset, e.g., because internal Fs changed, do not allow interpolation */
 	/* improves the case of packet loss in the first frame after a switch           */
@@ -37,7 +37,7 @@ func (psDec *DecoderState) DecodeParameters(psDecCtrl *DecoderControl, condCodin
 		}
 
 		/* Convert NLSF parameters to AR prediction filter coefficients */
-		NLSF2A(psDecCtrl.PredCoef_Q12[0][:], pNLSF0_Q15[:], psDec.LPC_order)
+		NLSF2A(psDecCtrl.PredCoef_Q12[0][:], pNLSF0_Q15[:], psDec.LPC_order, psDec.arch)
 	} else {
 		/* Copy LPC coefficients for first half from second half */
 		copy(psDecCtrl.PredCoef_Q12[0][:psDec.LPC_order], psDecCtrl.PredCoef_Q12[1][:psDec.LPC_order])

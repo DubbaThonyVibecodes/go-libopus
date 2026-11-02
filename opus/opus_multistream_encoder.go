@@ -44,7 +44,6 @@ type OpusMSEncoder struct {
 	variable_duration int
 	mapping_type      MappingType
 	bitrate_bps       int32
-	subframe_mem      [3]float32
 	// Encoder states go here
 	encoders []*OpusEncoder
 	// then opus_val32 window_mem[channels*120];
@@ -159,12 +158,14 @@ func SurroundAnalysis(celt_mode *celt.CELTMode, pcm any, bandLogE []int16, mem [
 	var pos [8]int
 	var upsample int
 	var frame_size int
+	var freq_size int
 	var channel_offset int16
 	var bandE [21]int32
 	var maskLogE [3][21]int16
 
 	upsample = celt.ResamplingFactor(int32(rate))
 	frame_size = length * upsample
+	freq_size = IMIN(960, frame_size)
 
 	// LM = log2(frame_size / 120)
 	for LM = 0; LM < celt_mode.MaxLM(); LM++ {
@@ -175,7 +176,7 @@ func SurroundAnalysis(celt_mode *celt.CELTMode, pcm any, bandLogE []int16, mem [
 
 	in := make([]int32, frame_size+overlap)
 	x := make([]int16, length)
-	freq := make([]int32, frame_size)
+	freq := make([]int32, freq_size)
 
 	channel_pos(channels, pos[:])
 
@@ -186,23 +187,34 @@ func SurroundAnalysis(celt_mode *celt.CELTMode, pcm any, bandLogE []int16, mem [
 	}
 
 	for c = 0; c < channels; c++ {
+		var frame int
+		var nb_frames int = frame_size / freq_size
+		celt.Assert(nb_frames*freq_size == frame_size)
 		copy(in[:overlap], mem[c*overlap:])
 		copy_channel_in(x, 1, pcm, channels, c, length)
 		preemph := celt_mode.Preemph()
 		celt.Preemphasis(x, in[overlap:], frame_size, 1, upsample, preemph[:], &preemph_mem[c], 0)
-		celt.MdctForward(celt_mode.Mdct(), in, freq, celt_mode.Window(),
-			overlap, celt_mode.MaxLM()-LM, 1, arch)
-		if upsample != 1 {
-			var bound int = length
-			for i = 0; i < bound; i++ {
-				freq[i] *= int32(upsample)
+		clear(bandE[:21])
+		for frame = 0; frame < nb_frames; frame++ {
+			var tmpE [21]int32
+			celt.MdctForward(celt_mode.Mdct(), in[960*frame:], freq, celt_mode.Window(),
+				overlap, celt_mode.MaxLM()-LM, 1, arch)
+			if upsample != 1 {
+				var bound int = freq_size / upsample
+				for i = 0; i < bound; i++ {
+					freq[i] *= int32(upsample)
+				}
+				for ; i < freq_size; i++ {
+					freq[i] = 0
+				}
 			}
-			for ; i < frame_size; i++ {
-				freq[i] = 0
+
+			celt.ComputeBandEnergies(celt_mode, freq, tmpE[:], 21, 1, LM, arch)
+			// If we have multiple frames, take the max energy.
+			for i = 0; i < 21; i++ {
+				bandE[i] = celt.MAX32(bandE[i], tmpE[i])
 			}
 		}
-
-		celt.ComputeBandEnergies(celt_mode, freq, bandE[:], 21, 1, LM)
 		celt.Amp2Log2(celt_mode, 21, 21, bandE[:], bandLogE[21*c:], 1)
 		// Apply spreading function with -6 dB/band going up and -12 dB/band going down.
 		for i = 1; i < 21; i++ {
@@ -309,9 +321,6 @@ func (st *OpusMSEncoder) multistreamEncoderInitImpl(Fs int32, channels int, stre
 	st.layout.nb_channels = channels
 	st.layout.nb_streams = streams
 	st.layout.nb_coupled_streams = coupled_streams
-	st.subframe_mem[0] = 0
-	st.subframe_mem[1] = 0
-	st.subframe_mem[2] = 0
 	if mapping_type != MAPPING_TYPE_SURROUND {
 		st.lfe_stream = -1
 	}
@@ -321,7 +330,11 @@ func (st *OpusMSEncoder) multistreamEncoderInitImpl(Fs int32, channels int, stre
 	for i = 0; i < st.layout.nb_channels; i++ {
 		st.layout.mapping[i] = mapping[i]
 	}
-	if validate_layout(&st.layout) == 0 || validate_encoder_layout(&st.layout) == 0 {
+	if validate_layout(&st.layout) == 0 {
+		return OPUS_BAD_ARG
+	}
+	if mapping_type == MAPPING_TYPE_SURROUND &&
+		validate_encoder_layout(&st.layout) == 0 {
 		return OPUS_BAD_ARG
 	}
 	st.encoders = make([]*OpusEncoder, streams)
@@ -469,49 +482,56 @@ func (st *OpusMSEncoder) surround_rate_allocation(rate []int32, frame_size int, 
 	var lfe_offset int
 	var coupled_ratio int // Q8
 	var lfe_ratio int     // Q8
+	var nb_lfe int
+	var nb_uncoupled int
+	var nb_coupled int
+	var nb_normal int
+	var channel_offset int32
+	var bitrate int32
+	var total int
 
-	if st.bitrate_bps > int32(st.layout.nb_channels*40000) {
-		stream_offset = 20000
+	nb_lfe = b2i(st.lfe_stream != -1)
+	nb_coupled = st.layout.nb_coupled_streams
+	nb_uncoupled = st.layout.nb_streams - nb_coupled - nb_lfe
+	nb_normal = 2*nb_coupled + nb_uncoupled
+
+	// Give each non-LFE channel enough bits per channel for coding band energy.
+	channel_offset = 40 * IMAX(50, Fs/int32(frame_size))
+
+	if st.bitrate_bps == OPUS_AUTO {
+		bitrate = int32(nb_normal)*(channel_offset+Fs+10000) + int32(8000*nb_lfe)
+	} else if st.bitrate_bps == OPUS_BITRATE_MAX {
+		bitrate = int32(nb_normal*300000 + nb_lfe*128000)
 	} else {
-		stream_offset = int(st.bitrate_bps) / st.layout.nb_channels / 2
+		bitrate = st.bitrate_bps
 	}
-	stream_offset += 60 * (int(Fs)/frame_size - 50)
 
-	// We start by giving each stream (coupled or uncoupled) the same bitrate.
+	// Give LFE some basic stream_channel allocation but never exceed 1/20 of the
+	// total rate for the non-energy part to avoid problems at really low rate.
+	lfe_offset = int(IMIN(bitrate/20, 3000)) + 15*int(IMAX(50, Fs/int32(frame_size)))
+
+	// We give each stream (coupled or uncoupled) a starting bitrate.
 	// This models the main saving of coupled channels over uncoupled.
-	// The LFE stream is an exception to the above and gets fewer bits.
-	lfe_offset = 3500 + 60*(int(Fs)/frame_size-50)
-	// Coupled streams get twice the mono rate after the first 20 kb/s.
+	stream_offset = int(bitrate-channel_offset*int32(nb_normal)-int32(lfe_offset*nb_lfe)) / nb_normal / 2
+	stream_offset = IMAX(0, IMIN(20000, stream_offset))
+
+	// Coupled streams get twice the mono rate after the offset is allocated.
 	coupled_ratio = 512
 	// Should depend on the bitrate, for now we assume LFE gets 1/8 the bits of mono
 	lfe_ratio = 32
 
-	// Compute bitrate allocation between streams
-	if st.bitrate_bps == OPUS_AUTO {
-		channel_rate = Fs + 60*Fs/int32(frame_size)
-	} else if st.bitrate_bps == OPUS_BITRATE_MAX {
-		channel_rate = 300000
-	} else {
-		var nb_lfe int
-		var nb_uncoupled int
-		var nb_coupled int
-		var total int
-		nb_lfe = b2i(st.lfe_stream != -1)
-		nb_coupled = st.layout.nb_coupled_streams
-		nb_uncoupled = st.layout.nb_streams - nb_coupled - nb_lfe
-		total = (nb_uncoupled << 8) + // mono
-			coupled_ratio*nb_coupled + // stereo
-			nb_lfe*lfe_ratio
-		channel_rate = 256 * (st.bitrate_bps - int32(lfe_offset*nb_lfe) - int32(stream_offset*(nb_coupled+nb_uncoupled))) / int32(total)
-	}
+	total = (nb_uncoupled << 8) + // mono
+		coupled_ratio*nb_coupled + // stereo
+		nb_lfe*lfe_ratio
+	channel_rate = int32(256 * int64(bitrate-int32(lfe_offset*nb_lfe)-int32(stream_offset*(nb_coupled+nb_uncoupled))-channel_offset*int32(nb_normal)) / int64(total))
 
 	for i = 0; i < st.layout.nb_streams; i++ {
 		if i < st.layout.nb_coupled_streams {
-			rate[i] = int32(stream_offset) + (channel_rate * int32(coupled_ratio) >> 8)
+			rate[i] = 2*channel_offset + IMAX(0, int32(stream_offset)+(channel_rate*int32(coupled_ratio)>>8))
 		} else if i != st.lfe_stream {
-			rate[i] = int32(stream_offset) + channel_rate
+			rate[i] = channel_offset + IMAX(0, int32(stream_offset)+channel_rate)
 		} else {
-			rate[i] = int32(lfe_offset) + (channel_rate * int32(lfe_ratio) >> 8)
+			rate[i] = IMAX(0, int32(lfe_offset)+(channel_rate*int32(lfe_ratio)>>8))
 		}
 	}
 }
@@ -533,8 +553,8 @@ func (st *OpusMSEncoder) rate_allocation(rate []int32, frame_size int) int32 {
 	return rate_sum
 }
 
-// Max size in case the encoder decides to return three frames
-const MS_FRAME_TMP = (3*1275 + 7)
+// Max size in case the encoder decides to return six frames (6 x 20 ms = 120 ms)
+const MS_FRAME_TMP = (6*1275 + 12)
 
 // C: static int opus_multistream_encode_native(OpusMSEncoder *st, opus_copy_channel_in_func copy_channel_in, const void *pcm, int analysis_frame_size, unsigned char *data, opus_int32 max_data_bytes, int lsb_depth, downmix_func downmix, int float_api)
 func (st *OpusMSEncoder) multistreamEncodeNative(copy_channel_in opus_copy_channel_in_func, pcm any, analysis_frame_size int, data []byte, max_data_bytes int32, lsb_depth int, downmix downmix_func, float_api int) int {
@@ -561,31 +581,17 @@ func (st *OpusMSEncoder) multistreamEncodeNative(copy_channel_in opus_copy_chann
 	st.encoders[0].Ctl(OPUS_GET_VBR_REQUEST, &vbr)
 	st.encoders[0].Ctl(celt.CELT_GET_MODE_REQUEST, &celt_mode)
 
-	{
-		var delay_compensation int32
-		var channels int
-
-		channels = st.layout.nb_streams + st.layout.nb_coupled_streams
-		st.encoders[0].Ctl(OPUS_GET_LOOKAHEAD_REQUEST, &delay_compensation)
-		delay_compensation -= Fs / 400
-		frame_size = int(ComputeFrameSize(pcm, analysis_frame_size,
-			st.variable_duration, channels, Fs, int(st.bitrate_bps),
-			int(delay_compensation), downmix, st.subframe_mem[:]))
-	}
-
-	if 400*int32(frame_size) < Fs {
-		return OPUS_BAD_ARG
-	}
-	// Validate frame_size before using it to allocate stack space.
-	// This mirrors the checks in opus_encode[_float]().
-	if 400*int32(frame_size) != Fs && 200*int32(frame_size) != Fs &&
-		100*int32(frame_size) != Fs && 50*int32(frame_size) != Fs &&
-		25*int32(frame_size) != Fs && 50*int32(frame_size) != 3*Fs {
+	frame_size = int(FrameSizeSelect(int32(analysis_frame_size), st.variable_duration, Fs))
+	if frame_size <= 0 {
 		return OPUS_BAD_ARG
 	}
 
 	// Smallest packet the encoder can produce.
 	smallest_packet = int32(st.layout.nb_streams*2 - 1)
+	// 100 ms needs an extra byte per stream for the ToC.
+	if Fs/int32(frame_size) == 10 {
+		smallest_packet += int32(st.layout.nb_streams)
+	}
 	if max_data_bytes < smallest_packet {
 		return OPUS_BUFFER_TOO_SMALL
 	}
@@ -681,6 +687,10 @@ func (st *OpusMSEncoder) multistreamEncodeNative(copy_channel_in opus_copy_chann
 		curr_max = max_data_bytes - int32(tot_size)
 		// Reserve one byte for the last stream and two for the others
 		curr_max -= int32(IMAX(0, 2*(st.layout.nb_streams-s-1)-1))
+		// For 100 ms, reserve an extra byte per stream for the ToC
+		if Fs/int32(frame_size) == 10 {
+			curr_max -= int32(st.layout.nb_streams - s - 1)
+		}
 		curr_max = IMIN(curr_max, MS_FRAME_TMP)
 		// Repacketizer will add one or two bytes for self-delimited frames
 		if s != st.layout.nb_streams-1 {
@@ -755,8 +765,14 @@ func (st *OpusMSEncoder) Ctl(request int, args ...any) int {
 	switch request {
 	case OPUS_SET_BITRATE_REQUEST:
 		value, ok := argInt32(args, 0)
-		if !ok || (value < 0 && value != OPUS_AUTO && value != OPUS_BITRATE_MAX) {
+		if !ok {
 			return OPUS_BAD_ARG
+		}
+		if value != OPUS_AUTO && value != OPUS_BITRATE_MAX {
+			if value <= 0 {
+				return OPUS_BAD_ARG
+			}
+			value = IMIN(int32(300000*st.layout.nb_channels), IMAX(int32(500*st.layout.nb_channels), value))
 		}
 		st.bitrate_bps = value
 	case OPUS_GET_BITRATE_REQUEST:
@@ -786,7 +802,8 @@ func (st *OpusMSEncoder) Ctl(request int, args ...any) int {
 		OPUS_GET_SAMPLE_RATE_REQUEST,
 		OPUS_GET_INBAND_FEC_REQUEST,
 		OPUS_GET_FORCE_CHANNELS_REQUEST,
-		OPUS_GET_PREDICTION_DISABLED_REQUEST:
+		OPUS_GET_PREDICTION_DISABLED_REQUEST,
+		OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST:
 		// For int32* GET params, just query the first stream
 		value, ok := args[0].(*int32)
 		if !ok {
@@ -823,7 +840,8 @@ func (st *OpusMSEncoder) Ctl(request int, args ...any) int {
 		OPUS_SET_DTX_REQUEST,
 		OPUS_SET_FORCE_MODE_REQUEST,
 		OPUS_SET_FORCE_CHANNELS_REQUEST,
-		OPUS_SET_PREDICTION_DISABLED_REQUEST:
+		OPUS_SET_PREDICTION_DISABLED_REQUEST,
+		OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST:
 		var s int
 		// This works for int32 params
 		value, ok := argInt32(args, 0)
@@ -866,9 +884,6 @@ func (st *OpusMSEncoder) Ctl(request int, args ...any) int {
 		*value = int32(st.variable_duration)
 	case OPUS_RESET_STATE:
 		var s int
-		st.subframe_mem[0] = 0
-		st.subframe_mem[1] = 0
-		st.subframe_mem[2] = 0
 		if st.mapping_type == MAPPING_TYPE_SURROUND {
 			clear(st.ms_get_preemph_mem()[:st.layout.nb_channels])
 			clear(st.ms_get_window_mem()[:st.layout.nb_channels*120])

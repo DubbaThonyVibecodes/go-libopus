@@ -118,6 +118,11 @@ func SATURATE16[T integer](x T) int16 {
 // C: ROUND16(x,a) (EXTRACT16(PSHR32((x),(a))))
 func ROUND16[T integer](x T, a int) int16 { return EXTRACT16(PSHR32(x, a)) }
 
+// Shift by a and round-to-neareast 32-bit value. Result is a saturated 16-bit value.
+//
+// C: SROUND16(x,a) EXTRACT16(SATURATE(PSHR32(x,a), 32767))
+func SROUND16[T integer](x T, a int) int16 { return EXTRACT16(SATURATE(PSHR32(x, a), 32767)) }
+
 // C: HALF16(x) (SHR16(x,1))
 func HALF16[T integer](x T) int32 { return SHR16(x, 1) }
 
@@ -135,6 +140,21 @@ func ADD32[A, B integer](a A, b B) int32 { return int32(a) + int32(b) }
 
 // C: SUB32(a,b) ((opus_val32)(a)-(opus_val32)(b))
 func SUB32[A, B integer](a A, b B) int32 { return int32(a) - int32(b) }
+
+// Add two 32-bit values, ignore any overflows.
+//
+// C: ADD32_ovflw(a,b) ((opus_val32)((opus_uint32)(a)+(opus_uint32)(b)))
+func ADD32_ovflw[A, B integer](a A, b B) int32 { return int32(uint32(a) + uint32(b)) }
+
+// Subtract two 32-bit values, ignore any overflows.
+//
+// C: SUB32_ovflw(a,b) ((opus_val32)((opus_uint32)(a)-(opus_uint32)(b)))
+func SUB32_ovflw[A, B integer](a A, b B) int32 { return int32(uint32(a) - uint32(b)) }
+
+// Negate 32-bit value, ignore any overflows.
+//
+// C: NEG32_ovflw(a) ((opus_val32)(0-(opus_uint32)(a)))
+func NEG32_ovflw[T integer](a T) int32 { return int32(0 - uint32(a)) }
 
 // C: MULT16_16_16(a,b) ((((opus_val16)(a))*((opus_val16)(b))))   (promoted to int)
 func MULT16_16_16[A, B integer](a A, b B) int32 { return int32(int16(a)) * int32(int16(b)) }

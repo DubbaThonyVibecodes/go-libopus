@@ -60,7 +60,7 @@ func (psEncC *EncoderState) ProcessNLSFs(
 		NLSF_mu_Q20, psEncC.NLSF_MSVQ_Survivors, int(psEncC.indices.signalType))
 
 	// Convert quantized NLSFs back to LPC coefficients
-	NLSF2A(PredCoef_Q12[1][:], pNLSF_Q15, psEncC.predictLPCOrder)
+	NLSF2A(PredCoef_Q12[1][:], pNLSF_Q15, psEncC.predictLPCOrder, psEncC.arch)
 
 	if doInterpolate != 0 {
 		// Calculate the interpolated, quantized LSF vector for the first half
@@ -68,7 +68,7 @@ func (psEncC *EncoderState) ProcessNLSFs(
 			int(psEncC.indices.NLSFInterpCoef_Q2), psEncC.predictLPCOrder)
 
 		// Convert back to LPC coefficients
-		NLSF2A(PredCoef_Q12[0][:], pNLSF0_temp_Q15[:], psEncC.predictLPCOrder)
+		NLSF2A(PredCoef_Q12[0][:], pNLSF0_temp_Q15[:], psEncC.predictLPCOrder, psEncC.arch)
 
 	} else {
 		// Copy LPC coefficients for first half from second half

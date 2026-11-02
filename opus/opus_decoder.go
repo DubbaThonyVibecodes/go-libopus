@@ -673,7 +673,7 @@ func (st *OpusDecoder) DecodeFloat(data []byte,
 }
 
 // Ctl is the C opus_decoder_ctl. Value arguments are int32 (int accepted),
-// output arguments are *int32 or *uint32.
+// output arguments are *int32 (OPUS_GET_FINAL_RANGE: *uint32).
 //
 // C: int opus_decoder_ctl(OpusDecoder *st, int request, ...)
 func (st *OpusDecoder) Ctl(request int, args ...any) int {
@@ -739,20 +739,23 @@ func (st *OpusDecoder) Ctl(request int, args ...any) int {
 		}
 		st.decode_gain = int(value)
 	case OPUS_GET_LAST_PACKET_DURATION_REQUEST:
-		switch value := args[0].(type) {
-		case *uint32:
-			if value == nil {
-				return OPUS_BAD_ARG // goto bad_arg
-			}
-			*value = uint32(st.last_packet_duration)
-		case *int32:
-			if value == nil {
-				return OPUS_BAD_ARG // goto bad_arg
-			}
-			*value = int32(st.last_packet_duration)
-		default:
-			return OPUS_BAD_ARG
+		value, ok := args[0].(*int32)
+		if !ok || value == nil {
+			return OPUS_BAD_ARG // goto bad_arg
 		}
+		*value = int32(st.last_packet_duration)
+	case OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST:
+		value, ok := argInt32(args, 0)
+		if !ok || value < 0 || value > 1 {
+			return OPUS_BAD_ARG // goto bad_arg
+		}
+		celt_dec.Ctl(celt.OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST, value)
+	case OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST:
+		value, ok := args[0].(*int32)
+		if !ok || value == nil {
+			return OPUS_BAD_ARG // goto bad_arg
+		}
+		celt_dec.Ctl(celt.OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST, value)
 	default:
 		// fprintf(stderr, "unknown opus_decoder_ctl() request: %d", request);
 		ret = OPUS_UNIMPLEMENTED

@@ -21,8 +21,9 @@ const (
 	LBRR_WB_MIN_RATE_BPS = 16000
 
 	// DTX settings
-	NB_SPEECH_FRAMES_BEFORE_DTX = 10 // eq 200 ms
-	MAX_CONSECUTIVE_DTX         = 20 // eq 400 ms
+	NB_SPEECH_FRAMES_BEFORE_DTX         = 10 // eq 200 ms
+	MAX_CONSECUTIVE_DTX                 = 20 // eq 400 ms
+	DTX_ACTIVITY_THRESHOLD      float32 = 0.1
 
 	// Maximum sampling frequency
 	MAX_FS_KHZ     = 16
@@ -114,7 +115,7 @@ const (
 	USE_HARM_SHAPING = 1
 
 	// Max LPC order of noise shaping filters
-	MAX_SHAPE_LPC_ORDER = 16
+	MAX_SHAPE_LPC_ORDER = 24
 
 	HARM_SHAPE_FIR_TAPS = 3
 
@@ -124,8 +125,7 @@ const (
 	LTP_BUF_LENGTH = 512
 	LTP_MASK       = (LTP_BUF_LENGTH - 1)
 
-	DECISION_DELAY      = 32
-	DECISION_DELAY_MASK = (DECISION_DELAY - 1)
+	DECISION_DELAY = 40
 
 	// Number of subframes for excitation entropy coding
 	SHELL_CODEC_FRAME_LENGTH      = 16
@@ -140,7 +140,7 @@ const (
 
 	MAX_MATRIX_SIZE = MAX_LPC_ORDER // Max of LPC Order and LTP order
 
-	NSQ_LPC_BUF_LENGTH = DECISION_DELAY // MAX_LPC_ORDER > DECISION_DELAY is false
+	NSQ_LPC_BUF_LENGTH = MAX_LPC_ORDER
 
 	// Voice activity detector
 	VAD_N_BANDS = 4
@@ -164,7 +164,6 @@ const (
 	// NLSF quantizer
 	NLSF_W_Q                       = 2
 	NLSF_VQ_MAX_VECTORS            = 32
-	NLSF_VQ_MAX_SURVIVORS          = 32
 	NLSF_QUANT_MAX_AMPLITUDE       = 4
 	NLSF_QUANT_MAX_AMPLITUDE_EXT   = 10
 	NLSF_QUANT_LEVEL_ADJ           = 0.1

@@ -359,6 +359,7 @@ func QuantEnergyFinalise(m *CELTMode, start, end int, oldEBands, error []int16, 
 				enc.EncBits(uint32(q2), 1)
 				offset = int16(SHR16(int32(SHL16(q2, DB_SHIFT))-int32(QCONST16(.5, DB_SHIFT)), fine_quant[i]+1))
 				oldEBands[i+c*m.nbEBands] += offset
+				error[i+c*m.nbEBands] -= offset
 				bits_left--
 				c++
 				if c >= C {
@@ -481,7 +482,9 @@ func Amp2Log2(m *CELTMode, effEnd, end int, bandE []int32, bandLogE []int16, C i
 	c = 0
 	for {
 		for i = 0; i < effEnd; i++ {
-			bandLogE[i+c*m.nbEBands] = int16(int32(Log2(SHL32(bandE[i+c*m.nbEBands], 2))) - int32(SHL16(int16(eMeans[i]), 6)))
+			bandLogE[i+c*m.nbEBands] = int16(int32(Log2(bandE[i+c*m.nbEBands])) - int32(SHL16(int16(eMeans[i]), 6)))
+			// Compensate for bandE[] being Q12 but celt_log2() taking a Q14 input.
+			bandLogE[i+c*m.nbEBands] += QCONST16(2.0, DB_SHIFT)
 		}
 		for i = effEnd; i < end; i++ {
 			bandLogE[c*m.nbEBands+i] = -QCONST16(14.0, DB_SHIFT)

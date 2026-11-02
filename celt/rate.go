@@ -175,15 +175,19 @@ func interp_bits2pulses(m *CELTMode, start, end, skip_start int,
 				// This if() block is the only part of the allocation function that
 				// is not a mandatory part of the bitstream: any bands we choose to
 				// skip here must be explicitly signaled.
-				// Choose a threshold with some hysteresis to keep bands from
-				// fluctuating in and out.
-				var thr int
-				if j < prev {
-					thr = 7
+				var depth_threshold int
+				// We choose a threshold with some hysteresis to keep bands from
+				// fluctuating in and out, but we try not to fold below a certain point.
+				if codedBands > 17 {
+					if j < prev {
+						depth_threshold = 7
+					} else {
+						depth_threshold = 9
+					}
 				} else {
-					thr = 9
+					depth_threshold = 0
 				}
-				if codedBands <= start+2 || (band_bits > ((thr*band_width<<uint(LM)<<BITRES)>>4) && j <= signalBandwidth) {
+				if codedBands <= start+2 || (band_bits > ((depth_threshold*band_width<<uint(LM)<<BITRES)>>4) && j <= signalBandwidth) {
 					ec.EncBitLogp(1, 1)
 					break
 				}

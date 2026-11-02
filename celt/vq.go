@@ -27,8 +27,8 @@ func exp_rotation1(X []int16, length, stride int, c, s int16) {
 	}
 }
 
-// C: static void exp_rotation(celt_norm *X, int len, int dir, int stride, int K, int spread)
-func exp_rotation(X []int16, length, dir, stride, K, spread int) {
+// C: void exp_rotation(celt_norm *X, int len, int dir, int stride, int K, int spread)
+func ExpRotation(X []int16, length, dir, stride, K, spread int) {
 	var SPREAD_FACTOR = [3]int{15, 10, 5}
 	var i int
 	var c, s int16
@@ -130,39 +130,29 @@ func extract_collapse_mask(iy []int, N, B int) uint32 {
 	return collapse_mask
 }
 
-// AlgQuant is the algebraic pulse-vector quantiser. The signal x is replaced by
-// the sum of the pitch and a combination of pulses such that its norm is still
-// equal to 1. This is the function that will typically require the most CPU.
-// Returns a mask indicating which blocks in the band received pulses.
-//
-// C: unsigned alg_quant(celt_norm *X, int N, int K, int spread, int B, ec_enc *enc)
-func AlgQuant(X []int16, N, K, spread, B int, enc *EcEnc) uint32 {
+// C: opus_val16 op_pvq_search_c(celt_norm *X, int *iy, int K, int N, int arch)
+// C: #define op_pvq_search(x, iy, K, N, arch) (op_pvq_search_c(x, iy, K, N, arch))
+func OpPvqSearch(X []int16, iy []int, K, N int, arch int) int16 {
 	var i, j int
-	var s int16
 	var pulsesLeft int
 	var sum, xy int32
 	var yy int16
-	var collapse_mask uint32
 
-	celt_assert2(K > 0, "alg_quant() needs at least one pulse")
-	celt_assert2(N > 1, "alg_quant() needs at least two dimensions")
-
+	_ = arch
 	y := make([]int16, N)
-	iy := make([]int, N)
-	signx := make([]int16, N)
-
-	exp_rotation(X, N, 1, B, K, spread)
+	signx := make([]int, N)
 
 	// Get rid of the sign
 	sum = 0
 	j = 0
 	for {
-		if X[j] > 0 {
+		if X[j] < 0 {
 			signx[j] = 1
 		} else {
-			signx[j] = -1
-			X[j] = -X[j]
+			signx[j] = 0
 		}
+		// OPT: Make sure the compiler doesn't use a branch on ABS16().
+		X[j] = ABS16(X[j])
 		iy[j] = 0
 		y[j] = 0
 		j++
@@ -200,7 +190,7 @@ func AlgQuant(X []int16, N, K, spread, B int, enc *EcEnc) uint32 {
 			}
 			sum = int32(QCONST16(1.0, 14))
 		}
-		rcp = EXTRACT16(MULT16_32_Q16(K-1, Rcp(sum)))
+		rcp = EXTRACT16(MULT16_32_Q16(K, Rcp(sum)))
 		j = 0
 		for {
 			// It's really important to round *towards zero* here
@@ -216,7 +206,7 @@ func AlgQuant(X []int16, N, K, spread, B int, enc *EcEnc) uint32 {
 			}
 		}
 	}
-	celt_assert2(pulsesLeft >= 1, "Allocated too many pulses in the quick pass")
+	celt_assert2(pulsesLeft >= 0, "Allocated too many pulses in the quick pass")
 
 	// This should never happen, but just in case it does (e.g. on silence)
 	// we fill the first bin with pulses.
@@ -228,20 +218,33 @@ func AlgQuant(X []int16, N, K, spread, B int, enc *EcEnc) uint32 {
 		pulsesLeft = 0
 	}
 
-	s = 1
 	for i = 0; i < pulsesLeft; i++ {
+		var Rxy, Ryy int16
 		var best_id int
-		var best_num int32 = -int32(VERY_LARGE16)
-		var best_den int16 = 0
+		var best_num int32
+		var best_den int16
 		var rshift int
 		rshift = 1 + int(Ilog2(int32(K-pulsesLeft+i+1)))
 		best_id = 0
 		// The squared magnitude term gets added anyway, so we might as well
 		// add it outside the loop
 		yy = ADD16(yy, 1)
-		j = 0
+
+		// Calculations for position 0 are out of the loop, in part to reduce
+		// mispredicted branches (since the if condition is usually false)
+		// in the loop.
+		// Temporary sums of the new pulse(s)
+		Rxy = EXTRACT16(SHR32(ADD32(xy, EXTEND32(X[0])), rshift))
+		// We're multiplying y[j] by two so we don't have to do it here
+		Ryy = ADD16(yy, y[0])
+
+		// Approximate score: we maximise Rxy/sqrt(Ryy) (we're guaranteed that
+		// Rxy is positive because the sign is pre-computed)
+		Rxy = int16(MULT16_16_Q15(Rxy, Rxy))
+		best_den = Ryy
+		best_num = int32(Rxy)
+		j = 1
 		for {
-			var Rxy, Ryy int16
 			// Temporary sums of the new pulse(s)
 			Rxy = EXTRACT16(SHR32(ADD32(xy, EXTEND32(X[j])), rshift))
 			// We're multiplying y[j] by two so we don't have to do it here
@@ -252,7 +255,10 @@ func AlgQuant(X []int16, N, K, spread, B int, enc *EcEnc) uint32 {
 			Rxy = int16(MULT16_16_Q15(Rxy, Rxy))
 			// The idea is to check for num/den >= best_num/best_den, but that way
 			// we can do it without any division
-			// OPT: Make sure to use conditional moves here
+			// OPT: It's not clear whether a cmov is faster than a branch here
+			// since the condition is more often false than true and using
+			// a cmov introduces data dependencies across iterations. The optimal
+			// choice may be architecture-dependent.
 			if MULT16_16(best_den, Rxy) > MULT16_16(Ryy, best_num) {
 				best_den = Ryy
 				best_num = int32(Rxy)
@@ -271,23 +277,51 @@ func AlgQuant(X []int16, N, K, spread, B int, enc *EcEnc) uint32 {
 
 		// Only now that we've made the final choice, update y/iy
 		// Multiplying y[j] by 2 so we don't have to do it everywhere else
-		y[best_id] += 2 * s
+		y[best_id] += 2
 		iy[best_id]++
 	}
 
 	// Put the original sign back
 	j = 0
 	for {
-		X[j] = int16(MULT16_16(signx[j], X[j]))
-		if signx[j] < 0 {
-			iy[j] = -iy[j]
-		}
+		// iy[j] = signx[j] ? -iy[j] : iy[j];
+		// OPT: The is more likely to be compiled without a branch than the code above
+		// but has the same performance otherwise.
+		iy[j] = (iy[j] ^ -signx[j]) + signx[j]
 		j++
 		if j >= N {
 			break
 		}
 	}
+	return yy
+}
+
+// AlgQuant is the algebraic pulse-vector quantiser. The signal x is replaced by
+// the sum of the pitch and a combination of pulses such that its norm is still
+// equal to 1. This is the function that will typically require the most CPU.
+// Returns a mask indicating which blocks in the band received pulses.
+//
+// C: unsigned alg_quant(celt_norm *X, int N, int K, int spread, int B, ec_enc *enc, opus_val16 gain, int resynth, int arch)
+func AlgQuant(X []int16, N, K, spread, B int, enc *EcEnc, gain int16, resynth int, arch int) uint32 {
+	var yy int16
+	var collapse_mask uint32
+
+	celt_assert2(K > 0, "alg_quant() needs at least one pulse")
+	celt_assert2(N > 1, "alg_quant() needs at least two dimensions")
+
+	// Covers vectorization by up to 4.
+	iy := make([]int, N+3)
+
+	ExpRotation(X, N, 1, B, K, spread)
+
+	yy = OpPvqSearch(X, iy, K, N, arch)
+
 	EncodePulses(iy, N, K, enc)
+
+	if resynth != 0 {
+		normalise_residual(iy, X, N, int32(yy), gain)
+		ExpRotation(X, N, -1, B, K, spread)
+	}
 
 	collapse_mask = extract_collapse_mask(iy, N, B)
 	return collapse_mask
@@ -305,7 +339,7 @@ func AlgUnquant(X []int16, N, K, spread, B int, dec *EcDec, gain int16) uint32 {
 	iy := make([]int, N)
 	Ryy = DecodePulses(iy, N, K, dec)
 	normalise_residual(iy, X, N, Ryy, gain)
-	exp_rotation(X, N, -1, B, K, spread)
+	ExpRotation(X, N, -1, B, K, spread)
 	collapse_mask = extract_collapse_mask(iy, N, B)
 	return collapse_mask
 }

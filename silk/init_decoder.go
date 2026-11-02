@@ -2,6 +2,8 @@ package silk
 
 // C: silk/init_decoder.c
 
+import "github.com/DubbaThonyVibecodes/go-libopus/celt"
+
 /************************/
 /* Init Decoder State   */
 /************************/
@@ -14,6 +16,7 @@ func (psDec *DecoderState) InitDecoder() int {
 	/* Used to deactivate LSF interpolation */
 	psDec.first_frame_after_reset = 1
 	psDec.prev_gain_Q16 = 65536
+	psDec.arch = celt.SelectArch()
 
 	/* Reset CNG state */
 	psDec.CNGReset()

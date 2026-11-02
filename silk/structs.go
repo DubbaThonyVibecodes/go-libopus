@@ -9,6 +9,7 @@ type NsqState struct {
 	sLPC_Q14         [MAX_SUB_FRAME_LENGTH + NSQ_LPC_BUF_LENGTH]int32
 	sAR2_Q14         [MAX_SHAPE_LPC_ORDER]int32
 	sLF_AR_shp_Q14   int32
+	sDiff_shp_Q14    int32
 	lagPrev          int
 	sLTP_buf_idx     int
 	sLTP_shp_buf_idx int
@@ -45,6 +46,7 @@ type NLSFCBStruct struct {
 	quantStepSize_Q16   int16
 	invQuantStepSize_Q6 int16
 	CB1_NLSF_Q8         []uint8
+	CB1_Wght_Q9         []int16
 	CB1_iCDF            []uint8
 	pred_Q8             []uint8
 	ec_sel              []uint8
@@ -130,8 +132,6 @@ type EncoderState struct {
 	pitchEstimationComplexity     int           // Complexity level for pitch estimator
 	pitchEstimationLPCOrder       int           // Whitening filter order for pitch estimator
 	pitchEstimationThreshold_Q16  int32         // Threshold for pitch estimator
-	LTPQuantLowComplexity         int           // Flag for low complexity LTP quantization
-	mu_LTP_Q9                     int           // Rate-distortion tradeoff in LTP quantization
 	sum_log_gain_Q7               int32         // Cumulative max prediction gain
 	NLSF_MSVQ_Survivors           int           // Number of survivors in NLSF MSVQ
 	first_frame_after_reset       int           // Flag for deactivating NLSF interpolation, pitch prediction
@@ -259,6 +259,7 @@ type DecoderState struct {
 	// Stuff used for PLC
 	lossCnt        int
 	prevSignalType int
+	arch           int
 
 	sPLC PLCStruct
 }

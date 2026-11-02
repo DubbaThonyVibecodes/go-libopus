@@ -32,85 +32,75 @@ func warpedGain(coefs_Q24 []int32, lambda_Q16 int, order int) int32 {
 
 // C: static OPUS_INLINE void limit_warped_coefs(
 //
-//	opus_int32           *coefs_syn_Q24,
-//	opus_int32           *coefs_ana_Q24,
+//	opus_int32           *coefs_Q24,
 //	opus_int             lambda_Q16,
 //	opus_int32           limit_Q24,
 //	opus_int             order
 //
 // )
-func limitWarpedCoefs(coefs_syn_Q24 []int32, coefs_ana_Q24 []int32, lambda_Q16 int, limit_Q24 int32, order int) {
+func limitWarpedCoefs(coefs_Q24 []int32, lambda_Q16 int, limit_Q24 int32, order int) {
 	var i, iter int
 	ind := 0
-	var tmp, maxabs_Q24, chirp_Q16, gain_syn_Q16, gain_ana_Q16 int32
+	var tmp, maxabs_Q24, chirp_Q16, gain_Q16 int32
 	var nom_Q16, den_Q24 int32
+	var limit_Q20, maxabs_Q20 int32
 
 	/* Convert to monic coefficients */
 	lambda_Q16 = -lambda_Q16
 	for i = order - 1; i > 0; i-- {
-		coefs_syn_Q24[i-1] = SMLAWB(coefs_syn_Q24[i-1], coefs_syn_Q24[i], lambda_Q16)
-		coefs_ana_Q24[i-1] = SMLAWB(coefs_ana_Q24[i-1], coefs_ana_Q24[i], lambda_Q16)
+		coefs_Q24[i-1] = SMLAWB(coefs_Q24[i-1], coefs_Q24[i], lambda_Q16)
 	}
 	lambda_Q16 = -lambda_Q16
 	nom_Q16 = SMLAWB(SILK_FIX_CONST(1.0, 16), -int32(lambda_Q16), lambda_Q16)
-	den_Q24 = SMLAWB(SILK_FIX_CONST(1.0, 24), coefs_syn_Q24[0], lambda_Q16)
-	gain_syn_Q16 = DIV32_varQ(nom_Q16, den_Q24, 24)
-	den_Q24 = SMLAWB(SILK_FIX_CONST(1.0, 24), coefs_ana_Q24[0], lambda_Q16)
-	gain_ana_Q16 = DIV32_varQ(nom_Q16, den_Q24, 24)
+	den_Q24 = SMLAWB(SILK_FIX_CONST(1.0, 24), coefs_Q24[0], lambda_Q16)
+	gain_Q16 = DIV32_varQ(nom_Q16, den_Q24, 24)
 	for i = 0; i < order; i++ {
-		coefs_syn_Q24[i] = SMULWW(gain_syn_Q16, coefs_syn_Q24[i])
-		coefs_ana_Q24[i] = SMULWW(gain_ana_Q16, coefs_ana_Q24[i])
+		coefs_Q24[i] = SMULWW(gain_Q16, coefs_Q24[i])
 	}
-
+	limit_Q20 = RSHIFT(limit_Q24, 4)
 	for iter = 0; iter < 10; iter++ {
 		/* Find maximum absolute value */
 		maxabs_Q24 = -1
 		for i = 0; i < order; i++ {
-			tmp = max(abs_int32(coefs_syn_Q24[i]), abs_int32(coefs_ana_Q24[i]))
+			tmp = abs_int32(coefs_Q24[i])
 			if tmp > maxabs_Q24 {
 				maxabs_Q24 = tmp
 				ind = i
 			}
 		}
-		if maxabs_Q24 <= limit_Q24 {
+		/* Use Q20 to avoid any overflow when multiplying by (ind + 1) later. */
+		maxabs_Q20 = RSHIFT(maxabs_Q24, 4)
+		if maxabs_Q20 <= limit_Q20 {
 			/* Coefficients are within range - done */
 			return
 		}
 
 		/* Convert back to true warped coefficients */
 		for i = 1; i < order; i++ {
-			coefs_syn_Q24[i-1] = SMLAWB(coefs_syn_Q24[i-1], coefs_syn_Q24[i], lambda_Q16)
-			coefs_ana_Q24[i-1] = SMLAWB(coefs_ana_Q24[i-1], coefs_ana_Q24[i], lambda_Q16)
+			coefs_Q24[i-1] = SMLAWB(coefs_Q24[i-1], coefs_Q24[i], lambda_Q16)
 		}
-		gain_syn_Q16 = INVERSE32_varQ(gain_syn_Q16, 32)
-		gain_ana_Q16 = INVERSE32_varQ(gain_ana_Q16, 32)
+		gain_Q16 = INVERSE32_varQ(gain_Q16, 32)
 		for i = 0; i < order; i++ {
-			coefs_syn_Q24[i] = SMULWW(gain_syn_Q16, coefs_syn_Q24[i])
-			coefs_ana_Q24[i] = SMULWW(gain_ana_Q16, coefs_ana_Q24[i])
+			coefs_Q24[i] = SMULWW(gain_Q16, coefs_Q24[i])
 		}
 
 		/* Apply bandwidth expansion */
 		chirp_Q16 = SILK_FIX_CONST(0.99, 16) - DIV32_varQ(
-			SMULWB(maxabs_Q24-limit_Q24, SMLABB(SILK_FIX_CONST(0.8, 10), SILK_FIX_CONST(0.1, 10), iter)),
-			MUL(maxabs_Q24, ind+1), 22)
-		Bwexpander32(coefs_syn_Q24, order, chirp_Q16)
-		Bwexpander32(coefs_ana_Q24, order, chirp_Q16)
+			SMULWB(maxabs_Q20-limit_Q20, SMLABB(SILK_FIX_CONST(0.8, 10), SILK_FIX_CONST(0.1, 10), iter)),
+			MUL(maxabs_Q20, ind+1), 22)
+		Bwexpander32(coefs_Q24, order, chirp_Q16)
 
 		/* Convert to monic warped coefficients */
 		lambda_Q16 = -lambda_Q16
 		for i = order - 1; i > 0; i-- {
-			coefs_syn_Q24[i-1] = SMLAWB(coefs_syn_Q24[i-1], coefs_syn_Q24[i], lambda_Q16)
-			coefs_ana_Q24[i-1] = SMLAWB(coefs_ana_Q24[i-1], coefs_ana_Q24[i], lambda_Q16)
+			coefs_Q24[i-1] = SMLAWB(coefs_Q24[i-1], coefs_Q24[i], lambda_Q16)
 		}
 		lambda_Q16 = -lambda_Q16
 		nom_Q16 = SMLAWB(SILK_FIX_CONST(1.0, 16), -int32(lambda_Q16), lambda_Q16)
-		den_Q24 = SMLAWB(SILK_FIX_CONST(1.0, 24), coefs_syn_Q24[0], lambda_Q16)
-		gain_syn_Q16 = DIV32_varQ(nom_Q16, den_Q24, 24)
-		den_Q24 = SMLAWB(SILK_FIX_CONST(1.0, 24), coefs_ana_Q24[0], lambda_Q16)
-		gain_ana_Q16 = DIV32_varQ(nom_Q16, den_Q24, 24)
+		den_Q24 = SMLAWB(SILK_FIX_CONST(1.0, 24), coefs_Q24[0], lambda_Q16)
+		gain_Q16 = DIV32_varQ(nom_Q16, den_Q24, 24)
 		for i = 0; i < order; i++ {
-			coefs_syn_Q24[i] = SMULWW(gain_syn_Q16, coefs_syn_Q24[i])
-			coefs_ana_Q24[i] = SMULWW(gain_ana_Q16, coefs_ana_Q24[i])
+			coefs_Q24[i] = SMULWW(gain_Q16, coefs_Q24[i])
 		}
 	}
 	silk_assert(false)
@@ -131,15 +121,14 @@ func limitWarpedCoefs(coefs_syn_Q24 []int32, coefs_ana_Q24 []int32, lambda_Q16 i
 // )
 func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX, pitch_res []int16, x []int16, arch int) {
 	psShapeSt := &psEnc.sShape
-	var k, i, nSamples, Qnrg, b_Q14, warping_Q16 int
+	var k, i, nSamples, nSegs, Qnrg, b_Q14, warping_Q16 int
 	scale := 0
-	var SNR_adj_dB_Q7, HarmBoost_Q16, HarmShapeGain_Q16, Tilt_Q16, tmp32 int32
-	var nrg, pre_nrg_Q30, log_energy_Q7, log_energy_prev_Q7, energy_variation_Q7 int32
-	var delta_Q16, BWExp1_Q16, BWExp2_Q16, gain_mult_Q16, gain_add_Q16, strength_Q16, b_Q8 int32
+	var SNR_adj_dB_Q7, HarmShapeGain_Q16, Tilt_Q16, tmp32 int32
+	var nrg, log_energy_Q7, log_energy_prev_Q7, energy_variation_Q7 int32
+	var BWExp_Q16, gain_mult_Q16, gain_add_Q16, strength_Q16, b_Q8 int32
 	var auto_corr [MAX_SHAPE_LPC_ORDER + 1]int32
 	var refl_coef_Q16 [MAX_SHAPE_LPC_ORDER]int32
-	var AR1_Q24 [MAX_SHAPE_LPC_ORDER]int32
-	var AR2_Q24 [MAX_SHAPE_LPC_ORDER]int32
+	var AR_Q24 [MAX_SHAPE_LPC_ORDER]int32
 	var x_windowed []int16
 	var x_ptr, pitch_res_ptr []int16
 
@@ -188,14 +177,14 @@ func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX
 	if psEnc.sCmn.indices.signalType == TYPE_VOICED {
 		/* Initially set to 0; may be overruled in process_gains(..) */
 		psEnc.sCmn.indices.quantOffsetType = 0
-		psEncCtrl.sparseness_Q8 = 0
 	} else {
 		/* Sparseness measure, based on relative fluctuations of energy per 2 milliseconds */
 		nSamples = int(LSHIFT(psEnc.sCmn.fs_kHz, 1))
 		energy_variation_Q7 = 0
 		log_energy_prev_Q7 = 0
 		pitch_res_ptr = pitch_res
-		for k = 0; k < int(SMULBB(SUB_FRAME_LENGTH_MS, psEnc.sCmn.nb_subfr))/2; k++ {
+		nSegs = int(SMULBB(SUB_FRAME_LENGTH_MS, psEnc.sCmn.nb_subfr)) / 2
+		for k = 0; k < nSegs; k++ {
 			SumSqrShift(&nrg, &scale, pitch_res_ptr, nSamples)
 			nrg += int32(RSHIFT(nSamples, scale)) /* Q(-scale)*/
 
@@ -207,18 +196,12 @@ func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX
 			pitch_res_ptr = pitch_res_ptr[nSamples:]
 		}
 
-		psEncCtrl.sparseness_Q8 = RSHIFT(SigmQ15(int(SMULWB(energy_variation_Q7-
-			SILK_FIX_CONST(5.0, 7), SILK_FIX_CONST(0.1, 16)))), 7)
-
 		/* Set quantization offset depending on sparseness measure */
-		if psEncCtrl.sparseness_Q8 > int(SILK_FIX_CONST(SPARSENESS_THRESHOLD_QNT_OFFSET, 8)) {
+		if energy_variation_Q7 > SILK_FIX_CONST(ENERGY_VARIATION_THRESHOLD_QNT_OFFSET, 7)*int32(nSegs-1) {
 			psEnc.sCmn.indices.quantOffsetType = 0
 		} else {
 			psEnc.sCmn.indices.quantOffsetType = 1
 		}
-
-		/* Increase coding SNR for sparse signals */
-		SNR_adj_dB_Q7 = SMLAWB(SNR_adj_dB_Q7, SILK_FIX_CONST(SPARSE_SNR_INCR_dB, 15), int32(psEncCtrl.sparseness_Q8)-SILK_FIX_CONST(0.5, 8))
 	}
 
 	/*******************************/
@@ -226,15 +209,8 @@ func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX
 	/*******************************/
 	/* More BWE for signals with high prediction gain */
 	strength_Q16 = SMULWB(psEncCtrl.predGain_Q16, SILK_FIX_CONST(FIND_PITCH_WHITE_NOISE_FRACTION, 16))
-	BWExp2_Q16 = DIV32_varQ(SILK_FIX_CONST(BANDWIDTH_EXPANSION, 16),
+	BWExp_Q16 = DIV32_varQ(SILK_FIX_CONST(BANDWIDTH_EXPANSION, 16),
 		SMLAWW(SILK_FIX_CONST(1.0, 16), strength_Q16, strength_Q16), 16)
-	BWExp1_Q16 = BWExp2_Q16
-	delta_Q16 = SMULWB(SILK_FIX_CONST(1.0, 16)-SMULBB(3, psEncCtrl.coding_quality_Q14),
-		SILK_FIX_CONST(LOW_RATE_BANDWIDTH_EXPANSION_DELTA, 16))
-	BWExp1_Q16 = SUB32(BWExp1_Q16, delta_Q16)
-	BWExp2_Q16 = ADD32(BWExp2_Q16, delta_Q16)
-	/* BWExp1 will be applied after BWExp2, so make it relative */
-	BWExp1_Q16 = DIV32_16(LSHIFT(BWExp1_Q16, 14), RSHIFT(BWExp2_Q16, 2))
 
 	if psEnc.sCmn.warping_Q16 > 0 {
 		/* Slightly more warping in analysis will move quantization noise up in frequency, where it's better masked */
@@ -264,7 +240,7 @@ func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX
 
 		if psEnc.sCmn.warping_Q16 > 0 {
 			/* Calculate warped auto correlation */
-			WarpedAutocorrelationFIX(auto_corr[:], &scale, x_windowed, warping_Q16, psEnc.sCmn.shapeWinLength, psEnc.sCmn.shapingLPCOrder)
+			WarpedAutocorrelationFIX(auto_corr[:], &scale, x_windowed, warping_Q16, psEnc.sCmn.shapeWinLength, psEnc.sCmn.shapingLPCOrder, arch)
 		} else {
 			/* Calculate regular auto correlation */
 			Autocorr(auto_corr[:], &scale, x_windowed, psEnc.sCmn.shapeWinLength, psEnc.sCmn.shapingLPCOrder+1, arch)
@@ -279,7 +255,7 @@ func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX
 		silk_assert(nrg >= 0)
 
 		/* Convert reflection coefficients to prediction coefficients */
-		K2aQ16(AR2_Q24[:], refl_coef_Q16[:], int32(psEnc.sCmn.shapingLPCOrder))
+		K2aQ16(AR_Q24[:], refl_coef_Q16[:], int32(psEnc.sCmn.shapingLPCOrder))
 
 		Qnrg = -scale /* range: -12...30*/
 		silk_assert(Qnrg >= -12)
@@ -298,40 +274,34 @@ func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX
 
 		if psEnc.sCmn.warping_Q16 > 0 {
 			/* Adjust gain for warping */
-			gain_mult_Q16 = warpedGain(AR2_Q24[:], warping_Q16, psEnc.sCmn.shapingLPCOrder)
-			silk_assert(psEncCtrl.Gains_Q16[k] >= 0)
-			if SMULWW(RSHIFT_ROUND(psEncCtrl.Gains_Q16[k], 1), gain_mult_Q16) >= (int32_MAX >> 1) {
-				psEncCtrl.Gains_Q16[k] = int32_MAX
-			} else {
+			gain_mult_Q16 = warpedGain(AR_Q24[:], warping_Q16, psEnc.sCmn.shapingLPCOrder)
+			silk_assert(psEncCtrl.Gains_Q16[k] > 0)
+			if psEncCtrl.Gains_Q16[k] < SILK_FIX_CONST(0.25, 16) {
 				psEncCtrl.Gains_Q16[k] = SMULWW(psEncCtrl.Gains_Q16[k], gain_mult_Q16)
+			} else {
+				psEncCtrl.Gains_Q16[k] = SMULWW(RSHIFT_ROUND(psEncCtrl.Gains_Q16[k], 1), gain_mult_Q16)
+				if psEncCtrl.Gains_Q16[k] >= (int32_MAX >> 1) {
+					psEncCtrl.Gains_Q16[k] = int32_MAX
+				} else {
+					psEncCtrl.Gains_Q16[k] = LSHIFT32(psEncCtrl.Gains_Q16[k], 1)
+				}
 			}
+			silk_assert(psEncCtrl.Gains_Q16[k] > 0)
 		}
 
-		/* Bandwidth expansion for synthesis filter shaping */
-		Bwexpander32(AR2_Q24[:], psEnc.sCmn.shapingLPCOrder, BWExp2_Q16)
+		/* Bandwidth expansion */
+		Bwexpander32(AR_Q24[:], psEnc.sCmn.shapingLPCOrder, BWExp_Q16)
 
-		/* Compute noise shaping filter coefficients */
-		copy(AR1_Q24[:psEnc.sCmn.shapingLPCOrder], AR2_Q24[:psEnc.sCmn.shapingLPCOrder])
+		if psEnc.sCmn.warping_Q16 > 0 {
+			/* Convert to monic warped prediction coefficients and limit absolute values */
+			limitWarpedCoefs(AR_Q24[:], warping_Q16, SILK_FIX_CONST(3.999, 24), psEnc.sCmn.shapingLPCOrder)
 
-		/* Bandwidth expansion for analysis filter shaping */
-		silk_assert(BWExp1_Q16 <= SILK_FIX_CONST(1.0, 16))
-		Bwexpander32(AR1_Q24[:], psEnc.sCmn.shapingLPCOrder, BWExp1_Q16)
-
-		/* Ratio of prediction gains, in energy domain */
-		pre_nrg_Q30 = LPCInversePredGainQ24(AR2_Q24[:], psEnc.sCmn.shapingLPCOrder)
-		nrg = LPCInversePredGainQ24(AR1_Q24[:], psEnc.sCmn.shapingLPCOrder)
-
-		/*psEncCtrl->GainsPre[ k ] = 1.0f - 0.7f * ( 1.0f - pre_nrg / nrg ) = 0.3f + 0.7f * pre_nrg / nrg;*/
-		pre_nrg_Q30 = LSHIFT32(SMULWB(pre_nrg_Q30, SILK_FIX_CONST(0.7, 15)), 1)
-		psEncCtrl.GainsPre_Q14[k] = int(SILK_FIX_CONST(0.3, 14)) + int(DIV32_varQ(pre_nrg_Q30, nrg, 14))
-
-		/* Convert to monic warped prediction coefficients and limit absolute values */
-		limitWarpedCoefs(AR2_Q24[:], AR1_Q24[:], warping_Q16, SILK_FIX_CONST(3.999, 24), psEnc.sCmn.shapingLPCOrder)
-
-		/* Convert from Q24 to Q13 and store in int16 */
-		for i = 0; i < psEnc.sCmn.shapingLPCOrder; i++ {
-			psEncCtrl.AR1_Q13[k*MAX_SHAPE_LPC_ORDER+i] = int16(SAT16(RSHIFT_ROUND(AR1_Q24[i], 11)))
-			psEncCtrl.AR2_Q13[k*MAX_SHAPE_LPC_ORDER+i] = int16(SAT16(RSHIFT_ROUND(AR2_Q24[i], 11)))
+			/* Convert from Q24 to Q13 and store in int16 */
+			for i = 0; i < psEnc.sCmn.shapingLPCOrder; i++ {
+				psEncCtrl.AR_Q13[k*MAX_SHAPE_LPC_ORDER+i] = int16(SAT16(RSHIFT_ROUND(AR_Q24[i], 11)))
+			}
+		} else {
+			LPCFit(psEncCtrl.AR_Q13[k*MAX_SHAPE_LPC_ORDER:], AR_Q24[:], 13, 24, psEnc.sCmn.shapingLPCOrder)
 		}
 	}
 
@@ -346,12 +316,6 @@ func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX
 		psEncCtrl.Gains_Q16[k] = SMULWW(psEncCtrl.Gains_Q16[k], gain_mult_Q16)
 		silk_assert(psEncCtrl.Gains_Q16[k] >= 0)
 		psEncCtrl.Gains_Q16[k] = ADD_POS_SAT32(psEncCtrl.Gains_Q16[k], gain_add_Q16)
-	}
-
-	gain_mult_Q16 = SILK_FIX_CONST(1.0, 16) + RSHIFT_ROUND(MLA(SILK_FIX_CONST(INPUT_TILT, 26),
-		psEncCtrl.coding_quality_Q14, SILK_FIX_CONST(HIGH_RATE_INPUT_TILT, 12)), 10)
-	for k = 0; k < psEnc.sCmn.nb_subfr; k++ {
-		psEncCtrl.GainsPre_Q14[k] = int(SMULWB(gain_mult_Q16, psEncCtrl.GainsPre_Q14[k]))
 	}
 
 	/************************************************/
@@ -390,14 +354,6 @@ func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX
 	/****************************/
 	/* HARMONIC SHAPING CONTROL */
 	/****************************/
-	/* Control boosting of harmonic frequencies */
-	HarmBoost_Q16 = SMULWB(SMULWB(SILK_FIX_CONST(1.0, 17)-LSHIFT(psEncCtrl.coding_quality_Q14, 3),
-		psEnc.LTPCorr_Q15), SILK_FIX_CONST(LOW_RATE_HARMONIC_BOOST, 16))
-
-	/* More harmonic boost for noisy input signals */
-	HarmBoost_Q16 = SMLAWB(HarmBoost_Q16,
-		SILK_FIX_CONST(1.0, 16)-LSHIFT(psEncCtrl.input_quality_Q14, 2), SILK_FIX_CONST(LOW_INPUT_QUALITY_HARMONIC_BOOST, 16))
-
 	if USE_HARM_SHAPING != 0 && psEnc.sCmn.indices.signalType == TYPE_VOICED {
 		/* More harmonic noise shaping for high bitrates or noisy input */
 		HarmShapeGain_Q16 = SMLAWB(SILK_FIX_CONST(HARMONIC_SHAPING, 16),
@@ -415,14 +371,11 @@ func (psEnc *EncoderStateFIX) NoiseShapeAnalysisFIX(psEncCtrl *EncoderControlFIX
 	/* Smooth over subframes */
 	/*************************/
 	for k = 0; k < MAX_NB_SUBFR; k++ {
-		psShapeSt.HarmBoost_smth_Q16 =
-			SMLAWB(psShapeSt.HarmBoost_smth_Q16, HarmBoost_Q16-psShapeSt.HarmBoost_smth_Q16, SILK_FIX_CONST(SUBFR_SMTH_COEF, 16))
 		psShapeSt.HarmShapeGain_smth_Q16 =
 			SMLAWB(psShapeSt.HarmShapeGain_smth_Q16, HarmShapeGain_Q16-psShapeSt.HarmShapeGain_smth_Q16, SILK_FIX_CONST(SUBFR_SMTH_COEF, 16))
 		psShapeSt.Tilt_smth_Q16 =
 			SMLAWB(psShapeSt.Tilt_smth_Q16, Tilt_Q16-psShapeSt.Tilt_smth_Q16, SILK_FIX_CONST(SUBFR_SMTH_COEF, 16))
 
-		psEncCtrl.HarmBoost_Q14[k] = int(RSHIFT_ROUND(psShapeSt.HarmBoost_smth_Q16, 2))
 		psEncCtrl.HarmShapeGain_Q14[k] = int(RSHIFT_ROUND(psShapeSt.HarmShapeGain_smth_Q16, 2))
 		psEncCtrl.Tilt_Q14[k] = int(RSHIFT_ROUND(psShapeSt.Tilt_smth_Q16, 2))
 	}

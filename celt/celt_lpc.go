@@ -45,38 +45,36 @@ func Lpc(_lpc []int16, ac []int32, p int) {
 	}
 }
 
-// C: void celt_fir_c(const opus_val16 *_x, const opus_val16 *num, opus_val16 *_y, int N, int ord, opus_val16 *mem, int arch)
-// C: #define celt_fir(x, num, y, N, ord, mem, arch) (celt_fir_c(x, num, y, N, ord, mem, arch))
-func Fir(_x, num, _y []int16, N, ord int, mem []int16, arch int) {
+// C: void celt_fir_c(const opus_val16 *x, const opus_val16 *num, opus_val16 *y, int N, int ord, int arch)
+// C: #define celt_fir(x, num, y, N, ord, arch) (celt_fir_c(x, num, y, N, ord, arch))
+//
+// The C reads ord samples *behind* x (x[i+j-ord]), so the Go slice x starts
+// ord samples *before* the C x pointer: the caller passes the C pointer
+// minus ord, and the C x[k] is the Go x[ord+k].
+func Fir(x []int16, num []int16, y []int16, N, ord int, arch int) {
 	var i, j int
 	rnum := make([]int16, ord)
-	x := make([]int16, N+ord)
 	for i = 0; i < ord; i++ {
 		rnum[i] = num[ord-i-1]
 	}
-	for i = 0; i < ord; i++ {
-		x[i] = mem[ord-i-1]
-	}
-	for i = 0; i < N; i++ {
-		x[i+ord] = _x[i]
-	}
-	for i = 0; i < ord; i++ {
-		mem[i] = _x[N-i-1]
-	}
 	for i = 0; i < N-3; i += 4 {
-		var sum = [4]int32{0, 0, 0, 0}
+		var sum [4]int32
+		sum[0] = SHL32(EXTEND32(x[ord+i]), SIG_SHIFT)
+		sum[1] = SHL32(EXTEND32(x[ord+i+1]), SIG_SHIFT)
+		sum[2] = SHL32(EXTEND32(x[ord+i+2]), SIG_SHIFT)
+		sum[3] = SHL32(EXTEND32(x[ord+i+3]), SIG_SHIFT)
 		XcorrKernel(rnum, x[i:], sum[:], ord, arch)
-		_y[i] = SATURATE16(ADD32(EXTEND32(_x[i]), PSHR32(sum[0], SIG_SHIFT)))
-		_y[i+1] = SATURATE16(ADD32(EXTEND32(_x[i+1]), PSHR32(sum[1], SIG_SHIFT)))
-		_y[i+2] = SATURATE16(ADD32(EXTEND32(_x[i+2]), PSHR32(sum[2], SIG_SHIFT)))
-		_y[i+3] = SATURATE16(ADD32(EXTEND32(_x[i+3]), PSHR32(sum[3], SIG_SHIFT)))
+		y[i] = ROUND16(sum[0], SIG_SHIFT)
+		y[i+1] = ROUND16(sum[1], SIG_SHIFT)
+		y[i+2] = ROUND16(sum[2], SIG_SHIFT)
+		y[i+3] = ROUND16(sum[3], SIG_SHIFT)
 	}
 	for ; i < N; i++ {
-		var sum int32 = 0
+		var sum int32 = SHL32(EXTEND32(x[ord+i]), SIG_SHIFT)
 		for j = 0; j < ord; j++ {
-			sum = MAC16_16(sum, rnum[j], x[i+j])
+			sum = MAC16_16(sum, rnum[j], x[i+j]) // C: x[i+j-ord]
 		}
-		_y[i] = SATURATE16(ADD32(EXTEND32(_x[i]), PSHR32(sum, SIG_SHIFT)))
+		y[i] = ROUND16(sum, SIG_SHIFT)
 	}
 }
 
@@ -106,20 +104,20 @@ func Iir(_x []int32, den []int16, _y []int32, N, ord int, mem []int16, arch int)
 		XcorrKernel(rden, y[i:], sum[:], ord, arch)
 
 		// Patch up the result to compensate for the fact that this is an IIR
-		y[i+ord] = -ROUND16(sum[0], SIG_SHIFT)
+		y[i+ord] = -SROUND16(sum[0], SIG_SHIFT)
 		_y[i] = sum[0]
 		sum[1] = MAC16_16(sum[1], y[i+ord], den[0])
-		y[i+ord+1] = -ROUND16(sum[1], SIG_SHIFT)
+		y[i+ord+1] = -SROUND16(sum[1], SIG_SHIFT)
 		_y[i+1] = sum[1]
 		sum[2] = MAC16_16(sum[2], y[i+ord+1], den[0])
 		sum[2] = MAC16_16(sum[2], y[i+ord], den[1])
-		y[i+ord+2] = -ROUND16(sum[2], SIG_SHIFT)
+		y[i+ord+2] = -SROUND16(sum[2], SIG_SHIFT)
 		_y[i+2] = sum[2]
 
 		sum[3] = MAC16_16(sum[3], y[i+ord+2], den[0])
 		sum[3] = MAC16_16(sum[3], y[i+ord+1], den[1])
 		sum[3] = MAC16_16(sum[3], y[i+ord], den[2])
-		y[i+ord+3] = -ROUND16(sum[3], SIG_SHIFT)
+		y[i+ord+3] = -SROUND16(sum[3], SIG_SHIFT)
 		_y[i+3] = sum[3]
 	}
 	for ; i < N; i++ {
@@ -127,7 +125,7 @@ func Iir(_x []int32, den []int16, _y []int32, N, ord int, mem []int16, arch int)
 		for j = 0; j < ord; j++ {
 			sum -= MULT16_16(rden[j], y[i+j])
 		}
-		y[i+ord] = ROUND16(sum, SIG_SHIFT)
+		y[i+ord] = SROUND16(sum, SIG_SHIFT)
 		_y[i] = sum
 	}
 	for i = 0; i < ord; i++ {

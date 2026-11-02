@@ -42,15 +42,9 @@ func NLSFDecode(
 	var pred_Q8 [MAX_LPC_ORDER]uint8
 	var ec_ix [MAX_LPC_ORDER]int16
 	var res_Q10 [MAX_LPC_ORDER]int16
-	var W_tmp_QW [MAX_LPC_ORDER]int16
-	var W_tmp_Q9, NLSF_Q15_tmp int32
+	var NLSF_Q15_tmp int32
 	var pCB_element []uint8
-
-	// Decode first stage
-	pCB_element = psNLSF_CB.CB1_NLSF_Q8[int(NLSFIndices[0])*int(psNLSF_CB.order):]
-	for i = 0; i < int(psNLSF_CB.order); i++ {
-		pNLSF_Q15[i] = int16(LSHIFT(int16(pCB_element[i]), 7))
-	}
+	var pCB_Wght_Q9 []int16
 
 	// Unpack entropy table indices and predictor for current CB1 index
 	NLSFUnpack(ec_ix[:], pred_Q8[:], psNLSF_CB, int(NLSFIndices[0]))
@@ -58,13 +52,11 @@ func NLSFDecode(
 	// Predictive residual dequantizer
 	nlsfResidualDequant(res_Q10[:], NLSFIndices[1:], pred_Q8[:], int(psNLSF_CB.quantStepSize_Q16), psNLSF_CB.order)
 
-	// Weights from codebook vector
-	NLSFVQWeightsLaroia(W_tmp_QW[:], pNLSF_Q15, int(psNLSF_CB.order))
-
-	// Apply inverse square-rooted weights and add to output
+	// Apply inverse square-rooted weights to first stage and add to output
+	pCB_element = psNLSF_CB.CB1_NLSF_Q8[int(NLSFIndices[0])*int(psNLSF_CB.order):]
+	pCB_Wght_Q9 = psNLSF_CB.CB1_Wght_Q9[int(NLSFIndices[0])*int(psNLSF_CB.order):]
 	for i = 0; i < int(psNLSF_CB.order); i++ {
-		W_tmp_Q9 = SQRT_APPROX(LSHIFT(int32(W_tmp_QW[i]), 18-NLSF_W_Q))
-		NLSF_Q15_tmp = ADD32(pNLSF_Q15[i], DIV32_16(LSHIFT(int32(res_Q10[i]), 14), W_tmp_Q9))
+		NLSF_Q15_tmp = ADD_LSHIFT32(DIV32_16(LSHIFT(int32(res_Q10[i]), 14), pCB_Wght_Q9[i]), int16(pCB_element[i]), 7)
 		pNLSF_Q15[i] = int16(LIMIT(NLSF_Q15_tmp, 0, 32767))
 	}
 

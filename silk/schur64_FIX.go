@@ -15,7 +15,7 @@ func Schur64( // O    returns residual energy
 	var C [SILK_MAX_ORDER_LPC + 1][2]int32
 	var Ctmp1_Q30, Ctmp2_Q30, rc_tmp_Q31 int32
 
-	silk_assert(order == 6 || order == 8 || order == 10 || order == 12 || order == 14 || order == 16)
+	silk_assert(order >= 0 && order <= SILK_MAX_ORDER_LPC)
 
 	// Check for invalid input
 	if c[0] <= 0 {
@@ -23,9 +23,14 @@ func Schur64( // O    returns residual energy
 		return 0
 	}
 
-	for k = 0; k < int(order)+1; k++ {
+	k = 0
+	for { // C: do { ... } while( ++k <= order );
 		C[k][1] = c[k]
 		C[k][0] = C[k][1]
+		k++
+		if !(k <= int(order)) {
+			break
+		}
 	}
 
 	for k = 0; k < int(order); k++ {

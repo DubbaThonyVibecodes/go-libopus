@@ -92,6 +92,12 @@ func parseFramesize(s string, rate int) (int, error) {
 		return rate / 25, nil
 	case "60":
 		return 3 * rate / 50, nil
+	case "80":
+		return 4 * rate / 50, nil
+	case "100":
+		return rate / 10, nil
+	case "120":
+		return 6 * rate / 50, nil
 	}
 	return 0, die("bad framesize %q", s)
 }
@@ -219,8 +225,12 @@ func parseFramedur(v string) (int32, error) {
 		return opus.OPUS_FRAMESIZE_40_MS, nil
 	case "60":
 		return opus.OPUS_FRAMESIZE_60_MS, nil
-	case "variable":
-		return opus.OPUS_FRAMESIZE_VARIABLE, nil
+	case "80":
+		return opus.OPUS_FRAMESIZE_80_MS, nil
+	case "100":
+		return opus.OPUS_FRAMESIZE_100_MS, nil
+	case "120":
+		return opus.OPUS_FRAMESIZE_120_MS, nil
 	}
 	return 0, die("bad frame duration %q", v)
 }
@@ -333,6 +343,8 @@ func applySched(enc encoder, s *sched, frameSize *int, framedur *int32) error {
 		*framedur = s.val
 	case "pred":
 		r = enc.Ctl(opus.OPUS_SET_PREDICTION_DISABLED_REQUEST, s.val)
+	case "phaseinv":
+		r = enc.Ctl(opus.OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST, s.val)
 	case "framesize":
 		*frameSize = int(s.val)
 	default:
@@ -372,7 +384,7 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 	bw, maxbw := int32(opus.OPUS_AUTO), int32(opus.OPUS_AUTO)
 	complexity := int32(10)
 	fec, lossperc, dtx := int32(0), int32(0), int32(0)
-	framedur, nopred := int32(opus.OPUS_FRAMESIZE_ARG), int32(0)
+	framedur, nopred, nophaseinv := int32(opus.OPUS_FRAMESIZE_ARG), int32(0), int32(0)
 	remaining := 0
 	forcech := int32(opus.OPUS_AUTO)
 	sig := int32(opus.OPUS_AUTO)
@@ -445,6 +457,8 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 			framedur, err = parseFramedur(next())
 		case "--nopred":
 			nopred = 1
+		case "--nophaseinv":
+			nophaseinv = 1
 		case "--voiceratio":
 			voiceratio = int32(atoi(next()))
 		case "--sweep":
@@ -595,6 +609,12 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 			}
 			return nil
 		},
+		func() error {
+			if nophaseinv != 0 {
+				return set(opus.OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST, nophaseinv)
+			}
+			return nil
+		},
 	}
 	for _, s := range steps {
 		if err := s(); err != nil {
@@ -631,6 +651,7 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 			{opus.OPUS_GET_LSB_DEPTH_REQUEST, "lsb"},
 			{opus.OPUS_GET_EXPERT_FRAME_DURATION_REQUEST, "framedur"},
 			{opus.OPUS_GET_PREDICTION_DISABLED_REQUEST, "pred"},
+			{opus.OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST, "phaseinv"},
 		} {
 			if err := get(g.req, g.name); err != nil {
 				return nil, err
@@ -832,6 +853,7 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 	rate, ch := 48000, 1
 	lossperc, fec, gain, skip := 0, 0, int32(0), 0
 	useFloat := false
+	nophaseinv := int32(0)
 	ms := false
 	streams, coupled := 0, 0
 	var mapping []byte
@@ -863,6 +885,8 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 			skip = atoi(next())
 		case "--float":
 			useFloat = true
+		case "--nophaseinv":
+			nophaseinv = 1
 		case "--seed":
 			v, _ := strconv.ParseUint(next(), 0, 32)
 			lcg.State = uint32(v)
@@ -917,6 +941,11 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 			return nil, err
 		}
 	}
+	if nophaseinv != 0 {
+		if err := set(opus.OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST, nophaseinv); err != nil {
+			return nil, err
+		}
+	}
 	{
 		var v int32
 		if err := set(opus.OPUS_GET_SAMPLE_RATE_REQUEST, &v); err != nil {
@@ -926,7 +955,11 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 		if err := set(opus.OPUS_GET_GAIN_REQUEST, &v); err != nil {
 			return nil, err
 		}
-		res.Trace = append(res.Trace, fmt.Sprintf("%s gain=%d", line, v))
+		line += fmt.Sprintf(" gain=%d", v)
+		if err := set(opus.OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST, &v); err != nil {
+			return nil, err
+		}
+		res.Trace = append(res.Trace, fmt.Sprintf("%s phaseinv=%d", line, v))
 	}
 	getDur := func() (int32, error) {
 		var v int32
@@ -954,6 +987,10 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 					}
 				case "reset":
 					if err := set(opus.OPUS_RESET_STATE); err != nil {
+						return nil, err
+					}
+				case "phaseinv":
+					if err := set(opus.OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST, scheds[s].val); err != nil {
 						return nil, err
 					}
 				default:

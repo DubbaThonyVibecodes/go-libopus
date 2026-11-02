@@ -185,8 +185,8 @@ func MdctBackward(l *mdct_lookup, in []int32, out []int32, window []int16, overl
 			var rev int
 			var yr, yi int32
 			rev = int(bitrev[i])
-			yr = S_MUL(in[xp2], t[i]) + S_MUL(in[xp1], t[N4+i])
-			yi = S_MUL(in[xp1], t[i]) - S_MUL(in[xp2], t[N4+i])
+			yr = ADD32_ovflw(S_MUL(in[xp2], t[i]), S_MUL(in[xp1], t[N4+i]))
+			yi = SUB32_ovflw(S_MUL(in[xp1], t[i]), S_MUL(in[xp2], t[N4+i]))
 			// We swap real and imag because we use an FFT instead of an IFFT.
 			yp[2*rev+1] = yr
 			yp[2*rev] = yi
@@ -215,8 +215,8 @@ func MdctBackward(l *mdct_lookup, in []int32, out []int32, window []int16, overl
 			t0 = t[i]
 			t1 = t[N4+i]
 			// We'd scale up by 2 here, but instead it's done when mixing the windows
-			yr = S_MUL(re, t0) + S_MUL(im, t1)
-			yi = S_MUL(re, t1) - S_MUL(im, t0)
+			yr = ADD32_ovflw(S_MUL(re, t0), S_MUL(im, t1))
+			yi = SUB32_ovflw(S_MUL(re, t1), S_MUL(im, t0))
 			// We swap real and imag because we're using an FFT instead of an IFFT.
 			re = out[yp1+1]
 			im = out[yp1+0]
@@ -226,8 +226,8 @@ func MdctBackward(l *mdct_lookup, in []int32, out []int32, window []int16, overl
 			t0 = t[(N4 - i - 1)]
 			t1 = t[(N2 - i - 1)]
 			// We'd scale up by 2 here, but instead it's done when mixing the windows
-			yr = S_MUL(re, t0) + S_MUL(im, t1)
-			yi = S_MUL(re, t1) - S_MUL(im, t0)
+			yr = ADD32_ovflw(S_MUL(re, t0), S_MUL(im, t1))
+			yi = SUB32_ovflw(S_MUL(re, t1), S_MUL(im, t0))
 			out[yp1+0] = yr
 			out[yp0+1] = yi
 			yp0 += 2
@@ -246,9 +246,9 @@ func MdctBackward(l *mdct_lookup, in []int32, out []int32, window []int16, overl
 			var x1, x2 int32
 			x1 = out[xp1]
 			x2 = out[yp1]
-			out[yp1] = MULT16_32_Q15(window[wp2], x2) - MULT16_32_Q15(window[wp1], x1)
+			out[yp1] = SUB32_ovflw(MULT16_32_Q15(window[wp2], x2), MULT16_32_Q15(window[wp1], x1))
 			yp1++
-			out[xp1] = MULT16_32_Q15(window[wp1], x2) + MULT16_32_Q15(window[wp2], x1)
+			out[xp1] = ADD32_ovflw(MULT16_32_Q15(window[wp1], x2), MULT16_32_Q15(window[wp2], x1))
 			xp1--
 			wp1++
 			wp2--

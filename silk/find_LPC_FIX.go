@@ -64,7 +64,7 @@ func (psEncC *EncoderState) FindLPCFIX(NLSF_Q15 []int16, x []int16, minInvGain_Q
 			Interpolate(NLSF0_Q15[:], psEncC.prev_NLSFq_Q15[:], NLSF_Q15, k, psEncC.predictLPCOrder)
 
 			/* Convert to LPC for residual energy evaluation */
-			NLSF2A(a_tmp_Q12[:], NLSF0_Q15[:], psEncC.predictLPCOrder)
+			NLSF2A(a_tmp_Q12[:], NLSF0_Q15[:], psEncC.predictLPCOrder, psEncC.arch)
 
 			/* Calculate residual energy with NLSF interpolation */
 			LPCAnalysisFilter(LPC_res, x, a_tmp_Q12[:], int32(2*subfr_length), int32(psEncC.predictLPCOrder), psEncC.arch)
