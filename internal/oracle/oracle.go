@@ -17,7 +17,7 @@ import (
 const (
 	maxPacket = 1500
 	maxFrame  = 960 * 6
-	maxCh     = 8
+	maxCh     = 18
 )
 
 func die(format string, a ...any) error { return fmt.Errorf("oracle: "+format, a...) }
@@ -303,6 +303,34 @@ func (e msEnc) encode(pcm []int16, frameSize int, data []byte, maxBytes int) int
 	return e.MultistreamEncode(pcm, frameSize, data, int32(maxBytes))
 }
 
+type projEnc struct{ *opus.OpusProjectionEncoder }
+
+func (e projEnc) encode(pcm []int16, frameSize int, data []byte, maxBytes int) int {
+	return e.ProjectionEncode(pcm, frameSize, data, int32(maxBytes))
+}
+
+// getDemixingMatrix mirrors get_demixing_matrix in gen.c: the demixing matrix
+// of the projection (family 3) encoder for this channel count.
+func getDemixingMatrix(rate, ch int, app int) (matrix []byte, streams, coupled int, gain int32, err error) {
+	var errc int
+	pe := opus.ProjectionAmbisonicsEncoderCreate(int32(rate), ch, 3, &streams, &coupled, app, &errc)
+	if errc != opus.OPUS_OK {
+		return nil, 0, 0, 0, die("projection create: %s", opus.Strerror(errc))
+	}
+	var size int32
+	if pe.Ctl(opus.OPUS_PROJECTION_GET_DEMIXING_MATRIX_SIZE_REQUEST, &size) != opus.OPUS_OK {
+		return nil, 0, 0, 0, die("matrix size")
+	}
+	matrix = make([]byte, size)
+	if pe.Ctl(opus.OPUS_PROJECTION_GET_DEMIXING_MATRIX_REQUEST, matrix, size) != opus.OPUS_OK {
+		return nil, 0, 0, 0, die("matrix")
+	}
+	if pe.Ctl(opus.OPUS_PROJECTION_GET_DEMIXING_MATRIX_GAIN_REQUEST, &gain) != opus.OPUS_OK {
+		return nil, 0, 0, 0, die("matrix gain")
+	}
+	return matrix, streams, coupled, gain, nil
+}
+
 func applySched(enc encoder, s *sched, frameSize *int, framedur *int32) error {
 	r := opus.OPUS_OK
 	switch s.what {
@@ -385,6 +413,7 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 	complexity := int32(10)
 	fec, lossperc, dtx := int32(0), int32(0), int32(0)
 	framedur, nopred, nophaseinv := int32(opus.OPUS_FRAMESIZE_ARG), int32(0), int32(0)
+	proj := false
 	remaining := 0
 	forcech := int32(opus.OPUS_AUTO)
 	sig := int32(opus.OPUS_AUTO)
@@ -502,6 +531,9 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 		case "--family":
 			ms = true
 			family = atoi(next())
+		case "--projection":
+			ms, proj = true, true
+			family = 3
 		case "--mapping":
 			ms = true
 			mapping, err = parseMapping(next())
@@ -525,7 +557,20 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 	res := &EncResult{}
 	var enc encoder
 	var errc int
-	if ms {
+	if proj {
+		var s2, c2 int
+		e := opus.ProjectionAmbisonicsEncoderCreate(int32(rate), ch, family, &s2, &c2, int(app), &errc)
+		if errc != opus.OPUS_OK {
+			return nil, die("projection create: %s", opus.Strerror(errc))
+		}
+		streams, coupled = s2, c2
+		matrix, _, _, gain, err := getDemixingMatrix(rate, ch, int(app))
+		if err != nil {
+			return nil, err
+		}
+		res.Trace = append(res.Trace, fmt.Sprintf("H projection family=%d streams=%d coupled=%d gain=%d size=%d matrix=%x", family, streams, coupled, gain, len(matrix), matrix))
+		enc = projEnc{e}
+	} else if ms {
 		if family >= 0 {
 			var s2, c2 int
 			map2 := make([]byte, maxCh)
@@ -793,6 +838,13 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 		if length > 0 {
 			line += fmt.Sprintf(" toc=%02x", data[0])
 		}
+		if !ms {
+			var indtx int32
+			if err := set(opus.OPUS_GET_IN_DTX_REQUEST, &indtx); err != nil {
+				return nil, err
+			}
+			line += fmt.Sprintf(" indtx=%d", indtx)
+		}
 		remaining = 0
 		if framedur != opus.OPUS_FRAMESIZE_ARG {
 			// like opus_demo: the encoder may consume fewer samples than offered; keep the rest
@@ -841,6 +893,15 @@ func (d elemDec) decodeFloat(data []byte, length int, pcm []float32, frameSize i
 
 type msDec struct{ *opus.OpusMSDecoder }
 
+type projDec struct{ *opus.OpusProjectionDecoder }
+
+func (d projDec) decode(data []byte, length int, pcm []int16, frameSize int, decodeFec int) int {
+	return d.ProjectionDecode(data, int32(length), pcm, frameSize, decodeFec)
+}
+func (d projDec) decodeFloat(data []byte, length int, pcm []float32, frameSize int, decodeFec int) int {
+	return d.ProjectionDecodeFloat(data, int32(length), pcm, frameSize, decodeFec)
+}
+
 func (d msDec) decode(data []byte, length int, pcm []int16, frameSize int, decodeFec int) int {
 	return d.MultistreamDecode(data, int32(length), pcm, frameSize, decodeFec)
 }
@@ -854,7 +915,7 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 	lossperc, fec, gain, skip := 0, 0, int32(0), 0
 	useFloat := false
 	nophaseinv := int32(0)
-	ms := false
+	ms, proj := false, false
 	streams, coupled := 0, 0
 	var mapping []byte
 	var scheds []sched
@@ -892,6 +953,8 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 			lcg.State = uint32(v)
 		case "--sched":
 			scheds, err = parseSched(next(), rate)
+		case "--projection":
+			ms, proj = true, true
 		case "--streams":
 			ms = true
 			streams = atoi(next())
@@ -914,7 +977,18 @@ func RunDec(args []string, pkts []testvec.Packet) (*DecResult, error) {
 	res := &DecResult{}
 	var dec decoder
 	var errc int
-	if ms {
+	if proj {
+		matrix, s2, c2, _, err := getDemixingMatrix(rate, ch, opus.OPUS_APPLICATION_AUDIO)
+		if err != nil {
+			return nil, err
+		}
+		streams, coupled = s2, c2
+		d := opus.ProjectionDecoderCreate(int32(rate), ch, streams, coupled, matrix, int32(len(matrix)), &errc)
+		if errc != opus.OPUS_OK {
+			return nil, die("projection dec create: %s", opus.Strerror(errc))
+		}
+		dec = projDec{d}
+	} else if ms {
 		if len(mapping) != ch {
 			return nil, die("mapping length must equal channels")
 		}

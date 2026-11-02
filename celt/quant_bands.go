@@ -397,7 +397,7 @@ func UnquantCoarseEnergy(m *CELTMode, start, end int, oldEBands []int16, intra i
 			// It would be better to express this invariant as a
 			// test on C at function entry, but that isn't enough
 			// to make the static analyzer happy.
-			celt_assert(c < 2)
+			celt_sig_assert(c < 2)
 			tell = int32(dec.Tell())
 			if budget-tell >= 15 {
 				var pi int

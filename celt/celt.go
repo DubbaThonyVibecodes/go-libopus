@@ -4,7 +4,7 @@ package celt
 // (celt_encoder.go) and the decoder (celt_decoder.go).
 
 // PACKAGE_VERSION mirrors the upstream version this port tracks.
-const PACKAGE_VERSION = "1.2.1"
+const PACKAGE_VERSION = "1.3.1"
 
 // AnalysisInfo is the C struct AnalysisInfo (celt.h). It is filled by the
 // opus package's analysis code (analysis.c) and passed to the CELT encoder
@@ -19,9 +19,11 @@ type AnalysisInfo struct {
 	Noisiness            float32
 	Activity             float32
 	Music_prob           float32
-	Vad_prob             float32
+	Music_prob_min       float32
+	Music_prob_max       float32
 	Bandwidth            int
 	Activity_probability float32
+	Max_pitch_ratio      float32
 	// Store as Q6 char to save space.
 	Leak_boost [LEAK_BANDS]uint8
 }

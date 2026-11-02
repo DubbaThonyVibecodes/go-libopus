@@ -1,7 +1,12 @@
 package opus
 
+import "github.com/DubbaThonyVibecodes/go-libopus/celt"
+
 // C: src/opus_multistream_decoder.c, include/opus_multistream.h
 
+// OpusMSDecoder is the C struct OpusMSDecoder (src/opus_private.h); the
+// per-stream decoder states that C places after the struct are the decoders
+// slice (coupled streams first).
 type OpusMSDecoder struct {
 	layout ChannelLayout
 	// Decoder states go here
@@ -9,6 +14,14 @@ type OpusMSDecoder struct {
 }
 
 /* DECODER */
+
+// C: static void validate_ms_decoder(OpusMSDecoder *st)   (ENABLE_HARDENING)
+func validate_ms_decoder(st *OpusMSDecoder) {
+	validate_layout(&st.layout)
+}
+
+// C: #define VALIDATE_MS_DECODER(st) validate_ms_decoder(st)
+func VALIDATE_MS_DECODER(st *OpusMSDecoder) { validate_ms_decoder(st) }
 
 // C: opus_int32 opus_multistream_decoder_get_size(int nb_streams, int nb_coupled_streams)
 func MultistreamDecoderGetSize(nb_streams int, nb_coupled_streams int) int32 {
@@ -84,8 +97,8 @@ func MultistreamDecoderCreate(Fs int32, channels int, streams int, coupled_strea
 	return st
 }
 
-// C: typedef void (*opus_copy_channel_out_func)(void *dst, int dst_stride, int dst_channel, const opus_val16 *src, int src_stride, int frame_size)
-type opus_copy_channel_out_func func(dst any, dst_stride int, dst_channel int, src []int16, src_stride int, frame_size int)
+// C: typedef void (*opus_copy_channel_out_func)(void *dst, int dst_stride, int dst_channel, const opus_val16 *src, int src_stride, int frame_size, void *user_data)   (src/opus_private.h)
+type opus_copy_channel_out_func func(dst any, dst_stride int, dst_channel int, src []int16, src_stride int, frame_size int, user_data any)
 
 // C: static int opus_multistream_packet_validate(const unsigned char *data, opus_int32 len, int nb_streams, opus_int32 Fs)
 func opus_multistream_packet_validate(data []byte, length int32, nb_streams int, Fs int32) int {
@@ -117,14 +130,18 @@ func opus_multistream_packet_validate(data []byte, length int32, nb_streams int,
 	return samples
 }
 
-// C: static int opus_multistream_decode_native(OpusMSDecoder *st, const unsigned char *data, opus_int32 len, void *pcm, opus_copy_channel_out_func copy_channel_out, int frame_size, int decode_fec, int soft_clip)
-func (st *OpusMSDecoder) multistreamDecodeNative(data []byte, length int32, pcm any, copy_channel_out opus_copy_channel_out_func, frame_size int, decode_fec int, soft_clip int) int {
+// C: int opus_multistream_decode_native(OpusMSDecoder *st, const unsigned char *data, opus_int32 len, void *pcm, opus_copy_channel_out_func copy_channel_out, int frame_size, int decode_fec, int soft_clip, void *user_data)
+func (st *OpusMSDecoder) MultistreamDecodeNative(data []byte, length int32, pcm any, copy_channel_out opus_copy_channel_out_func, frame_size int, decode_fec int, soft_clip int, user_data any) int {
 	var Fs int32
 	var s, c int
 	var do_plc int = 0
 
+	VALIDATE_MS_DECODER(st)
+	if frame_size <= 0 {
+		return OPUS_BAD_ARG
+	}
 	// Limit frame_size to avoid excessive stack allocations.
-	st.Ctl(OPUS_GET_SAMPLE_RATE_REQUEST, &Fs)
+	celt.MustSucceed(st.Ctl(OPUS_GET_SAMPLE_RATE_REQUEST, &Fs))
 	frame_size = IMIN(frame_size, int(Fs/25*3))
 	buf := make([]int16, 2*frame_size)
 
@@ -173,7 +190,7 @@ func (st *OpusMSDecoder) multistreamDecodeNative(data []byte, length int32, pcm 
 					break
 				}
 				copy_channel_out(pcm, st.layout.nb_channels, chanIdx,
-					buf, 2, frame_size)
+					buf, 2, frame_size, user_data)
 				prev = chanIdx
 			}
 			prev = -1
@@ -184,7 +201,7 @@ func (st *OpusMSDecoder) multistreamDecodeNative(data []byte, length int32, pcm 
 					break
 				}
 				copy_channel_out(pcm, st.layout.nb_channels, chanIdx,
-					buf[1:], 2, frame_size)
+					buf[1:], 2, frame_size, user_data)
 				prev = chanIdx
 			}
 		} else {
@@ -197,7 +214,7 @@ func (st *OpusMSDecoder) multistreamDecodeNative(data []byte, length int32, pcm 
 					break
 				}
 				copy_channel_out(pcm, st.layout.nb_channels, chanIdx,
-					buf, 1, frame_size)
+					buf, 1, frame_size, user_data)
 				prev = chanIdx
 			}
 		}
@@ -206,16 +223,17 @@ func (st *OpusMSDecoder) multistreamDecodeNative(data []byte, length int32, pcm 
 	for c = 0; c < st.layout.nb_channels; c++ {
 		if st.layout.mapping[c] == 255 {
 			copy_channel_out(pcm, st.layout.nb_channels, c,
-				nil, 0, frame_size)
+				nil, 0, frame_size, user_data)
 		}
 	}
 	return frame_size
 }
 
-// C: static void opus_copy_channel_out_float(void *dst, int dst_stride, int dst_channel, const opus_val16 *src, int src_stride, int frame_size)
-func opus_copy_channel_out_float(dst any, dst_stride int, dst_channel int, src []int16, src_stride int, frame_size int) {
+// C: static void opus_copy_channel_out_float(void *dst, int dst_stride, int dst_channel, const opus_val16 *src, int src_stride, int frame_size, void *user_data)
+func opus_copy_channel_out_float(dst any, dst_stride int, dst_channel int, src []int16, src_stride int, frame_size int, user_data any) {
 	float_dst := dst.([]float32)
 	var i int32
+	_ = user_data
 	if src != nil {
 		for i = 0; i < int32(frame_size); i++ {
 			float_dst[int(i)*dst_stride+dst_channel] = (1 / 32768.0) * float32(src[int(i)*src_stride])
@@ -227,10 +245,11 @@ func opus_copy_channel_out_float(dst any, dst_stride int, dst_channel int, src [
 	}
 }
 
-// C: static void opus_copy_channel_out_short(void *dst, int dst_stride, int dst_channel, const opus_val16 *src, int src_stride, int frame_size)
-func opus_copy_channel_out_short(dst any, dst_stride int, dst_channel int, src []int16, src_stride int, frame_size int) {
+// C: static void opus_copy_channel_out_short(void *dst, int dst_stride, int dst_channel, const opus_val16 *src, int src_stride, int frame_size, void *user_data)
+func opus_copy_channel_out_short(dst any, dst_stride int, dst_channel int, src []int16, src_stride int, frame_size int, user_data any) {
 	short_dst := dst.([]int16)
 	var i int32
+	_ = user_data
 	if src != nil {
 		for i = 0; i < int32(frame_size); i++ {
 			short_dst[int(i)*dst_stride+dst_channel] = src[int(i)*src_stride]
@@ -244,18 +263,21 @@ func opus_copy_channel_out_short(dst any, dst_stride int, dst_channel int, src [
 
 // C: int opus_multistream_decode(OpusMSDecoder *st, const unsigned char *data, opus_int32 len, opus_int16 *pcm, int frame_size, int decode_fec)   (FIXED_POINT)
 func (st *OpusMSDecoder) MultistreamDecode(data []byte, length int32, pcm []int16, frame_size int, decode_fec int) int {
-	return st.multistreamDecodeNative(data, length,
-		pcm, opus_copy_channel_out_short, frame_size, decode_fec, 0)
+	return st.MultistreamDecodeNative(data, length,
+		pcm, opus_copy_channel_out_short, frame_size, decode_fec, 0, nil)
 }
 
 // C: int opus_multistream_decode_float(OpusMSDecoder *st, const unsigned char *data, opus_int32 len, float *pcm, int frame_size, int decode_fec)   (FIXED_POINT)
 func (st *OpusMSDecoder) MultistreamDecodeFloat(data []byte, length int32, pcm []float32, frame_size int, decode_fec int) int {
-	return st.multistreamDecodeNative(data, length,
-		pcm, opus_copy_channel_out_float, frame_size, decode_fec, 0)
+	return st.MultistreamDecodeNative(data, length,
+		pcm, opus_copy_channel_out_float, frame_size, decode_fec, 0, nil)
 }
 
-// Ctl is the C opus_multistream_decoder_ctl.
+// Ctl is the C opus_multistream_decoder_ctl_va_list; the variadic Go form
+// is also the va_list form, so opus_multistream_decoder_ctl (which only
+// wraps va_start/va_end around it) is the same function.
 //
+// C: int opus_multistream_decoder_ctl_va_list(OpusMSDecoder *st, int request, va_list ap)
 // C: int opus_multistream_decoder_ctl(OpusMSDecoder *st, int request, ...)
 func (st *OpusMSDecoder) Ctl(request int, args ...any) int {
 	var ret int = OPUS_OK
@@ -308,15 +330,13 @@ func (st *OpusMSDecoder) Ctl(request int, args ...any) int {
 			return OPUS_BAD_ARG
 		}
 		if stream_id < 0 || int(stream_id) >= st.layout.nb_streams {
-			ret = OPUS_BAD_ARG
+			return OPUS_BAD_ARG // goto bad_arg
 		}
 		value, ok := args[1].(**OpusDecoder)
 		if !ok || value == nil {
 			return OPUS_BAD_ARG // goto bad_arg
 		}
-		if ret == OPUS_OK {
-			*value = st.decoders[stream_id]
-		}
+		*value = st.decoders[stream_id]
 	case OPUS_SET_GAIN_REQUEST,
 		OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST:
 		var s int

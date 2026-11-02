@@ -243,6 +243,12 @@ func transient_analysis(in []int32, len, C int, tf_estimate *int16, tf_chan *int
 		// Compute harmonic mean discarding the unreliable boundaries
 		// The data is smooth, so we only take 1/4th of the samples
 		unmask = 0
+		// We should never see NaNs here. If we find any, then something really bad happened and we better abort
+		// before it does any damage later on. If these asserts are disabled (no hardening), then the table
+		// lookup a few lines below (id = ...) is likely to crash dur to an out-of-bounds read. DO NOT FIX
+		// that crash on NaN since it could result in a worse issue later on.
+		celt_assert(!celt_isnan(tmp[0]))
+		celt_assert(!celt_isnan(norm))
 		for i = 12; i < len2-5; i += 4 {
 			var id int
 			id = int(MAX32(0, MIN32(127, MULT16_32_Q15(int32(tmp[i])+EPSILON, norm)))) // Do not round to nearest
@@ -439,10 +445,10 @@ func l1_metric(tmp []int16, N, LM int, bias int16) int32 {
 // C: static int tf_analysis(const CELTMode *m, int len, int isTransient,
 //
 //	int *tf_res, int lambda, celt_norm *X, int N0, int LM,
-//	opus_val16 tf_estimate, int tf_chan)
+//	opus_val16 tf_estimate, int tf_chan, int *importance)
 func tf_analysis(m *CELTMode, len, isTransient int,
 	tf_res []int, lambda int, X []int16, N0, LM int,
-	tf_estimate int16, tf_chan int) int {
+	tf_estimate int16, tf_chan int, importance []int) int {
 	var i int
 	var cost0 int
 	var cost1 int
@@ -520,24 +526,23 @@ func tf_analysis(m *CELTMode, len, isTransient int,
 		if narrow != 0 && (metric[i] == 0 || metric[i] == -2*LM) {
 			metric[i] -= 1
 		}
-		// printf("%d ", metric[i]);
+		// printf("%d ", metric[i]/2 + (!isTransient)*LM);
 	}
 	// printf("\n");
 	// Search for the optimal tf resolution, including tf_select
 	tf_select = 0
 	for sel = 0; sel < 2; sel++ {
-		cost0 = 0
-		if isTransient != 0 {
-			cost1 = 0
-		} else {
-			cost1 = lambda
+		cost0 = importance[0] * ABS(metric[0]-2*int(tf_select_table[LM][4*isTransient+2*sel+0]))
+		cost1 = importance[0] * ABS(metric[0]-2*int(tf_select_table[LM][4*isTransient+2*sel+1]))
+		if isTransient == 0 {
+			cost1 += lambda
 		}
 		for i = 1; i < len; i++ {
 			var curr0, curr1 int
 			curr0 = IMIN(cost0, cost1+lambda)
 			curr1 = IMIN(cost0+lambda, cost1)
-			cost0 = curr0 + ABS(metric[i]-2*int(tf_select_table[LM][4*isTransient+2*sel+0]))
-			cost1 = curr1 + ABS(metric[i]-2*int(tf_select_table[LM][4*isTransient+2*sel+1]))
+			cost0 = curr0 + importance[i]*ABS(metric[i]-2*int(tf_select_table[LM][4*isTransient+2*sel+0]))
+			cost1 = curr1 + importance[i]*ABS(metric[i]-2*int(tf_select_table[LM][4*isTransient+2*sel+1]))
 		}
 		cost0 = IMIN(cost0, cost1)
 		selcost[sel] = cost0
@@ -547,11 +552,10 @@ func tf_analysis(m *CELTMode, len, isTransient int,
 	if selcost[1] < selcost[0] && isTransient != 0 {
 		tf_select = 1
 	}
-	cost0 = 0
-	if isTransient != 0 {
-		cost1 = 0
-	} else {
-		cost1 = lambda
+	cost0 = importance[0] * ABS(metric[0]-2*int(tf_select_table[LM][4*isTransient+2*tf_select+0]))
+	cost1 = importance[0] * ABS(metric[0]-2*int(tf_select_table[LM][4*isTransient+2*tf_select+1]))
+	if isTransient == 0 {
+		cost1 += lambda
 	}
 	// Viterbi forward pass
 	for i = 1; i < len; i++ {
@@ -577,8 +581,8 @@ func tf_analysis(m *CELTMode, len, isTransient int,
 			curr1 = from1
 			path1[i] = 1
 		}
-		cost0 = curr0 + ABS(metric[i]-2*int(tf_select_table[LM][4*isTransient+2*tf_select+0]))
-		cost1 = curr1 + ABS(metric[i]-2*int(tf_select_table[LM][4*isTransient+2*tf_select+1]))
+		cost0 = curr0 + importance[i]*ABS(metric[i]-2*int(tf_select_table[LM][4*isTransient+2*tf_select+0]))
+		cost1 = curr1 + importance[i]*ABS(metric[i]-2*int(tf_select_table[LM][4*isTransient+2*tf_select+1]))
 	}
 	if cost0 < cost1 {
 		tf_res[len-1] = 0
@@ -816,11 +820,13 @@ func median_of_3(x []int16) int16 {
 //
 //	int nbEBands, int start, int end, int C, int *offsets, int lsb_depth, const opus_int16 *logN,
 //	int isTransient, int vbr, int constrained_vbr, const opus_int16 *eBands, int LM,
-//	int effectiveBytes, opus_int32 *tot_boost_, int lfe, opus_val16 *surround_dynalloc, AnalysisInfo *analysis)
+//	int effectiveBytes, opus_int32 *tot_boost_, int lfe, opus_val16 *surround_dynalloc,
+//	AnalysisInfo *analysis, int *importance, int *spread_weight)
 func dynalloc_analysis(bandLogE, bandLogE2 []int16,
 	nbEBands, start, end, C int, offsets []int, lsb_depth int, logN []int16,
 	isTransient, vbr, constrained_vbr int, eBands []int16, LM int,
-	effectiveBytes int, tot_boost_ *int32, lfe int, surround_dynalloc []int16, analysis *AnalysisInfo) int16 {
+	effectiveBytes int, tot_boost_ *int32, lfe int, surround_dynalloc []int16,
+	analysis *AnalysisInfo, importance []int, spread_weight []int) int16 {
 	var i, c int
 	var tot_boost int32 = 0
 	var maxDepth int16
@@ -845,6 +851,39 @@ func dynalloc_analysis(bandLogE, bandLogE2 []int16,
 		if c >= C {
 			break
 		}
+	}
+	{
+		// Compute a really simple masking model to avoid taking into account completely masked
+		// bands when computing the spreading decision.
+		mask := make([]int16, nbEBands)
+		sig := make([]int16, nbEBands)
+		for i = 0; i < end; i++ {
+			mask[i] = bandLogE[i] - noise_floor[i]
+		}
+		if C == 2 {
+			for i = 0; i < end; i++ {
+				mask[i] = MAX16(mask[i], bandLogE[nbEBands+i]-noise_floor[i])
+			}
+		}
+		copy(sig[:end], mask[:end])
+		for i = 1; i < end; i++ {
+			mask[i] = MAX16(mask[i], mask[i-1]-QCONST16(2.0, DB_SHIFT))
+		}
+		for i = end - 2; i >= 0; i-- {
+			mask[i] = MAX16(mask[i], mask[i+1]-QCONST16(3.0, DB_SHIFT))
+		}
+		for i = 0; i < end; i++ {
+			// Compute SMR: Mask is never more than 72 dB below the peak and never below the noise floor.
+			// (C does the MAX16 arithmetic in int; maxDepth-12 dB can be below -32768.)
+			var smr int16 = int16(int32(sig[i]) - MAX16(MAX16(0, int32(maxDepth)-int32(QCONST16(12.0, DB_SHIFT))), int32(mask[i])))
+			// Clamp SMR to make sure we're not shifting by something negative or too large.
+			// FIXME: Use PSHR16() instead
+			var shift int = -int(PSHR32(MAX16(-QCONST16(5.0, DB_SHIFT), MIN16(0, smr)), DB_SHIFT))
+			spread_weight[i] = 32 >> uint(shift)
+		}
+		// for (i=0;i<end;i++)
+		//    printf("%d ", spread_weight[i]);
+		// printf("\n");
 	}
 	// Make sure that dynamic allocation can't make us bust the budget
 	if effectiveBytes > 50 && LM >= 1 && lfe == 0 {
@@ -906,6 +945,9 @@ func dynalloc_analysis(bandLogE, bandLogE2 []int16,
 		for i = start; i < end; i++ {
 			follower[i] = MAX16(follower[i], surround_dynalloc[i])
 		}
+		for i = start; i < end; i++ {
+			importance[i] = int(PSHR32(13*Exp2(MIN16(follower[i], QCONST16(4.0, DB_SHIFT))), 16))
+		}
 		// For non-transient CBR/CVBR frames, halve the dynalloc contribution
 		if (vbr == 0 || constrained_vbr != 0) && isTransient == 0 {
 			for i = start; i < end; i++ {
@@ -955,6 +997,10 @@ func dynalloc_analysis(bandLogE, bandLogE2 []int16,
 				tot_boost += int32(boost_bits)
 			}
 		}
+	} else {
+		for i = start; i < end; i++ {
+			importance[i] = 13
+		}
 	}
 	*tot_boost_ = tot_boost
 	return maxDepth
@@ -962,9 +1008,9 @@ func dynalloc_analysis(bandLogE, bandLogE2 []int16,
 
 // C: static int run_prefilter(CELTEncoder *st, celt_sig *in, celt_sig *prefilter_mem, int CC, int N,
 //
-//	int prefilter_tapset, int *pitch, opus_val16 *gain, int *qgain, int enabled, int nbAvailableBytes)
+//	int prefilter_tapset, int *pitch, opus_val16 *gain, int *qgain, int enabled, int nbAvailableBytes, AnalysisInfo *analysis)
 func run_prefilter(st *CELTEncoder, in []int32, prefilter_mem []int32, CC, N int,
-	prefilter_tapset int, pitch *int, gain *int16, qgain *int, enabled int, nbAvailableBytes int) int {
+	prefilter_tapset int, pitch *int, gain *int16, qgain *int, enabled int, nbAvailableBytes int, analysis *AnalysisInfo) int {
 	var c int
 	var pre [2][]int32
 	var mode *CELTMode
@@ -1023,7 +1069,10 @@ func run_prefilter(st *CELTEncoder, in []int32, prefilter_mem []int32, CC, N int
 		gain1 = 0
 		pitch_index = COMBFILTER_MINPERIOD
 	}
-
+	// DISABLE_FLOAT_API is not defined.
+	if analysis.Valid != 0 {
+		gain1 = int16(float32(gain1) * analysis.Max_pitch_ratio)
+	}
 	// Gain threshold for enabling the prefilter/postfilter
 	pf_threshold = QCONST16(.2, 15)
 
@@ -1273,6 +1322,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	var equiv_rate int32
 	var hybrid int
 	var weak_transient int = 0
+	var enable_tf_analysis int
 
 	mode = st.mode
 	nbEBands = mode.nbEBands
@@ -1309,8 +1359,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		tell0_frac = tell
 		nbFilledBytes = 0
 	} else {
-		tell = int32(enc.TellFrac())
-		tell0_frac = tell
+		tell0_frac = int32(enc.TellFrac())
 		tell = int32(enc.Tell())
 		nbFilledBytes = int((tell + 4) >> 3)
 	}
@@ -1426,7 +1475,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 			st.complexity >= 5)
 
 		prefilter_tapset = st.tapset_decision
-		pf_on = run_prefilter(st, in, prefilter_mem, CC, N, prefilter_tapset, &pitch_index, &gain1, &qg, enabled, nbAvailableBytes)
+		pf_on = run_prefilter(st, in, prefilter_mem, CC, N, prefilter_tapset, &pitch_index, &gain1, &qg, enabled, nbAvailableBytes, &st.analysis)
 		if (gain1 > QCONST16(.4, 15) || st.prefilter_gain > QCONST16(.4, 15)) && (st.analysis.Valid == 0 || float64(st.analysis.Tonality) > .3) &&
 			(float64(pitch_index) > 1.26*float64(st.prefilter_period) || float64(pitch_index) < .79*float64(st.prefilter_period)) {
 			pitch_change = 1
@@ -1456,7 +1505,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		// Reduces the likelihood of energy instability on fricatives at low bitrate
 		// in hybrid mode. It seems like we still want to have real transients on vowels
 		// though (small SILK quantization offset value).
-		var allow_weak_transients int = b2i(hybrid != 0 && effectiveBytes < 15 && st.silk_info.Offset >= 100)
+		var allow_weak_transients int = b2i(hybrid != 0 && effectiveBytes < 15 && st.silk_info.SignalType != 2)
 		isTransient = transient_analysis(in, N+overlap, CC,
 			&tf_estimate, &tf_chan, allow_weak_transients, &weak_transient)
 	}
@@ -1485,6 +1534,9 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	}
 
 	compute_mdcts(mode, shortBlocks, in, freq, C, CC, LM, st.upsample, st.arch)
+	// This should catch any NaN in the CELT input. Since we're not supposed to see any (they're filtered
+	// at the Opus layer), just abort.
+	celt_assert(!celt_isnan(freq[0]) && (C == 1 || !celt_isnan(freq[N])))
 	if CC == 2 && C == 1 {
 		tf_chan = 0
 	}
@@ -1627,12 +1679,22 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	// Band normalisation
 	NormaliseBands(mode, freq, X, bandE, effEnd, C, M)
 
+	enable_tf_analysis = b2i(effectiveBytes >= 15*C && hybrid == 0 && st.complexity >= 2 && st.lfe == 0)
+
+	offsets := make([]int, nbEBands)
+	importance := make([]int, nbEBands)
+	spread_weight := make([]int, nbEBands)
+
+	maxDepth = dynalloc_analysis(bandLogE, bandLogE2, nbEBands, start, end, C, offsets,
+		st.lsb_depth, mode.logN, isTransient, st.vbr, st.constrained_vbr,
+		eBands, LM, effectiveBytes, &tot_boost, st.lfe, surround_dynalloc, &st.analysis, importance, spread_weight)
+
 	tf_res := make([]int, nbEBands)
 	// Disable variable tf resolution for hybrid and at very low bitrate
-	if effectiveBytes >= 15*C && hybrid == 0 && st.complexity >= 2 && st.lfe == 0 {
+	if enable_tf_analysis != 0 {
 		var lambda int
-		lambda = IMAX(5, 1280/effectiveBytes+2)
-		tf_select = tf_analysis(mode, effEnd, isTransient, tf_res, lambda, X, N, LM, tf_estimate, tf_chan)
+		lambda = IMAX(80, 20480/effectiveBytes+2)
+		tf_select = tf_analysis(mode, effEnd, isTransient, tf_res, lambda, X, N, LM, tf_estimate, tf_chan, importance)
 		for i = effEnd; i < end; i++ {
 			tf_res[i] = tf_res[effEnd-1]
 		}
@@ -1644,7 +1706,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 			tf_res[i] = 1
 		}
 		tf_select = 0
-	} else if hybrid != 0 && effectiveBytes < 15 {
+	} else if hybrid != 0 && effectiveBytes < 15 && st.silk_info.SignalType != 2 {
 		// For low bitrate hybrid, we force temporal resolution to 5 ms rather than 2.5 ms.
 		for i = 0; i < end; i++ {
 			tf_res[i] = 0
@@ -1705,7 +1767,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 			{
 				st.spread_decision = SpreadingDecision(mode, X,
 					&st.tonal_average, st.spread_decision, &st.hf_average,
-					&st.tapset_decision, b2i(pf_on != 0 && shortBlocks == 0), effEnd, C, M)
+					&st.tapset_decision, b2i(pf_on != 0 && shortBlocks == 0), effEnd, C, M, spread_weight)
 			}
 			// printf("%d %d\n", st->tapset_decision, st->spread_decision);
 			// printf("%f %d %f %d\n\n", st->analysis.tonality, st->spread_decision, st->analysis.tonality_slope, st->tapset_decision);
@@ -1713,11 +1775,6 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 		enc.EncIcdf(st.spread_decision, spread_icdf[:], 5)
 	}
 
-	offsets := make([]int, nbEBands)
-
-	maxDepth = dynalloc_analysis(bandLogE, bandLogE2, nbEBands, start, end, C, offsets,
-		st.lsb_depth, mode.logN, isTransient, st.vbr, st.constrained_vbr,
-		eBands, LM, effectiveBytes, &tot_boost, st.lfe, surround_dynalloc, &st.analysis)
 	// For LFE, everything interesting is in the first band
 	if st.lfe != 0 {
 		offsets[0] = IMIN(8, effectiveBytes/3)
@@ -1933,7 +1990,7 @@ func (st *CELTEncoder) EncodeWithEc(pcm []int16, frame_size int, compressed []by
 	if st.lfe != 0 {
 		signalBandwidth = 1
 	}
-	codedBands = ComputeAllocation(mode, start, end, offsets, cap,
+	codedBands = CltComputeAllocation(mode, start, end, offsets, cap,
 		alloc_trim, &st.intensity, &dual_stereo, bits, &balance, pulses,
 		fine_quant, fine_priority, C, LM, enc, 1, st.lastCodedBands, signalBandwidth)
 	if st.lastCodedBands != 0 {

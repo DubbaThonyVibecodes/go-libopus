@@ -400,6 +400,38 @@ func cases() []encCase {
 	ms("surround_fam1_6ch_16k", synth("bursts", 16000, 6), "--app audio --bitrate 128000 --family 1", famMaps[6])
 	ms("surround_fam1_6ch_voip_fs40", synth("bursts", 48000, 6), "--app voip --bitrate 128000 --framesize 40 --family 1", famMaps[6])
 
+	// libopus 1.3: ambisonics (mapping family 2: ACN channels as mono streams plus an
+	// optional non-diegetic stereo pair; family 3: projection encoder/decoder).
+	amb := func(ch int) string {
+		o := 1
+		for (o+1)*(o+1) <= ch {
+			o++
+		}
+		acn := o * o
+		st, cp := acn, 0
+		if ch-acn == 2 {
+			st, cp = acn+1, 1
+		}
+		m := ""
+		for i := 0; i < ch; i++ {
+			if i > 0 {
+				m += ","
+			}
+			m += strconv.Itoa(i)
+		}
+		return fmt.Sprintf("--streams %d --coupled %d --mapping %s", st, cp, m)
+	}
+	for _, ch := range []int{1, 4, 6, 9, 11, 16, 18} {
+		ms(fmt.Sprintf("ambisonics_fam2_%dch", ch), synth("bursts", 48000, ch), fmt.Sprintf("--app audio --bitrate %d --family 2", 24000*ch), amb(ch), loss(10, 50+ch))
+	}
+	ms("ambisonics_fam2_4ch_voip_fs10", synth("multitone", 48000, 4), "--app voip --bitrate 96000 --framesize 10 --family 2", amb(4))
+	ms("ambisonics_fam2_9ch_16k", synth("pink", 16000, 9), "--app audio --bitrate 160000 --family 2", amb(9))
+	for _, ch := range []int{4, 9, 16} {
+		ms(fmt.Sprintf("projection_fam3_%dch", ch), synth("sweep", 48000, ch), fmt.Sprintf("--app audio --bitrate %d --projection", 24000*ch), "--projection", loss(10, 60+ch), asFloat)
+	}
+	ms("projection_fam3_4ch_fs40_cbr", synth("bursts", 48000, 4), "--app audio --bitrate 128000 --cbr --framesize 40 --projection", "--projection")
+	ms("projection_fam3_9ch_lowdelay", synth("impulses", 48000, 9), "--app lowdelay --bitrate 256000 --projection", "--projection")
+
 	msPad("ms_stereo_coupled", "pad3", "pad200")
 	msPad("ms_51", "pad9")
 	msPad("ms_3ch_omit", "pad40")

@@ -43,7 +43,7 @@ func Isqrt32(val uint32) uint32 {
 
 // C: static OPUS_INLINE opus_int16 celt_ilog2(opus_int32 x)
 func Ilog2(x int32) int16 {
-	celt_assert2(x > 0, "celt_ilog2() only defined for strictly positive numbers")
+	celt_sig_assert(x > 0)
 	return int16(EC_ILOG(uint32(x)) - 1)
 }
 
@@ -239,7 +239,7 @@ func CosNorm(x int32) int16 {
 func Rcp(x int32) int32 {
 	var i int
 	var n, r int16
-	celt_assert2(x > 0, "celt_rcp() only defined for positive values")
+	celt_sig_assert(x > 0)
 	i = int(Ilog2(x))
 	// n is Q15 with range [0,1).
 	n = int16(VSHR32(x, i-15) - 32768)

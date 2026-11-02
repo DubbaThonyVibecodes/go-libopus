@@ -4,14 +4,28 @@ import "math"
 
 // C: src/mlp.c, src/mlp.h
 
-// MLP is the C struct MLP.
-type MLP struct {
-	layers  int
-	topo    []int
-	weights []float32
+// C: #define WEIGHTS_SCALE (1.f/128)
+const WEIGHTS_SCALE float32 = 1.0 / 128
+
+const MAX_NEURONS = 32
+
+// DenseLayer is the C struct DenseLayer.
+type DenseLayer struct {
+	bias          []int8
+	input_weights []int8
+	nb_inputs     int
+	nb_neurons    int
+	sigmoid       int
 }
 
-const MAX_NEURONS = 100
+// GRULayer is the C struct GRULayer.
+type GRULayer struct {
+	bias              []int8
+	input_weights     []int8
+	recurrent_weights []int8
+	nb_inputs         int
+	nb_neurons        int
+}
 
 // C: static OPUS_INLINE float tansig_approx(float x)
 func tansig_approx(x float32) float32 {
@@ -37,31 +51,92 @@ func tansig_approx(x float32) float32 {
 	return sign * y
 }
 
-// C: void mlp_process(const MLP *m, const float *in, float *out)
-func mlp_process(m *MLP, in []float32, out []float32) {
-	var j int
-	var hidden [MAX_NEURONS]float32
-	W := m.weights
-	w := 0 // index of the C `W` pointer
-	// Copy to tmp_in
-	for j = 0; j < m.topo[1]; j++ {
-		var k int
-		var sum float32 = W[w]
-		w++
-		for k = 0; k < m.topo[0]; k++ {
-			sum = sum + float32(in[k]*W[w])
-			w++
+// C: static OPUS_INLINE float sigmoid_approx(float x)
+func sigmoid_approx(x float32) float32 {
+	return 0.5 + float32(0.5*tansig_approx(0.5*x))
+}
+
+// C: static void gemm_accum(float *out, const opus_int8 *weights, int rows, int cols, int col_stride, const float *x)
+func gemm_accum(out []float32, weights []int8, rows int, cols int, col_stride int, x []float32) {
+	var i, j int
+	for i = 0; i < rows; i++ {
+		for j = 0; j < cols; j++ {
+			out[i] += float32(float32(weights[j*col_stride+i]) * x[j])
 		}
-		hidden[j] = tansig_approx(sum)
 	}
-	for j = 0; j < m.topo[2]; j++ {
-		var k int
-		var sum float32 = W[w]
-		w++
-		for k = 0; k < m.topo[1]; k++ {
-			sum = sum + float32(hidden[k]*W[w])
-			w++
+}
+
+// C: void compute_dense(const DenseLayer *layer, float *output, const float *input)
+func compute_dense(layer *DenseLayer, output []float32, input []float32) {
+	var i int
+	var N, M int
+	var stride int
+	M = layer.nb_inputs
+	N = layer.nb_neurons
+	stride = N
+	for i = 0; i < N; i++ {
+		output[i] = float32(layer.bias[i])
+	}
+	gemm_accum(output, layer.input_weights, N, M, stride, input)
+	for i = 0; i < N; i++ {
+		output[i] *= WEIGHTS_SCALE
+	}
+	if layer.sigmoid != 0 {
+		for i = 0; i < N; i++ {
+			output[i] = sigmoid_approx(output[i])
 		}
-		out[j] = tansig_approx(sum)
+	} else {
+		for i = 0; i < N; i++ {
+			output[i] = tansig_approx(output[i])
+		}
+	}
+}
+
+// C: void compute_gru(const GRULayer *gru, float *state, const float *input)
+func compute_gru(gru *GRULayer, state []float32, input []float32) {
+	var i int
+	var N, M int
+	var stride int
+	var tmp [MAX_NEURONS]float32
+	var z [MAX_NEURONS]float32
+	var r [MAX_NEURONS]float32
+	var h [MAX_NEURONS]float32
+	M = gru.nb_inputs
+	N = gru.nb_neurons
+	stride = 3 * N
+	// Compute update gate.
+	for i = 0; i < N; i++ {
+		z[i] = float32(gru.bias[i])
+	}
+	gemm_accum(z[:], gru.input_weights, N, M, stride, input)
+	gemm_accum(z[:], gru.recurrent_weights, N, N, stride, state)
+	for i = 0; i < N; i++ {
+		z[i] = sigmoid_approx(WEIGHTS_SCALE * z[i])
+	}
+
+	// Compute reset gate.
+	for i = 0; i < N; i++ {
+		r[i] = float32(gru.bias[N+i])
+	}
+	gemm_accum(r[:], gru.input_weights[N:], N, M, stride, input)
+	gemm_accum(r[:], gru.recurrent_weights[N:], N, N, stride, state)
+	for i = 0; i < N; i++ {
+		r[i] = sigmoid_approx(WEIGHTS_SCALE * r[i])
+	}
+
+	// Compute output.
+	for i = 0; i < N; i++ {
+		h[i] = float32(gru.bias[2*N+i])
+	}
+	for i = 0; i < N; i++ {
+		tmp[i] = state[i] * r[i]
+	}
+	gemm_accum(h[:], gru.input_weights[2*N:], N, M, stride, input)
+	gemm_accum(h[:], gru.recurrent_weights[2*N:], N, N, stride, tmp[:])
+	for i = 0; i < N; i++ {
+		h[i] = float32(z[i]*state[i]) + float32((1-z[i])*tansig_approx(WEIGHTS_SCALE*h[i]))
+	}
+	for i = 0; i < N; i++ {
+		state[i] = h[i]
 	}
 }

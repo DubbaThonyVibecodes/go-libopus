@@ -115,13 +115,13 @@ func (e *EcCtx) TellFrac() uint32 {
 //
 // C: static OPUS_INLINE opus_uint32 celt_udiv(opus_uint32 n, opus_uint32 d)
 func Udiv(n, d uint32) uint32 {
-	celt_assert(d > 0)
+	celt_sig_assert(d > 0)
 	return n / d
 }
 
 // C: static OPUS_INLINE opus_int32 celt_sudiv(opus_int32 n, opus_int32 d)
 func Sudiv(n, d int32) int32 {
-	celt_assert(d > 0)
+	celt_sig_assert(d > 0)
 	return n / d
 }
 

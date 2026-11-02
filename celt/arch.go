@@ -24,6 +24,18 @@ func celt_assert2(cond bool, message string) {
 	}
 }
 
+// C: celt_sig_assert(cond)
+// Only active with ENABLE_ASSERTIONS (not with ENABLE_HARDENING), so it is a
+// no-op in the configuration we port.
+func celt_sig_assert(cond bool) {
+	if enableAssertions && !cond {
+		panic("celt: signal assertion failed")
+	}
+}
+
+// C: #define celt_isnan(x) 0  (fixed-point build)
+func celt_isnan[T integer](x T) bool { return false }
+
 type integer interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
 }
@@ -131,3 +143,8 @@ func SAT16(x int32) int16 {
 
 // Assert is celt_assert for other packages.
 func Assert(cond bool) { celt_assert(cond) }
+
+// MustSucceed is MUST_SUCCEED(call) for other packages: with ENABLE_HARDENING
+// it is celt_assert((call) == OPUS_OK).
+// C: #define MUST_SUCCEED(call) celt_assert((call) == OPUS_OK)
+func MustSucceed(ret int) { celt_assert(ret == OPUS_OK) }

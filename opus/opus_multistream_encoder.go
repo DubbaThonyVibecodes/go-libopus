@@ -22,18 +22,19 @@ var vorbis_mappings = [8]VorbisLayout{
 	{5, 3, [8]byte{0, 6, 1, 2, 3, 4, 5, 7}}, // 8: 7.1 surround
 }
 
-// C: typedef void (*opus_copy_channel_in_func)(opus_val16 *dst, int dst_stride, const void *src, int src_stride, int src_channel, int frame_size)
-type opus_copy_channel_in_func func(dst []int16, dst_stride int, src any, src_stride int, src_channel int, frame_size int)
+// C: typedef void (*opus_copy_channel_in_func)(opus_val16 *dst, int dst_stride, const void *src, int src_stride, int src_channel, int frame_size, void *user_data)   (opus_private.h)
+type opus_copy_channel_in_func func(dst []int16, dst_stride int, src any, src_stride int, src_channel int, frame_size int, user_data any)
 
-// C: typedef enum { MAPPING_TYPE_NONE, MAPPING_TYPE_SURROUND } MappingType
+// C: typedef enum { MAPPING_TYPE_NONE, MAPPING_TYPE_SURROUND, MAPPING_TYPE_AMBISONICS } MappingType   (opus_private.h)
 type MappingType int
 
 const (
 	MAPPING_TYPE_NONE MappingType = iota
 	MAPPING_TYPE_SURROUND
+	MAPPING_TYPE_AMBISONICS
 )
 
-// OpusMSEncoder is the C struct OpusMSEncoder; the per-stream encoder states
+// OpusMSEncoder is the C struct OpusMSEncoder (opus_private.h); the per-stream encoder states
 // that C places after the struct are the encoders slice (coupled streams
 // first), followed by window_mem[channels*120] and preemph_mem[channels].
 type OpusMSEncoder struct {
@@ -60,6 +61,33 @@ func (st *OpusMSEncoder) ms_get_preemph_mem() []int32 {
 // C: static opus_val32 *ms_get_window_mem(OpusMSEncoder *st)
 func (st *OpusMSEncoder) ms_get_window_mem() []int32 {
 	return st.window_mem
+}
+
+// C: static int validate_ambisonics(int nb_channels, int *nb_streams, int *nb_coupled_streams)
+func validate_ambisonics(nb_channels int, nb_streams *int, nb_coupled_streams *int) int {
+	var order_plus_one int
+	var acn_channels int
+	var nondiegetic_channels int
+
+	if nb_channels < 1 || nb_channels > 227 {
+		return 0
+	}
+
+	order_plus_one = int(celt.Isqrt32(uint32(nb_channels)))
+	acn_channels = order_plus_one * order_plus_one
+	nondiegetic_channels = nb_channels - acn_channels
+
+	if nondiegetic_channels != 0 && nondiegetic_channels != 2 {
+		return 0
+	}
+
+	if nb_streams != nil {
+		*nb_streams = acn_channels + b2i(nondiegetic_channels != 0)
+	}
+	if nb_coupled_streams != nil {
+		*nb_coupled_streams = b2i(nondiegetic_channels != 0)
+	}
+	return 1
 }
 
 // C: static int validate_encoder_layout(const ChannelLayout *layout)
@@ -191,7 +219,7 @@ func SurroundAnalysis(celt_mode *celt.CELTMode, pcm any, bandLogE []int16, mem [
 		var nb_frames int = frame_size / freq_size
 		celt.Assert(nb_frames*freq_size == frame_size)
 		copy(in[:overlap], mem[c*overlap:])
-		copy_channel_in(x, 1, pcm, channels, c, length)
+		copy_channel_in(x, 1, pcm, channels, c, length, nil)
 		preemph := celt_mode.Preemph()
 		celt.Preemphasis(x, in[overlap:], frame_size, 1, upsample, preemph[:], &preemph_mem[c], 0)
 		clear(bandE[:21])
@@ -298,6 +326,10 @@ func MultistreamSurroundEncoderGetSize(channels int, mapping_family int) int32 {
 	} else if mapping_family == 255 {
 		nb_streams = channels
 		nb_coupled_streams = 0
+	} else if mapping_family == 2 {
+		if validate_ambisonics(channels, &nb_streams, &nb_coupled_streams) == 0 {
+			return 0
+		}
 	} else {
 		return 0
 	}
@@ -335,6 +367,10 @@ func (st *OpusMSEncoder) multistreamEncoderInitImpl(Fs int32, channels int, stre
 	}
 	if mapping_type == MAPPING_TYPE_SURROUND &&
 		validate_encoder_layout(&st.layout) == 0 {
+		return OPUS_BAD_ARG
+	}
+	if mapping_type == MAPPING_TYPE_AMBISONICS &&
+		validate_ambisonics(st.layout.nb_channels, nil, nil) == 0 {
 		return OPUS_BAD_ARG
 	}
 	st.encoders = make([]*OpusEncoder, streams)
@@ -412,11 +448,25 @@ func (st *OpusMSEncoder) MultistreamSurroundEncoderInit(Fs int32, channels int, 
 		for i = 0; i < channels; i++ {
 			mapping[i] = byte(i)
 		}
+	} else if mapping_family == 2 {
+		var i int
+		if validate_ambisonics(channels, streams, coupled_streams) == 0 {
+			return OPUS_BAD_ARG
+		}
+		for i = 0; i < (*streams - *coupled_streams); i++ {
+			mapping[i] = byte(i + (*coupled_streams * 2))
+		}
+		for i = 0; i < *coupled_streams*2; i++ {
+			mapping[i+(*streams-*coupled_streams)] = byte(i)
+		}
 	} else {
 		return OPUS_UNIMPLEMENTED
 	}
+
 	if channels > 2 && mapping_family == 1 {
 		mapping_type = MAPPING_TYPE_SURROUND
+	} else if mapping_family == 2 {
+		mapping_type = MAPPING_TYPE_AMBISONICS
 	} else {
 		mapping_type = MAPPING_TYPE_NONE
 	}
@@ -536,13 +586,41 @@ func (st *OpusMSEncoder) surround_rate_allocation(rate []int32, frame_size int, 
 	}
 }
 
+// C: static void ambisonics_rate_allocation(OpusMSEncoder *st, opus_int32 *rate, int frame_size, opus_int32 Fs)
+func (st *OpusMSEncoder) ambisonics_rate_allocation(rate []int32, frame_size int, Fs int32) {
+	var i int
+	var total_rate int32
+	var per_stream_rate int32
+
+	var nb_channels int = st.layout.nb_streams + st.layout.nb_coupled_streams
+
+	if st.bitrate_bps == OPUS_AUTO {
+		total_rate = int32(st.layout.nb_coupled_streams+st.layout.nb_streams)*
+			(Fs+60*Fs/int32(frame_size)) + int32(st.layout.nb_streams)*int32(15000)
+	} else if st.bitrate_bps == OPUS_BITRATE_MAX {
+		total_rate = int32(nb_channels * 320000)
+	} else {
+		total_rate = st.bitrate_bps
+	}
+
+	// Allocate equal number of bits to Ambisonic (uncoupled) and non-diegetic
+	// (coupled) streams
+	per_stream_rate = total_rate / int32(st.layout.nb_streams)
+	for i = 0; i < st.layout.nb_streams; i++ {
+		rate[i] = per_stream_rate
+	}
+}
+
 // C: static opus_int32 rate_allocation(OpusMSEncoder *st, opus_int32 *rate, int frame_size)
 func (st *OpusMSEncoder) rate_allocation(rate []int32, frame_size int) int32 {
 	var i int
 	var rate_sum int32 = 0
 	var Fs int32
 	st.encoders[0].Ctl(OPUS_GET_SAMPLE_RATE_REQUEST, &Fs)
-	{
+
+	if st.mapping_type == MAPPING_TYPE_AMBISONICS {
+		st.ambisonics_rate_allocation(rate, frame_size, Fs)
+	} else {
 		st.surround_rate_allocation(rate, frame_size, Fs)
 	}
 
@@ -556,8 +634,8 @@ func (st *OpusMSEncoder) rate_allocation(rate []int32, frame_size int) int32 {
 // Max size in case the encoder decides to return six frames (6 x 20 ms = 120 ms)
 const MS_FRAME_TMP = (6*1275 + 12)
 
-// C: static int opus_multistream_encode_native(OpusMSEncoder *st, opus_copy_channel_in_func copy_channel_in, const void *pcm, int analysis_frame_size, unsigned char *data, opus_int32 max_data_bytes, int lsb_depth, downmix_func downmix, int float_api)
-func (st *OpusMSEncoder) multistreamEncodeNative(copy_channel_in opus_copy_channel_in_func, pcm any, analysis_frame_size int, data []byte, max_data_bytes int32, lsb_depth int, downmix downmix_func, float_api int) int {
+// C: int opus_multistream_encode_native(OpusMSEncoder *st, opus_copy_channel_in_func copy_channel_in, const void *pcm, int analysis_frame_size, unsigned char *data, opus_int32 max_data_bytes, int lsb_depth, downmix_func downmix, int float_api, void *user_data)
+func (st *OpusMSEncoder) multistreamEncodeNative(copy_channel_in opus_copy_channel_in_func, pcm any, analysis_frame_size int, data []byte, max_data_bytes int32, lsb_depth int, downmix downmix_func, float_api int, user_data any) int {
 	var Fs int32
 	var s int
 	var tot_size int
@@ -636,6 +714,8 @@ func (st *OpusMSEncoder) multistreamEncodeNative(copy_channel_in opus_copy_chann
 				enc.Ctl(OPUS_SET_FORCE_MODE_REQUEST, int32(MODE_CELT_ONLY))
 				enc.Ctl(OPUS_SET_FORCE_CHANNELS_REQUEST, int32(2))
 			}
+		} else if st.mapping_type == MAPPING_TYPE_AMBISONICS {
+			enc.Ctl(OPUS_SET_FORCE_MODE_REQUEST, int32(MODE_CELT_ONLY))
 		}
 	}
 
@@ -655,9 +735,9 @@ func (st *OpusMSEncoder) multistreamEncodeNative(copy_channel_in opus_copy_chann
 			left = get_left_channel(&st.layout, s, -1)
 			right = get_right_channel(&st.layout, s, -1)
 			copy_channel_in(buf, 2,
-				pcm, st.layout.nb_channels, left, frame_size)
+				pcm, st.layout.nb_channels, left, frame_size, user_data)
 			copy_channel_in(buf[1:], 2,
-				pcm, st.layout.nb_channels, right, frame_size)
+				pcm, st.layout.nb_channels, right, frame_size, user_data)
 			if st.mapping_type == MAPPING_TYPE_SURROUND {
 				for i = 0; i < 21; i++ {
 					bandLogE[i] = bandSMR[21*left+i]
@@ -670,7 +750,7 @@ func (st *OpusMSEncoder) multistreamEncodeNative(copy_channel_in opus_copy_chann
 			var i int
 			chanIdx := get_mono_channel(&st.layout, s, -1)
 			copy_channel_in(buf, 1,
-				pcm, st.layout.nb_channels, chanIdx, frame_size)
+				pcm, st.layout.nb_channels, chanIdx, frame_size, user_data)
 			if st.mapping_type == MAPPING_TYPE_SURROUND {
 				for i = 0; i < 21; i++ {
 					bandLogE[i] = bandSMR[21*chanIdx+i]
@@ -726,19 +806,21 @@ func (st *OpusMSEncoder) multistreamEncodeNative(copy_channel_in opus_copy_chann
 	return tot_size
 }
 
-// C: static void opus_copy_channel_in_float(opus_val16 *dst, int dst_stride, const void *src, int src_stride, int src_channel, int frame_size)
-func opus_copy_channel_in_float(dst []int16, dst_stride int, src any, src_stride int, src_channel int, frame_size int) {
+// C: static void opus_copy_channel_in_float(opus_val16 *dst, int dst_stride, const void *src, int src_stride, int src_channel, int frame_size, void *user_data)
+func opus_copy_channel_in_float(dst []int16, dst_stride int, src any, src_stride int, src_channel int, frame_size int, user_data any) {
 	float_src := src.([]float32)
 	var i int32
+	_ = user_data
 	for i = 0; i < int32(frame_size); i++ {
 		dst[i*int32(dst_stride)] = FLOAT2INT16(float_src[i*int32(src_stride)+int32(src_channel)])
 	}
 }
 
-// C: static void opus_copy_channel_in_short(opus_val16 *dst, int dst_stride, const void *src, int src_stride, int src_channel, int frame_size)
-func opus_copy_channel_in_short(dst []int16, dst_stride int, src any, src_stride int, src_channel int, frame_size int) {
+// C: static void opus_copy_channel_in_short(opus_val16 *dst, int dst_stride, const void *src, int src_stride, int src_channel, int frame_size, void *user_data)
+func opus_copy_channel_in_short(dst []int16, dst_stride int, src any, src_stride int, src_channel int, frame_size int, user_data any) {
 	short_src := src.([]int16)
 	var i int32
+	_ = user_data
 	for i = 0; i < int32(frame_size); i++ {
 		dst[i*int32(dst_stride)] = short_src[i*int32(src_stride)+int32(src_channel)]
 	}
@@ -747,17 +829,19 @@ func opus_copy_channel_in_short(dst []int16, dst_stride int, src any, src_stride
 // C: int opus_multistream_encode(OpusMSEncoder *st, const opus_val16 *pcm, int frame_size, unsigned char *data, opus_int32 max_data_bytes)   (FIXED_POINT)
 func (st *OpusMSEncoder) MultistreamEncode(pcm []int16, frame_size int, data []byte, max_data_bytes int32) int {
 	return st.multistreamEncodeNative(opus_copy_channel_in_short,
-		pcm, frame_size, data, max_data_bytes, 16, DownmixInt, 0)
+		pcm, frame_size, data, max_data_bytes, 16, DownmixInt, 0, nil)
 }
 
 // C: int opus_multistream_encode_float(OpusMSEncoder *st, const float *pcm, int frame_size, unsigned char *data, opus_int32 max_data_bytes)   (FIXED_POINT)
 func (st *OpusMSEncoder) MultistreamEncodeFloat(pcm []float32, frame_size int, data []byte, max_data_bytes int32) int {
 	return st.multistreamEncodeNative(opus_copy_channel_in_float,
-		pcm, frame_size, data, max_data_bytes, 16, DownmixFloat, 1)
+		pcm, frame_size, data, max_data_bytes, 16, DownmixFloat, 1, nil)
 }
 
-// Ctl is the C opus_multistream_encoder_ctl.
+// Ctl is the C opus_multistream_encoder_ctl_va_list; the variadic Go form is
+// also what opus_multistream_encoder_ctl(st, request, ...) wraps.
 //
+// C: int opus_multistream_encoder_ctl_va_list(OpusMSEncoder *st, int request, va_list ap)
 // C: int opus_multistream_encoder_ctl(OpusMSEncoder *st, int request, ...)
 func (st *OpusMSEncoder) Ctl(request int, args ...any) int {
 	var ret int = OPUS_OK
@@ -861,15 +945,13 @@ func (st *OpusMSEncoder) Ctl(request int, args ...any) int {
 			return OPUS_BAD_ARG
 		}
 		if stream_id < 0 || int(stream_id) >= st.layout.nb_streams {
-			ret = OPUS_BAD_ARG
+			return OPUS_BAD_ARG
 		}
 		value, ok := args[1].(**OpusEncoder)
 		if !ok || value == nil {
 			return OPUS_BAD_ARG
 		}
-		if ret == OPUS_OK {
-			*value = st.encoders[stream_id]
-		}
+		*value = st.encoders[stream_id]
 	case OPUS_SET_EXPERT_FRAME_DURATION_REQUEST:
 		value, ok := argInt32(args, 0)
 		if !ok {

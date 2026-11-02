@@ -378,6 +378,11 @@ func (e *Encoder) PredictionDisabled() bool {
 	return e.getInt(opus.OPUS_GET_PREDICTION_DISABLED_REQUEST) != 0
 }
 
+// InDTX reports whether the encoder is currently in a DTX period, i.e. the
+// last packet was a DTX packet and no activity was detected since
+// (libopus 1.3+).
+func (e *Encoder) InDTX() bool { return e.getInt(opus.OPUS_GET_IN_DTX_REQUEST) != 0 }
+
 // SetPhaseInversionDisabled disables the use of phase inversion for
 // intensity stereo, improving the quality of mono downmixes at the cost
 // of stereo quality (libopus 1.2+).
@@ -436,7 +441,7 @@ func (d *Decoder) Decode(packet []byte, pcm []int16, fec bool) (int, error) {
 	if len(pcm)%d.channels != 0 {
 		return 0, fmt.Errorf("opus: pcm length %d is not a multiple of %d channels", len(pcm), d.channels)
 	}
-	n := d.st.Decode(packet, int32(len(packet)), pcm, len(pcm)/d.channels, int(b2i(fec)))
+	n := d.st.Decode(packet, int32(len(packet)), pcm, len(pcm)/d.channels, b2iInt(fec))
 	if n < 0 {
 		return 0, Error(n)
 	}
@@ -448,7 +453,7 @@ func (d *Decoder) DecodeFloat(packet []byte, pcm []float32, fec bool) (int, erro
 	if len(pcm)%d.channels != 0 {
 		return 0, fmt.Errorf("opus: pcm length %d is not a multiple of %d channels", len(pcm), d.channels)
 	}
-	n := d.st.DecodeFloat(packet, int32(len(packet)), pcm, len(pcm)/d.channels, int(b2i(fec)))
+	n := d.st.DecodeFloat(packet, int32(len(packet)), pcm, len(pcm)/d.channels, b2iInt(fec))
 	if n < 0 {
 		return 0, Error(n)
 	}
@@ -745,6 +750,25 @@ func NewMultistreamEncoder(sampleRate int, layout Layout, app Application) (*Mul
 // NewSurroundEncoder creates a multistream encoder for a standard surround
 // layout (mapping family 0 for 1-2 channels, 1 for 1-8, 255 for independent
 // mono streams) and returns the layout it chose.
+// AmbisonicsLayout returns the channel mapping family 2 layout for an
+// ambisonics signal of the given channel count (libopus 1.3+): the
+// (order+1)^2 ACN channels are mono streams, optionally followed by a
+// non-diegetic stereo pair as one coupled stream.
+func AmbisonicsLayout(channels int) (Layout, error) {
+	var streams, coupled int
+	mapping := make([]byte, max(channels, 1))
+	var code int
+	st := opus.MultistreamSurroundEncoderCreate(48000, channels, 2, &streams, &coupled, mapping, opus.OPUS_APPLICATION_AUDIO, &code)
+	if st == nil {
+		return Layout{}, errOf(code)
+	}
+	return Layout{Channels: channels, Streams: streams, CoupledStreams: coupled, Mapping: mapping[:channels]}, nil
+}
+
+// NewSurroundEncoder creates a multistream encoder for a standard mapping
+// family: 0 (mono/stereo), 1 (Vorbis surround, up to 8 channels) or 2
+// (ambisonics, libopus 1.3+). The layout the encoder chose is available
+// through Layout and is what the decoder side needs.
 func NewSurroundEncoder(sampleRate, channels, mappingFamily int, app Application) (*MultistreamEncoder, error) {
 	var streams, coupled, code int
 	mapping := make([]byte, max(channels, 1))
@@ -870,7 +894,7 @@ func (d *MultistreamDecoder) Decode(packet []byte, pcm []int16, fec bool) (int, 
 	if len(pcm)%ch != 0 {
 		return 0, fmt.Errorf("opus: pcm length %d is not a multiple of %d channels", len(pcm), ch)
 	}
-	n := d.st.MultistreamDecode(packet, int32(len(packet)), pcm, len(pcm)/ch, int(b2i(fec)))
+	n := d.st.MultistreamDecode(packet, int32(len(packet)), pcm, len(pcm)/ch, b2iInt(fec))
 	if n < 0 {
 		return 0, Error(n)
 	}
@@ -883,7 +907,7 @@ func (d *MultistreamDecoder) DecodeFloat(packet []byte, pcm []float32, fec bool)
 	if len(pcm)%ch != 0 {
 		return 0, fmt.Errorf("opus: pcm length %d is not a multiple of %d channels", len(pcm), ch)
 	}
-	n := d.st.MultistreamDecodeFloat(packet, int32(len(packet)), pcm, len(pcm)/ch, int(b2i(fec)))
+	n := d.st.MultistreamDecodeFloat(packet, int32(len(packet)), pcm, len(pcm)/ch, b2iInt(fec))
 	if n < 0 {
 		return 0, Error(n)
 	}
@@ -941,4 +965,156 @@ func (d *MultistreamDecoder) Stream(i int) (*Decoder, error) {
 		ch = 2
 	}
 	return &Decoder{st: st, rate: d.rate, channels: ch}, nil
+}
+
+// ---- Projection (ambisonics mapping family 3, libopus 1.3+) --------------
+
+// ProjectionEncoder encodes ambisonics audio with a mixing matrix (channel
+// mapping family 3). The decoder needs the DemixingMatrix bytes, which are
+// transmitted out of band (e.g. in the Ogg Opus header).
+type ProjectionEncoder struct {
+	st       *opus.OpusProjectionEncoder
+	channels int
+	streams  int
+	coupled  int
+	rate     int
+}
+
+// NewProjectionEncoder creates a projection encoder for an ambisonics
+// signal of channels channels ((order+1)^2, optionally plus 2 non-diegetic).
+func NewProjectionEncoder(sampleRate, channels int, app Application) (*ProjectionEncoder, error) {
+	var streams, coupled, code int
+	st := opus.ProjectionAmbisonicsEncoderCreate(int32(sampleRate), channels, 3, &streams, &coupled, int(app), &code)
+	if st == nil {
+		return nil, errOf(code)
+	}
+	return &ProjectionEncoder{st: st, channels: channels, streams: streams, coupled: coupled, rate: sampleRate}, nil
+}
+
+// Streams returns the number of streams and coupled streams in the packets.
+func (e *ProjectionEncoder) Streams() (streams, coupled int) { return e.streams, e.coupled }
+
+// DemixingMatrix returns the demixing matrix the decoder needs, as the
+// little-endian int16 bytes defined by the Ogg Opus specification.
+func (e *ProjectionEncoder) DemixingMatrix() ([]byte, error) {
+	var size int32
+	if code := e.st.Ctl(opus.OPUS_PROJECTION_GET_DEMIXING_MATRIX_SIZE_REQUEST, &size); code != opus.OPUS_OK {
+		return nil, Error(code)
+	}
+	m := make([]byte, size)
+	if code := e.st.Ctl(opus.OPUS_PROJECTION_GET_DEMIXING_MATRIX_REQUEST, m, size); code != opus.OPUS_OK {
+		return nil, Error(code)
+	}
+	return m, nil
+}
+
+// DemixingMatrixGain returns the gain (Q8 dB) that goes with DemixingMatrix.
+func (e *ProjectionEncoder) DemixingMatrixGain() int {
+	var v int32
+	e.st.Ctl(opus.OPUS_PROJECTION_GET_DEMIXING_MATRIX_GAIN_REQUEST, &v)
+	return int(v)
+}
+
+// Encode encodes one frame of interleaved int16 PCM (all channels).
+func (e *ProjectionEncoder) Encode(pcm []int16, out []byte) (int, error) {
+	if len(pcm)%e.channels != 0 {
+		return 0, ErrBadArg
+	}
+	n := e.st.ProjectionEncode(pcm, len(pcm)/e.channels, out, int32(len(out)))
+	if n < 0 {
+		return 0, Error(n)
+	}
+	return n, nil
+}
+
+// EncodeFloat encodes one frame of interleaved float32 PCM.
+func (e *ProjectionEncoder) EncodeFloat(pcm []float32, out []byte) (int, error) {
+	if len(pcm)%e.channels != 0 {
+		return 0, ErrBadArg
+	}
+	n := e.st.ProjectionEncodeFloat(pcm, len(pcm)/e.channels, out, int32(len(out)))
+	if n < 0 {
+		return 0, Error(n)
+	}
+	return n, nil
+}
+
+// Ctl is the raw opus_projection_encoder_ctl escape hatch; requests that are
+// not projection-specific are forwarded to every stream encoder.
+func (e *ProjectionEncoder) Ctl(request int, args ...any) error {
+	return errOf(e.st.Ctl(request, args...))
+}
+
+// SetBitrate sets the total bitrate in bits per second.
+func (e *ProjectionEncoder) SetBitrate(bps int) error {
+	return e.Ctl(opus.OPUS_SET_BITRATE_REQUEST, int32(bps))
+}
+
+// SetComplexity sets the encoder complexity (0-10) of every stream.
+func (e *ProjectionEncoder) SetComplexity(c int) error {
+	return e.Ctl(opus.OPUS_SET_COMPLEXITY_REQUEST, int32(c))
+}
+
+// SetVBR enables or disables variable bitrate in every stream.
+func (e *ProjectionEncoder) SetVBR(on bool) error { return e.Ctl(opus.OPUS_SET_VBR_REQUEST, b2i(on)) }
+
+// Reset resets every stream encoder.
+func (e *ProjectionEncoder) Reset() error { return e.Ctl(opus.OPUS_RESET_STATE) }
+
+// ProjectionDecoder decodes mapping family 3 packets with a demixing matrix.
+type ProjectionDecoder struct {
+	st       *opus.OpusProjectionDecoder
+	channels int
+	rate     int
+}
+
+// NewProjectionDecoder creates a projection decoder; streams, coupled and
+// demixingMatrix come from the encoder side (ProjectionEncoder.Streams and
+// DemixingMatrix, or the Ogg Opus header).
+func NewProjectionDecoder(sampleRate, channels, streams, coupled int, demixingMatrix []byte) (*ProjectionDecoder, error) {
+	var code int
+	st := opus.ProjectionDecoderCreate(int32(sampleRate), channels, streams, coupled, demixingMatrix, int32(len(demixingMatrix)), &code)
+	if st == nil {
+		return nil, errOf(code)
+	}
+	return &ProjectionDecoder{st: st, channels: channels, rate: sampleRate}, nil
+}
+
+// Decode decodes a packet (nil for loss concealment) into interleaved
+// int16 PCM and returns the number of samples per channel.
+func (d *ProjectionDecoder) Decode(packet []byte, pcm []int16, fec bool) (int, error) {
+	n := d.st.ProjectionDecode(packet, int32(len(packet)), pcm, len(pcm)/d.channels, b2iInt(fec))
+	if n < 0 {
+		return 0, Error(n)
+	}
+	return n, nil
+}
+
+// DecodeFloat is Decode with float32 output.
+func (d *ProjectionDecoder) DecodeFloat(packet []byte, pcm []float32, fec bool) (int, error) {
+	n := d.st.ProjectionDecodeFloat(packet, int32(len(packet)), pcm, len(pcm)/d.channels, b2iInt(fec))
+	if n < 0 {
+		return 0, Error(n)
+	}
+	return n, nil
+}
+
+// Ctl is the raw opus_projection_decoder_ctl escape hatch.
+func (d *ProjectionDecoder) Ctl(request int, args ...any) error {
+	return errOf(d.st.Ctl(request, args...))
+}
+
+// SetGain sets the output gain (Q8 dB) of every stream.
+func (d *ProjectionDecoder) SetGain(q8dB int) error {
+	return d.Ctl(opus.OPUS_SET_GAIN_REQUEST, int32(q8dB))
+}
+
+// Reset resets every stream decoder.
+func (d *ProjectionDecoder) Reset() error { return d.Ctl(opus.OPUS_RESET_STATE) }
+
+func b2iInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

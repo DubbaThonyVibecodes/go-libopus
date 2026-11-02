@@ -21,11 +21,12 @@
 #include <stdint.h>
 #include "opus.h"
 #include "opus_multistream.h"
+#include "opus_projection.h"
 #include "opus_private.h"
 
 #define MAX_PACKET 1500
 #define MAX_FRAME (960*6)
-#define MAX_CH 8
+#define MAX_CH 18
 
 static void die(const char *m) { fprintf(stderr, "gen: %s\n", m); exit(2); }
 static void dief(const char *m, const char *a) { fprintf(stderr, "gen: %s: %s\n", m, a); exit(2); }
@@ -271,8 +272,24 @@ static int parse_sched(char *s, struct sched *out, int rate) {
 
 /* Generic encoder-ish control applied to either an OpusEncoder or an
  * OpusMSEncoder (which forwards to all its streams). */
-#define ENC_CTL(st, ms, ...) ((ms) ? opus_multistream_encoder_ctl((OpusMSEncoder*)(st), __VA_ARGS__) : opus_encoder_ctl((OpusEncoder*)(st), __VA_ARGS__))
-#define DEC_CTL(st, ms, ...) ((ms) ? opus_multistream_decoder_ctl((OpusMSDecoder*)(st), __VA_ARGS__) : opus_decoder_ctl((OpusDecoder*)(st), __VA_ARGS__))
+/* g_proj: the state is an OpusProjectionEncoder/Decoder (libopus 1.3 ambisonics, mapping family 3) */
+static int g_proj = 0;
+#define ENC_CTL(st, ms, ...) (g_proj ? opus_projection_encoder_ctl((OpusProjectionEncoder*)(st), __VA_ARGS__) : (ms) ? opus_multistream_encoder_ctl((OpusMSEncoder*)(st), __VA_ARGS__) : opus_encoder_ctl((OpusEncoder*)(st), __VA_ARGS__))
+#define DEC_CTL(st, ms, ...) (g_proj ? opus_projection_decoder_ctl((OpusProjectionDecoder*)(st), __VA_ARGS__) : (ms) ? opus_multistream_decoder_ctl((OpusMSDecoder*)(st), __VA_ARGS__) : opus_decoder_ctl((OpusDecoder*)(st), __VA_ARGS__))
+
+/* Demixing matrix of the projection (family 3) encoder for this channel count; it is
+ * deterministic, so the decoder side regenerates it instead of carrying it out of band. */
+static int get_demixing_matrix(int rate, int ch, int app, unsigned char **matrix, opus_int32 *size, int *streams, int *coupled, int *gain) {
+   int err;
+   OpusProjectionEncoder *pe = opus_projection_ambisonics_encoder_create(rate, ch, 3, streams, coupled, app, &err);
+   if (err != OPUS_OK) dief("projection create", opus_strerror(err));
+   if (opus_projection_encoder_ctl(pe, OPUS_PROJECTION_GET_DEMIXING_MATRIX_SIZE(size)) != OPUS_OK) die("matrix size");
+   *matrix = malloc(*size);
+   if (opus_projection_encoder_ctl(pe, OPUS_PROJECTION_GET_DEMIXING_MATRIX(*matrix, *size)) != OPUS_OK) die("matrix");
+   if (opus_projection_encoder_ctl(pe, OPUS_PROJECTION_GET_DEMIXING_MATRIX_GAIN(gain)) != OPUS_OK) die("matrix gain");
+   opus_projection_encoder_destroy(pe);
+   return 0;
+}
 
 static void apply_sched(void *enc, int ms, const struct sched *s, int *frame_size, int *framedur, int rate) {
    int r = OPUS_OK;
@@ -365,6 +382,7 @@ static int cmd_enc(int argc, char **argv) {
       else if (!strcmp(a, "--streams")) { ms = 1; streams = atoi(NEXT); }
       else if (!strcmp(a, "--coupled")) { ms = 1; coupled = atoi(NEXT); }
       else if (!strcmp(a, "--family")) { ms = 1; family = atoi(NEXT); }
+      else if (!strcmp(a, "--projection")) { ms = 1; g_proj = 1; family = 3; }
       else if (!strcmp(a, "--mapping")) {
          char *v = NEXT, *t = strtok(v, ",");
          ms = 1;
@@ -386,7 +404,17 @@ static int cmd_enc(int argc, char **argv) {
    fpkt = fopen(pkt_path, "wb"); if (!fpkt) dief("open", pkt_path);
    ftr = fopen(trace_path, "w"); if (!ftr) dief("open", trace_path);
 
-   if (ms) {
+   if (g_proj) {
+      int s2, c2, gain, i2; unsigned char *matrix; opus_int32 msize;
+      enc = opus_projection_ambisonics_encoder_create(rate, ch, family, &s2, &c2, app, &err);
+      if (err != OPUS_OK) dief("projection create", opus_strerror(err));
+      streams = s2; coupled = c2;
+      get_demixing_matrix(rate, ch, app, &matrix, &msize, &s2, &c2, &gain);
+      fprintf(ftr, "H projection family=%d streams=%d coupled=%d gain=%d size=%d matrix=", family, streams, coupled, gain, (int)msize);
+      for (i2 = 0; i2 < msize; i2++) fprintf(ftr, "%02x", matrix[i2]);
+      fprintf(ftr, "\n");
+      free(matrix);
+   } else if (ms) {
       if (family >= 0) {
          int s2, c2; unsigned char map2[MAX_CH];
          enc = opus_multistream_surround_encoder_create(rate, ch, family, &s2, &c2, map2, app, &err);
@@ -480,7 +508,8 @@ static int cmd_enc(int argc, char **argv) {
          for (i = read*ch; i < frame_size*ch; i++) in[i] = 0;
          stop = 1;
       }
-      if (ms) len = opus_multistream_encode((OpusMSEncoder*)enc, in, frame_size, data, maxpayload);
+      if (g_proj) len = opus_projection_encode((OpusProjectionEncoder*)enc, in, frame_size, data, maxpayload);
+      else if (ms) len = opus_multistream_encode((OpusMSEncoder*)enc, in, frame_size, data, maxpayload);
       else len = opus_encode((OpusEncoder*)enc, in, frame_size, data, maxpayload);
       if (len < 0) { fprintf(ftr, "E i=%d err=%d\n", count, len); fprintf(stderr, "gen: opus_encode: %s\n", opus_strerror(len)); break; }
       if (sweep_bps) {
@@ -495,6 +524,7 @@ static int cmd_enc(int argc, char **argv) {
       if (len && fwrite(data, 1, len, fpkt) != (size_t)len) die("write");
       fprintf(ftr, "E i=%d fs=%d len=%d rng=%08x bw=%d", count, frame_size, len, (unsigned)rng, ebw);
       if (len > 0) fprintf(ftr, " toc=%02x", data[0]);
+      if (!ms) { int indtx; SET(OPUS_GET_IN_DTX(&indtx)); fprintf(ftr, " indtx=%d", indtx); }
       remaining = 0;
       if (framedur != OPUS_FRAMESIZE_ARG) {
          /* like opus_demo: the encoder may consume fewer samples than offered; keep the rest */
@@ -510,7 +540,7 @@ static int cmd_enc(int argc, char **argv) {
       count++;
    }
 #undef SET
-   if (ms) opus_multistream_encoder_destroy((OpusMSEncoder*)enc); else opus_encoder_destroy((OpusEncoder*)enc);
+   if (g_proj) opus_projection_encoder_destroy((OpusProjectionEncoder*)enc); else if (ms) opus_multistream_encoder_destroy((OpusMSEncoder*)enc); else opus_encoder_destroy((OpusEncoder*)enc);
    fclose(fin); fclose(fpkt); fclose(ftr); free(in); free(data);
    return 0;
 }
@@ -538,6 +568,7 @@ static int cmd_dec(int argc, char **argv) {
       else if (!strcmp(a, "--skip")) skip = atoi(NEXT);
       else if (!strcmp(a, "--float")) use_float = 1;
       else if (!strcmp(a, "--nophaseinv")) nophaseinv = 1;
+      else if (!strcmp(a, "--projection")) { ms = 1; g_proj = 1; }
       else if (!strcmp(a, "--seed")) lcg_state = (uint32_t)strtoul(NEXT, NULL, 0);
       else if (!strcmp(a, "--sched")) nsched = parse_sched(NEXT, sched, rate);
       else if (!strcmp(a, "--streams")) { ms = 1; streams = atoi(NEXT); }
@@ -560,7 +591,13 @@ static int cmd_dec(int argc, char **argv) {
    ftr = fopen(trace_path, "w"); if (!ftr) dief("open", trace_path);
    if (out_path) { fout = fopen(out_path, "wb"); if (!fout) dief("open", out_path); }
 
-   if (ms) {
+   if (g_proj) {
+      int gain; unsigned char *matrix; opus_int32 msize;
+      get_demixing_matrix(rate, ch, OPUS_APPLICATION_AUDIO, &matrix, &msize, &streams, &coupled, &gain);
+      dec = opus_projection_decoder_create(rate, ch, streams, coupled, matrix, msize, &err);
+      if (err != OPUS_OK) dief("projection dec create", opus_strerror(err));
+      free(matrix);
+   } else if (ms) {
       if (nmap != ch) die("mapping length must equal channels");
       dec = opus_multistream_decoder_create(rate, ch, streams, coupled, mapping, &err);
       if (err != OPUS_OK) dief("ms create", opus_strerror(err));
@@ -616,11 +653,13 @@ static int cmd_dec(int argc, char **argv) {
       }
       if (pkt == NULL) pktlen = 0;
       if (use_float) {
-         if (ms) n = opus_multistream_decode_float((OpusMSDecoder*)dec, pkt, pktlen, outf, n, decode_fec);
+         if (g_proj) n = opus_projection_decode_float((OpusProjectionDecoder*)dec, pkt, pktlen, outf, n, decode_fec);
+         else if (ms) n = opus_multistream_decode_float((OpusMSDecoder*)dec, pkt, pktlen, outf, n, decode_fec);
          else n = opus_decode_float((OpusDecoder*)dec, pkt, pktlen, outf, n, decode_fec);
          if (n > 0) for (i = 0; i < n*ch; i++) { float x = outf[i]*32768.f; int v = (int)(x < 0 ? x - 0.5f : x + 0.5f); if (v > 32767) v = 32767; if (v < -32768) v = -32768; out[i] = (opus_int16)v; }
       } else {
-         if (ms) n = opus_multistream_decode((OpusMSDecoder*)dec, pkt, pktlen, out, n, decode_fec);
+         if (g_proj) n = opus_projection_decode((OpusProjectionDecoder*)dec, pkt, pktlen, out, n, decode_fec);
+         else if (ms) n = opus_multistream_decode((OpusMSDecoder*)dec, pkt, pktlen, out, n, decode_fec);
          else n = opus_decode((OpusDecoder*)dec, pkt, pktlen, out, n, decode_fec);
       }
       SET(OPUS_GET_FINAL_RANGE(&drng));
@@ -640,7 +679,7 @@ static int cmd_dec(int argc, char **argv) {
    }
 #undef SET
 #undef GET_DUR
-   if (ms) opus_multistream_decoder_destroy((OpusMSDecoder*)dec); else opus_decoder_destroy((OpusDecoder*)dec);
+   if (g_proj) opus_projection_decoder_destroy((OpusProjectionDecoder*)dec); else if (ms) opus_multistream_decoder_destroy((OpusMSDecoder*)dec); else opus_decoder_destroy((OpusDecoder*)dec);
    fclose(fpkt); fclose(ftr); if (fout) fclose(fout);
    free(data[0]); free(data[1]); free(out); free(outf);
    return 0;

@@ -37,6 +37,22 @@ type OpusDecoder struct {
 	celt_dec celt.CELTDecoder
 }
 
+// C: static void validate_opus_decoder(OpusDecoder *st)   (ENABLE_HARDENING)
+func validate_opus_decoder(st *OpusDecoder) {
+	celt.Assert(st.channels == 1 || st.channels == 2)
+	celt.Assert(st.Fs == 48000 || st.Fs == 24000 || st.Fs == 16000 || st.Fs == 12000 || st.Fs == 8000)
+	celt.Assert(st.DecControl.API_sampleRate == st.Fs)
+	celt.Assert(st.DecControl.InternalSampleRate == 0 || st.DecControl.InternalSampleRate == 16000 || st.DecControl.InternalSampleRate == 12000 || st.DecControl.InternalSampleRate == 8000)
+	celt.Assert(int(st.DecControl.NChannelsAPI) == st.channels)
+	celt.Assert(st.DecControl.NChannelsInternal == 0 || st.DecControl.NChannelsInternal == 1 || st.DecControl.NChannelsInternal == 2)
+	celt.Assert(st.DecControl.PayloadSize_ms == 0 || st.DecControl.PayloadSize_ms == 10 || st.DecControl.PayloadSize_ms == 20 || st.DecControl.PayloadSize_ms == 40 || st.DecControl.PayloadSize_ms == 60)
+	// #ifdef OPUS_ARCHMASK: not defined in this build.
+	celt.Assert(st.stream_channels == 1 || st.stream_channels == 2)
+}
+
+// C: #define VALIDATE_OPUS_DECODER(st) validate_opus_decoder(st)
+func VALIDATE_OPUS_DECODER(st *OpusDecoder) { validate_opus_decoder(st) }
+
 // DecoderGetSize returns the C allocation size (for API parity).
 //
 // C: int opus_decoder_get_size(int channels)
@@ -159,6 +175,7 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 
 	var audiosize int
 	var mode int
+	var bandwidth int
 	var transition int = 0
 	var start_band int
 	var redundancy int = 0
@@ -188,10 +205,12 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 	if data != nil {
 		audiosize = st.frame_size
 		mode = st.mode
+		bandwidth = st.bandwidth
 		dec.DecInit(data, uint32(length))
 	} else {
 		audiosize = frame_size
 		mode = st.prev_mode
+		bandwidth = 0
 
 		if mode == 0 {
 			// If we haven't got any packet yet, all we can do is return zeros
@@ -281,11 +300,11 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 		if data != nil {
 			st.DecControl.NChannelsInternal = int32(st.stream_channels)
 			if mode == MODE_SILK_ONLY {
-				if st.bandwidth == OPUS_BANDWIDTH_NARROWBAND {
+				if bandwidth == OPUS_BANDWIDTH_NARROWBAND {
 					st.DecControl.InternalSampleRate = 8000
-				} else if st.bandwidth == OPUS_BANDWIDTH_MEDIUMBAND {
+				} else if bandwidth == OPUS_BANDWIDTH_MEDIUMBAND {
 					st.DecControl.InternalSampleRate = 12000
-				} else if st.bandwidth == OPUS_BANDWIDTH_WIDEBAND {
+				} else if bandwidth == OPUS_BANDWIDTH_WIDEBAND {
 					st.DecControl.InternalSampleRate = 16000
 				} else {
 					st.DecControl.InternalSampleRate = 16000
@@ -361,23 +380,6 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 		start_band = 17
 	}
 
-	{
-		endband := 21
-
-		switch st.bandwidth {
-		case OPUS_BANDWIDTH_NARROWBAND:
-			endband = 13
-		case OPUS_BANDWIDTH_MEDIUMBAND, OPUS_BANDWIDTH_WIDEBAND:
-			endband = 17
-		case OPUS_BANDWIDTH_SUPERWIDEBAND:
-			endband = 19
-		case OPUS_BANDWIDTH_FULLBAND:
-			endband = 21
-		}
-		celt_dec.Ctl(celt.CELT_SET_END_BAND_REQUEST, int32(endband))
-		celt_dec.Ctl(celt.CELT_SET_CHANNELS_REQUEST, int32(st.stream_channels))
-	}
-
 	if redundancy != 0 {
 		transition = 0
 		pcm_transition_silk_size = ALLOC_NONE
@@ -390,6 +392,25 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 		st.decodeFrame(nil, 0, pcm_transition, IMIN(F5, audiosize), 0)
 	}
 
+	if bandwidth != 0 {
+		endband := 21
+
+		switch bandwidth {
+		case OPUS_BANDWIDTH_NARROWBAND:
+			endband = 13
+		case OPUS_BANDWIDTH_MEDIUMBAND, OPUS_BANDWIDTH_WIDEBAND:
+			endband = 17
+		case OPUS_BANDWIDTH_SUPERWIDEBAND:
+			endband = 19
+		case OPUS_BANDWIDTH_FULLBAND:
+			endband = 21
+		default:
+			celt.Assert(false)
+		}
+		celt.MustSucceed(celt_dec.Ctl(celt.CELT_SET_END_BAND_REQUEST, int32(endband)))
+	}
+	celt.MustSucceed(celt_dec.Ctl(celt.CELT_SET_CHANNELS_REQUEST, int32(st.stream_channels)))
+
 	// Only allocation memory for redundancy if/when needed
 	if redundancy != 0 {
 		redundant_audio_size = F5 * st.channels
@@ -400,20 +421,20 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 
 	// 5 ms redundant frame for CELT->SILK
 	if redundancy != 0 && celt_to_silk != 0 {
-		celt_dec.Ctl(celt.CELT_SET_START_BAND_REQUEST, int32(0))
+		celt.MustSucceed(celt_dec.Ctl(celt.CELT_SET_START_BAND_REQUEST, int32(0)))
 		celt_dec.DecodeWithEc(data[length:], redundancy_bytes,
 			redundant_audio, F5, nil, 0)
-		celt_dec.Ctl(celt.OPUS_GET_FINAL_RANGE_REQUEST, &redundant_rng)
+		celt.MustSucceed(celt_dec.Ctl(celt.OPUS_GET_FINAL_RANGE_REQUEST, &redundant_rng))
 	}
 
 	// MUST be after PLC
-	celt_dec.Ctl(celt.CELT_SET_START_BAND_REQUEST, int32(start_band))
+	celt.MustSucceed(celt_dec.Ctl(celt.CELT_SET_START_BAND_REQUEST, int32(start_band)))
 
 	if mode != MODE_SILK_ONLY {
 		celt_frame_size := IMIN(F20, frame_size)
 		// Make sure to discard any previous CELT state
 		if mode != st.prev_mode && st.prev_mode > 0 && st.prev_redundancy == 0 {
-			celt_dec.Ctl(celt.OPUS_RESET_STATE)
+			celt.MustSucceed(celt_dec.Ctl(celt.OPUS_RESET_STATE))
 		}
 		// Decode CELT
 		var cdata []byte
@@ -432,7 +453,7 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 		// For hybrid -> SILK transitions, we let the CELT MDCT
 		// do a fade-out by decoding a silence frame
 		if st.prev_mode == MODE_HYBRID && !(redundancy != 0 && celt_to_silk != 0 && st.prev_redundancy != 0) {
-			celt_dec.Ctl(celt.CELT_SET_START_BAND_REQUEST, int32(0))
+			celt.MustSucceed(celt_dec.Ctl(celt.CELT_SET_START_BAND_REQUEST, int32(0)))
 			celt_dec.DecodeWithEc(silence, 2, pcm, F2_5, nil, celt_accum)
 		}
 	}
@@ -445,17 +466,17 @@ func (st *OpusDecoder) decodeFrame(data []byte, length int32, pcm []int16, frame
 
 	{
 		var celt_mode *celt.CELTMode
-		celt_dec.Ctl(celt.CELT_GET_MODE_REQUEST, &celt_mode)
+		celt.MustSucceed(celt_dec.Ctl(celt.CELT_GET_MODE_REQUEST, &celt_mode))
 		window = celt_mode.Window()
 	}
 
 	// 5 ms redundant frame for SILK->CELT
 	if redundancy != 0 && celt_to_silk == 0 {
-		celt_dec.Ctl(celt.OPUS_RESET_STATE)
-		celt_dec.Ctl(celt.CELT_SET_START_BAND_REQUEST, int32(0))
+		celt.MustSucceed(celt_dec.Ctl(celt.OPUS_RESET_STATE))
+		celt.MustSucceed(celt_dec.Ctl(celt.CELT_SET_START_BAND_REQUEST, int32(0)))
 
 		celt_dec.DecodeWithEc(data[length:], redundancy_bytes, redundant_audio, F5, nil, 0)
-		celt_dec.Ctl(celt.OPUS_GET_FINAL_RANGE_REQUEST, &redundant_rng)
+		celt.MustSucceed(celt_dec.Ctl(celt.OPUS_GET_FINAL_RANGE_REQUEST, &redundant_rng))
 		smooth_fade(pcm[st.channels*(frame_size-F2_5):], redundant_audio[st.channels*F2_5:],
 			pcm[st.channels*(frame_size-F2_5):], F2_5, st.channels, window, st.Fs)
 	}
@@ -531,6 +552,7 @@ func (st *OpusDecoder) DecodeNative(data []byte,
 	var packet_frame_size, packet_bandwidth, packet_mode, packet_stream_channels int
 	// 48 x 2.5 ms = 120 ms
 	var size [48]int16
+	VALIDATE_OPUS_DECODER(st)
 	if decode_fec < 0 || decode_fec > 1 {
 		return OPUS_BAD_ARG
 	}
@@ -661,6 +683,7 @@ func (st *OpusDecoder) DecodeFloat(data []byte,
 			return OPUS_INVALID_PACKET
 		}
 	}
+	celt.Assert(st.channels == 1 || st.channels == 2)
 	out := make([]int16, frame_size*st.channels)
 
 	ret = st.DecodeNative(data, length, out, frame_size, decode_fec, 0, nil, 0)
@@ -722,7 +745,7 @@ func (st *OpusDecoder) Ctl(request int, args ...any) int {
 			return OPUS_BAD_ARG // goto bad_arg
 		}
 		if st.prev_mode == MODE_CELT_ONLY {
-			celt_dec.Ctl(celt.OPUS_GET_PITCH_REQUEST, value)
+			ret = celt_dec.Ctl(celt.OPUS_GET_PITCH_REQUEST, value)
 		} else {
 			*value = int32(st.DecControl.PrevPitchLag)
 		}
@@ -749,13 +772,13 @@ func (st *OpusDecoder) Ctl(request int, args ...any) int {
 		if !ok || value < 0 || value > 1 {
 			return OPUS_BAD_ARG // goto bad_arg
 		}
-		celt_dec.Ctl(celt.OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST, value)
+		ret = celt_dec.Ctl(celt.OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST, value)
 	case OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST:
 		value, ok := args[0].(*int32)
 		if !ok || value == nil {
 			return OPUS_BAD_ARG // goto bad_arg
 		}
-		celt_dec.Ctl(celt.OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST, value)
+		ret = celt_dec.Ctl(celt.OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST, value)
 	default:
 		// fprintf(stderr, "unknown opus_decoder_ctl() request: %d", request);
 		ret = OPUS_UNIMPLEMENTED

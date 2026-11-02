@@ -362,13 +362,13 @@ func interp_bits2pulses(m *CELTMode, start, end, skip_start int,
 	return codedBands
 }
 
-// ComputeAllocation computes the pulse allocation, i.e. how many pulses will
+// CltComputeAllocation computes the pulse allocation, i.e. how many pulses will
 // go in each band. Returns the number of coded bands.
 //
-// C: int compute_allocation(const CELTMode *m, int start, int end, const int *offsets, const int *cap, int alloc_trim, int *intensity, int *dual_stereo,
+// C: int clt_compute_allocation(const CELTMode *m, int start, int end, const int *offsets, const int *cap, int alloc_trim, int *intensity, int *dual_stereo,
 //
 //	opus_int32 total, opus_int32 *balance, int *pulses, int *ebits, int *fine_priority, int C, int LM, ec_ctx *ec, int encode, int prev, int signalBandwidth)
-func ComputeAllocation(m *CELTMode, start, end int, offsets, cap []int, alloc_trim int, intensity, dual_stereo *int,
+func CltComputeAllocation(m *CELTMode, start, end int, offsets, cap []int, alloc_trim int, intensity, dual_stereo *int,
 	total int32, balance *int32, pulses, ebits, fine_priority []int, C, LM int, ec *EcCtx, encode, prev int, signalBandwidth int) int {
 	var lo, hi, length, j, codedBands, skip_start, skip_rsv, intensity_rsv, dual_stereo_rsv int
 

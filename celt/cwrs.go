@@ -233,7 +233,7 @@ func cwrsi(_n, _k int, _i uint32, _y []int) int32 {
 			k0 = _k
 			q = row[_n]
 			if q > _i {
-				celt_assert(p > q)
+				celt_sig_assert(p > q)
 				_k = _n
 				for {
 					_k--

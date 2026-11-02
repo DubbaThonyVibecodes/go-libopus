@@ -221,15 +221,14 @@ func (psEncC *EncoderState) VADGetSAQ8(pIn []int16, arch int) int {
 		speech_nrg += int32(b+1) * RSHIFT(Xnrg[b]-psSilk_VAD.NL[b], 4)
 	}
 
+	if psEncC.frame_length == 20*psEncC.fs_kHz {
+		speech_nrg = RSHIFT32(speech_nrg, 1)
+	}
 	/* Power scaling */
 	if speech_nrg <= 0 {
 		SA_Q15 = RSHIFT(SA_Q15, 1)
-	} else if speech_nrg < 32768 {
-		if psEncC.frame_length == 10*psEncC.fs_kHz {
-			speech_nrg = LSHIFT_SAT32(speech_nrg, 16)
-		} else {
-			speech_nrg = LSHIFT_SAT32(speech_nrg, 15)
-		}
+	} else if speech_nrg < 16384 {
+		speech_nrg = LSHIFT32(speech_nrg, 16)
 
 		/* square-root */
 		speech_nrg = SQRT_APPROX(speech_nrg)
@@ -281,6 +280,8 @@ func vadGetNoiseLevels(pX []int32, psSilk_VAD *VADState) {
 	/* Initially faster smoothing */
 	if psSilk_VAD.counter < 1000 { /* 1000 = 20 sec */
 		min_coef = int(DIV32_16(int16_MAX, RSHIFT(psSilk_VAD.counter, 4)+1))
+		/* Increment frame counter */
+		psSilk_VAD.counter++
 	} else {
 		min_coef = 0
 	}
@@ -324,7 +325,4 @@ func vadGetNoiseLevels(pX []int32, psSilk_VAD *VADState) {
 		/* Store as part of state */
 		psSilk_VAD.NL[k] = nl
 	}
-
-	/* Increment frame counter */
-	psSilk_VAD.counter++
 }

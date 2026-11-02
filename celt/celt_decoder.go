@@ -4,6 +4,15 @@ package celt
 
 const DECODE_BUFFER_SIZE = 2048
 
+// The maximum pitch lag to allow in the pitch-based PLC. It's possible to save
+// CPU time in the PLC pitch search by making this smaller than MAX_PERIOD. The
+// current value corresponds to a pitch of 66.67 Hz.
+const PLC_PITCH_LAG_MAX = 720
+
+// The minimum pitch lag to allow in the pitch-based PLC. This corresponds to a
+// pitch of 480 Hz.
+const PLC_PITCH_LAG_MIN = 100
+
 // CELTDecoder is the C struct OpusCustomDecoder (CELTDecoder).
 type CELTDecoder struct {
 	mode            *CELTMode
@@ -39,6 +48,37 @@ type CELTDecoder struct {
 	oldLogE2       []int16 // Size = 2*mode->nbEBands
 	backgroundLogE []int16 // Size = 2*mode->nbEBands
 }
+
+// Make basic checks on the CELT state to ensure we don't end
+// up writing all over memory.
+// (ENABLE_HARDENING is defined, so this is compiled; it only asserts.)
+//
+// C: void validate_celt_decoder(CELTDecoder *st)
+func validate_celt_decoder(st *CELTDecoder) {
+	// CUSTOM_MODES is not defined.
+	celt_assert(st.mode == CustomModeCreate(48000, 960, nil))
+	celt_assert(st.overlap == 120)
+	celt_assert(st.channels == 1 || st.channels == 2)
+	celt_assert(st.stream_channels == 1 || st.stream_channels == 2)
+	celt_assert(st.downsample > 0)
+	celt_assert(st.start == 0 || st.start == 17)
+	celt_assert(st.start < st.end)
+	celt_assert(st.end <= 21)
+	// OPUS_ARCHMASK is not defined.
+	celt_assert(st.last_pitch_index <= PLC_PITCH_LAG_MAX)
+	celt_assert(st.last_pitch_index >= PLC_PITCH_LAG_MIN || st.last_pitch_index == 0)
+	celt_assert(st.postfilter_period < MAX_PERIOD)
+	celt_assert(st.postfilter_period >= COMBFILTER_MINPERIOD || st.postfilter_period == 0)
+	celt_assert(st.postfilter_period_old < MAX_PERIOD)
+	celt_assert(st.postfilter_period_old >= COMBFILTER_MINPERIOD || st.postfilter_period_old == 0)
+	celt_assert(st.postfilter_tapset <= 2)
+	celt_assert(st.postfilter_tapset >= 0)
+	celt_assert(st.postfilter_tapset_old <= 2)
+	celt_assert(st.postfilter_tapset_old >= 0)
+}
+
+// C: #define VALIDATE_CELT_DECODER(st) validate_celt_decoder(st)
+func VALIDATE_CELT_DECODER(st *CELTDecoder) { validate_celt_decoder(st) }
 
 // C: int celt_decoder_get_size(int channels)
 func DecoderGetSize(channels int) int {
@@ -97,8 +137,8 @@ func (st *CELTDecoder) CustomDecoderInit(mode *CELTMode, channels int) int {
 	st.start = 0
 	st.end = st.mode.effEBands
 	st.signalling = 1
-	// ENABLE_UPDATE_DRAFT is not defined.
-	st.disable_inv = 0
+	// DISABLE_UPDATE_DRAFT is not defined (RFC 8251 behaviour).
+	st.disable_inv = b2i(channels == 1)
 	st.arch = SelectArch()
 
 	st.Ctl(OPUS_RESET_STATE)
@@ -342,15 +382,6 @@ func tf_decode(start, end, isTransient int, tf_res []int, LM int, dec *EcDec) {
 	}
 }
 
-// The maximum pitch lag to allow in the pitch-based PLC. It's possible to save
-// CPU time in the PLC pitch search by making this smaller than MAX_PERIOD. The
-// current value corresponds to a pitch of 66.67 Hz.
-const PLC_PITCH_LAG_MAX = 720
-
-// The minimum pitch lag to allow in the pitch-based PLC. This corresponds to a
-// pitch of 480 Hz.
-const PLC_PITCH_LAG_MIN = 100
-
 // C: static int celt_plc_pitch_search(celt_sig *decode_mem[2], int C, int arch)
 func celt_plc_pitch_search(decode_mem [][]int32, C int, arch int) int {
 	var pitch_index int
@@ -461,6 +492,7 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 
 		celt_synthesis(mode, X, out_syn[:], oldBandE, start, effEnd, C, C, 0, LM, st.downsample, 0, st.arch)
 	} else {
+		var exc_length int
 		// Pitch-based PLC
 		var window []int16
 		var fade int16 = Q15ONE
@@ -474,8 +506,13 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 			fade = QCONST16(.8, 15)
 		}
 
+		// We want the excitation for 2 pitch periods in order to look for a
+		// decaying signal, but we can't get more than MAX_PERIOD.
+		exc_length = IMIN(2*pitch_index, MAX_PERIOD)
+
 		etmp := make([]int32, overlap)
 		_exc := make([]int16, MAX_PERIOD+LPC_ORDER)
+		fir_tmp := make([]int16, exc_length)
 		exc := _exc[LPC_ORDER:]
 		window = mode.window
 		c = 0
@@ -486,12 +523,12 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 			var buf []int32
 			var extrapolation_offset int
 			var extrapolation_len int
-			var exc_length int
 			var j int
 
 			buf = decode_mem[c]
-			for i = 0; i < MAX_PERIOD; i++ {
-				exc[i] = ROUND16(buf[DECODE_BUFFER_SIZE-MAX_PERIOD+i], SIG_SHIFT)
+			// (C: exc[i-LPC_ORDER]; exc = _exc+LPC_ORDER.)
+			for i = 0; i < MAX_PERIOD+LPC_ORDER; i++ {
+				_exc[i] = ROUND16(buf[DECODE_BUFFER_SIZE-MAX_PERIOD-LPC_ORDER+i], SIG_SHIFT)
 			}
 
 			if loss_count == 0 {
@@ -526,23 +563,16 @@ func (st *CELTDecoder) decodeLost(N, LM int) {
 					}
 				}
 			}
-			// We want the excitation for 2 pitch periods in order to look for a
-			// decaying signal, but we can't get more than MAX_PERIOD.
-			exc_length = IMIN(2*pitch_index, MAX_PERIOD)
 			// Initialize the LPC history with the samples just before the start
 			// of the region for which we're computing the excitation.
 			{
-				// (C: exc[MAX_PERIOD-exc_length-LPC_ORDER+i]; exc = _exc+LPC_ORDER, and
-				// the index goes negative when exc_length == MAX_PERIOD.)
-				for i = 0; i < LPC_ORDER; i++ {
-					_exc[MAX_PERIOD-exc_length+i] =
-						ROUND16(buf[DECODE_BUFFER_SIZE-exc_length-LPC_ORDER+i], SIG_SHIFT)
-				}
-				// Compute the excitation for exc_length samples before the loss.
+				// Compute the excitation for exc_length samples before the loss. We need the copy
+				// because celt_fir() cannot filter in-place.
 				// (Fir reads LPC_ORDER samples behind its input, so the input
 				// slice starts at exc+MAX_PERIOD-exc_length-LPC_ORDER.)
 				Fir(_exc[MAX_PERIOD-exc_length:], lpc[c*LPC_ORDER:],
-					exc[MAX_PERIOD-exc_length:], exc_length, LPC_ORDER, st.arch)
+					fir_tmp, exc_length, LPC_ORDER, st.arch)
+				copy(exc[MAX_PERIOD-exc_length:MAX_PERIOD], fir_tmp[:exc_length])
 			}
 
 			// Check if the waveform is decaying, and if so how fast.
@@ -711,6 +741,7 @@ func (st *CELTDecoder) DecodeWithEc(data []byte, length int, pcm []int16, frame_
 	var overlap int
 	var eBands []int16
 
+	VALIDATE_CELT_DECODER(st)
 	mode = st.mode
 	nbEBands = mode.nbEBands
 	overlap = mode.overlap
@@ -899,7 +930,7 @@ func (st *CELTDecoder) DecodeWithEc(data []byte, length int, pcm []int16, frame_
 	pulses := make([]int, nbEBands)
 	fine_priority := make([]int, nbEBands)
 
-	codedBands = ComputeAllocation(mode, start, end, offsets, cap,
+	codedBands = CltComputeAllocation(mode, start, end, offsets, cap,
 		alloc_trim, &intensity, &dual_stereo, bits, &balance, pulses,
 		fine_quant, fine_priority, C, LM, dec, 0, 0, 0)
 

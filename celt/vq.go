@@ -206,7 +206,7 @@ func OpPvqSearch(X []int16, iy []int, K, N int, arch int) int16 {
 			}
 		}
 	}
-	celt_assert2(pulsesLeft >= 0, "Allocated too many pulses in the quick pass")
+	celt_sig_assert(pulsesLeft >= 0)
 
 	// This should never happen, but just in case it does (e.g. on silence)
 	// we fill the first bin with pulses.

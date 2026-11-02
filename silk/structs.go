@@ -37,6 +37,7 @@ type LPState struct {
 	In_LP_State         [2]int32 // Low pass filter state
 	transition_frame_no int32    // Counter which is mapped to a cut-off frequency
 	mode                int      // Operating mode, <0: switch down, >0: switch up; 0: do nothing
+	saved_fs_kHz        int32    // If non-zero, holds the last sampling rate before a bandwidth switching reset.
 }
 
 // NLSFCBStruct is the C silk_NLSF_CB_struct: structure containing NLSF codebook.

@@ -47,8 +47,8 @@ func find_best_pitch(xcorr []int32, y []int16, length, max_pitch int, best_pitch
 	}
 }
 
-// C: static void celt_fir5(const opus_val16 *x, const opus_val16 *num, opus_val16 *y, int N, opus_val16 *mem)
-func celt_fir5(x []int16, num []int16, y []int16, N int, mem []int16) {
+// C: static void celt_fir5(opus_val16 *x, const opus_val16 *num, int N)
+func celt_fir5(x []int16, num []int16, N int) {
 	var i int
 	var num0, num1, num2, num3, num4 int16
 	var mem0, mem1, mem2, mem3, mem4 int32
@@ -57,11 +57,11 @@ func celt_fir5(x []int16, num []int16, y []int16, N int, mem []int16) {
 	num2 = num[2]
 	num3 = num[3]
 	num4 = num[4]
-	mem0 = int32(mem[0])
-	mem1 = int32(mem[1])
-	mem2 = int32(mem[2])
-	mem3 = int32(mem[3])
-	mem4 = int32(mem[4])
+	mem0 = 0
+	mem1 = 0
+	mem2 = 0
+	mem3 = 0
+	mem4 = 0
 	for i = 0; i < N; i++ {
 		var sum int32 = SHL32(EXTEND32(x[i]), SIG_SHIFT)
 		sum = MAC16_16(sum, num0, mem0)
@@ -74,13 +74,8 @@ func celt_fir5(x []int16, num []int16, y []int16, N int, mem []int16) {
 		mem2 = mem1
 		mem1 = mem0
 		mem0 = int32(x[i])
-		y[i] = ROUND16(sum, SIG_SHIFT)
+		x[i] = ROUND16(sum, SIG_SHIFT)
 	}
-	mem[0] = int16(mem0)
-	mem[1] = int16(mem1)
-	mem[2] = int16(mem2)
-	mem[3] = int16(mem3)
-	mem[4] = int16(mem4)
 }
 
 // PitchDownsample downsamples x by 2 (summing channels) into x_lp and applies a
@@ -92,7 +87,6 @@ func PitchDownsample(x [][]int32, x_lp []int16, length, C int, arch int) {
 	var ac [5]int32
 	var tmp int16 = Q15ONE
 	var lpc [4]int16
-	var mem = [5]int16{0, 0, 0, 0, 0}
 	var lpc2 [5]int16
 	var c1 int16 = QCONST16(.8, 15)
 	var shift int
@@ -144,7 +138,7 @@ func PitchDownsample(x [][]int32, x_lp []int16, length, C int, arch int) {
 	lpc2[2] = int16(int32(lpc[2]) + MULT16_16_Q15(c1, lpc[1]))
 	lpc2[3] = int16(int32(lpc[3]) + MULT16_16_Q15(c1, lpc[2]))
 	lpc2[4] = int16(MULT16_16_Q15(c1, lpc[3]))
-	celt_fir5(x_lp, lpc2[:], x_lp, length>>1, mem[:])
+	celt_fir5(x_lp, lpc2[:], length>>1)
 }
 
 // XcorrKernel is the kernel you really want to optimize. It gets used a lot

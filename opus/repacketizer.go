@@ -207,8 +207,8 @@ func (rp *OpusRepacketizer) repacketizerOutRangeImpl(begin, end int, data []byte
 	for i = 0; i < count; i++ {
 		// Using OPUS_MOVE() instead of OPUS_COPY() in case we're doing in-place
 		// padding from opus_packet_pad or opus_packet_unpad().
-		// celt_assert(frames[i] + len[i] <= data || ptr <= frames[i]) is a
-		// pointer comparison that has no slice equivalent; copy is a memmove.
+		// assert disabled because it's not valid in C.
+		// celt_assert(frames[i] + len[i] <= data || ptr <= frames[i]);
 		copy(data[ptr:ptr+int(length[i])], frames[i][:length[i]])
 		ptr += int(length[i])
 	}

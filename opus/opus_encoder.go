@@ -79,39 +79,39 @@ type OpusEncoder struct {
 // middle (memoriless) threshold. The second column is the hysteresis
 // (difference with the middle)
 var mono_voice_bandwidth_thresholds = [8]int32{
-	10000, 1000, // NB<->MB
-	11000, 1000, // MB<->WB
+	9000, 700, // NB<->MB
+	9000, 700, // MB<->WB
 	13500, 1000, // WB<->SWB
 	14000, 2000, // SWB<->FB
 }
 var mono_music_bandwidth_thresholds = [8]int32{
-	10000, 1000, // NB<->MB
-	11000, 1000, // MB<->WB
-	13500, 1000, // WB<->SWB
-	14000, 2000, // SWB<->FB
+	9000, 700, // NB<->MB
+	9000, 700, // MB<->WB
+	11000, 1000, // WB<->SWB
+	12000, 2000, // SWB<->FB
 }
 var stereo_voice_bandwidth_thresholds = [8]int32{
-	10000, 1000, // NB<->MB
-	11000, 1000, // MB<->WB
+	9000, 700, // NB<->MB
+	9000, 700, // MB<->WB
 	13500, 1000, // WB<->SWB
 	14000, 2000, // SWB<->FB
 }
 var stereo_music_bandwidth_thresholds = [8]int32{
-	10000, 1000, // NB<->MB
-	11000, 1000, // MB<->WB
-	13500, 1000, // WB<->SWB
-	14000, 2000, // SWB<->FB
+	9000, 700, // NB<->MB
+	9000, 700, // MB<->WB
+	11000, 1000, // WB<->SWB
+	12000, 2000, // SWB<->FB
 }
 
 // Threshold bit-rates for switching between mono and stereo
-const stereo_voice_threshold int32 = 24000
-const stereo_music_threshold int32 = 24000
+const stereo_voice_threshold int32 = 19000
+const stereo_music_threshold int32 = 17000
 
 // Threshold bit-rate for switching between SILK/hybrid and CELT-only
 var mode_thresholds = [2][2]int32{
 	// voice   music
-	{64000, 16000}, // mono
-	{36000, 16000}, // stereo
+	{64000, 10000}, // mono
+	{44000, 10000}, // stereo
 }
 
 var fec_thresholds = []int32{
@@ -291,18 +291,14 @@ func dc_reject(in []int16, cutoff_Hz int32, out []int16, hp_mem []int32, length 
 	var c, i int
 	var shift int
 
-	// Approximates -round(log2(4.*cutoff_Hz/Fs))
-	shift = int(celt.Ilog2(Fs / (cutoff_Hz * 3)))
+	// Approximates -round(log2(6.3*cutoff_Hz/Fs))
+	shift = int(celt.Ilog2(Fs / (cutoff_Hz * 4)))
 	for c = 0; c < channels; c++ {
 		for i = 0; i < length; i++ {
-			var x, tmp, y int32
+			var x, y int32
 			x = celt.SHL32(celt.EXTEND32(in[channels*i+c]), 14)
-			// First stage
-			tmp = x - hp_mem[2*c]
+			y = x - hp_mem[2*c]
 			hp_mem[2*c] = hp_mem[2*c] + celt.PSHR32(x-hp_mem[2*c], shift)
-			// Second stage
-			y = tmp - hp_mem[2*c+1]
-			hp_mem[2*c+1] = hp_mem[2*c+1] + celt.PSHR32(tmp-hp_mem[2*c+1], shift)
 			out[channels*i+c] = celt.EXTRACT16(celt.SATURATE(celt.PSHR32(y, 14), 32767))
 		}
 	}
@@ -624,13 +620,15 @@ var silk_hybrid_rate_table = [7][5]int{
 	{64000, 38000, 38000, 50000, 50000},
 }
 
-// C: static int compute_silk_rate_for_hybrid(int rate, int bandwidth, int frame20ms, int vbr, int fec)
-func compute_silk_rate_for_hybrid(rate int, bandwidth int, frame20ms int, vbr int, fec int) int {
+// C: static int compute_silk_rate_for_hybrid(int rate, int bandwidth, int frame20ms, int vbr, int fec, int channels)
+func compute_silk_rate_for_hybrid(rate int, bandwidth int, frame20ms int, vbr int, fec int, channels int) int {
 	var entry int
 	var i int
 	var N int
 	var silk_rate int
 	rate_table := &silk_hybrid_rate_table
+	// Do the allocation per-channel.
+	rate /= channels
 	entry = 1 + frame20ms + 2*fec
 	N = len(rate_table)
 	for i = 1; i < N; i++ {
@@ -657,6 +655,11 @@ func compute_silk_rate_for_hybrid(rate int, bandwidth int, frame20ms int, vbr in
 	if bandwidth == OPUS_BANDWIDTH_SUPERWIDEBAND {
 		silk_rate += 300
 	}
+	silk_rate *= channels
+	// Small adjustment for stereo (calibrated for 32 kb/s, haven't tried other bitrates).
+	if channels == 2 && rate >= 12000 {
+		silk_rate -= 1000
+	}
 	return silk_rate
 }
 
@@ -669,7 +672,9 @@ func compute_equiv_rate(bitrate int32, channels int,
 	var equiv int32
 	equiv = bitrate
 	// Take into account overhead from smaller frames.
-	equiv -= int32((40*channels + 20) * (frame_rate - 50))
+	if frame_rate > 50 {
+		equiv -= int32((40*channels + 20) * (frame_rate - 50))
+	}
 	// CBR is about a 8% penalty for both SILK and CELT.
 	if vbr == 0 {
 		equiv -= equiv / 12
@@ -697,8 +702,8 @@ func compute_equiv_rate(bitrate int32, channels int,
 	return equiv
 }
 
-// C: static int is_digital_silence(const opus_val16* pcm, int frame_size, int channels, int lsb_depth)
-func is_digital_silence(pcm []int16, frame_size int, channels int, lsb_depth int) int {
+// C: int is_digital_silence(const opus_val16* pcm, int frame_size, int channels, int lsb_depth)
+func IsDigitalSilence(pcm []int16, frame_size int, channels int, lsb_depth int) int {
 	var silence int = 0
 	var sample_max int32 = 0
 	sample_max = celt.Maxabs16(pcm, frame_size*channels)
@@ -752,19 +757,18 @@ func decide_dtx_mode(activity_probability float32, // probability that current f
 	is_silence int, // only digital silence detected in this frame
 	arch int,
 ) int {
-	var is_noise int
 	var noise_energy int32
-	var is_sufficiently_quiet int
 
 	if is_silence == 0 {
-		is_noise = b2i(activity_probability < silk.DTX_ACTIVITY_THRESHOLD)
-		if is_noise != 0 {
+		if activity_probability < silk.DTX_ACTIVITY_THRESHOLD { // is noise
 			noise_energy = compute_frame_energy(pcm, frame_size, channels, arch)
-			is_sufficiently_quiet = b2i(float32(peak_signal_energy) >= float32(PSEUDO_SNR_THRESHOLD*float32(noise_energy)))
+
+			// but is sufficiently quiet
+			is_silence = b2i(float32(peak_signal_energy) >= float32(PSEUDO_SNR_THRESHOLD*float32(noise_energy)))
 		}
 	}
 
-	if is_silence != 0 || (is_noise != 0 && is_sufficiently_quiet != 0) {
+	if is_silence != 0 {
 		// The number of consecutive DTX frames should be within the allowed bounds
 		(*nb_no_activity_frames)++
 
@@ -975,21 +979,20 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	celt_enc.Ctl(celt.CELT_GET_MODE_REQUEST, &celt_mode)
 	analysis_info.Valid = 0
 	if st.silk_mode.Complexity >= 10 && st.Fs >= 16000 { // FIXED_POINT
-		if is_digital_silence(pcm, frame_size, st.channels, lsb_depth) != 0 {
-			is_silence = 1
-		} else {
-			analysis_read_pos_bak = st.analysis.read_pos
-			analysis_read_subframe_bak = st.analysis.read_subframe
-			st.analysis.RunAnalysis(celt_mode, analysis_pcm, int(analysis_size), frame_size,
-				c1, c2, analysis_channels, st.Fs,
-				lsb_depth, downmix, &analysis_info)
-		}
+		is_silence = IsDigitalSilence(pcm, frame_size, st.channels, lsb_depth)
+		analysis_read_pos_bak = st.analysis.read_pos
+		analysis_read_subframe_bak = st.analysis.read_subframe
+		st.analysis.RunAnalysis(celt_mode, analysis_pcm, int(analysis_size), frame_size,
+			c1, c2, analysis_channels, st.Fs,
+			lsb_depth, downmix, &analysis_info)
 
 		// Track the peak signal energy
 		if is_silence == 0 && analysis_info.Activity_probability > silk.DTX_ACTIVITY_THRESHOLD {
 			st.peak_signal_energy = celt.MAX32(celt.MULT16_32_Q15(celt.QCONST16(0.999, 15), st.peak_signal_energy),
 				compute_frame_energy(pcm, frame_size, st.channels, st.arch))
 		}
+	} else if st.analysis.initialized != 0 {
+		st.analysis.TonalityAnalysisReset()
 	}
 
 	// Reset voice_ratio if this frame is not silent or if analysis is disabled.
@@ -1002,7 +1005,15 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	if analysis_info.Valid != 0 {
 		var analysis_bandwidth int
 		if st.signal_type == OPUS_AUTO {
-			st.voice_ratio = int(math.Floor(.5 + float64(float32(100*(1-analysis_info.Music_prob)))))
+			var prob float32
+			if st.prev_mode == 0 {
+				prob = analysis_info.Music_prob
+			} else if st.prev_mode == MODE_CELT_ONLY {
+				prob = analysis_info.Music_prob_max
+			} else {
+				prob = analysis_info.Music_prob_min
+			}
+			st.voice_ratio = int(math.Floor(.5 + float64(float32(100*(1-prob)))))
 		}
 
 		analysis_bandwidth = analysis_info.Bandwidth
@@ -1162,6 +1173,10 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	equiv_rate = compute_equiv_rate(st.bitrate_bps, st.stream_channels, int(st.Fs)/frame_size,
 		st.use_vbr, 0, st.silk_mode.Complexity, st.silk_mode.PacketLossPercentage)
 
+	// Allow SILK DTX if DTX is enabled but the generalized DTX cannot be used,
+	// e.g. because of the complexity setting or sample rate.
+	st.silk_mode.UseDTX = b2i(st.use_dtx != 0 && !(analysis_info.Valid != 0 || is_silence != 0))
+
 	// Mode selection depending on application and signal type
 	if st.application == OPUS_APPLICATION_RESTRICTED_LOWDELAY {
 		st.mode = MODE_CELT_ONLY
@@ -1200,9 +1215,7 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 			st.mode = MODE_SILK_ONLY
 		}
 		// When encoding voice and DTX is enabled but the generalized DTX cannot be used,
-		// because of complexity and sampling frequency settings, switch to SILK DTX and
-		// set the encoder to SILK mode
-		st.silk_mode.UseDTX = b2i(st.use_dtx != 0 && !(analysis_info.Valid != 0 || is_silence != 0))
+		// use SILK in order to make use of its DTX.
 		if st.silk_mode.UseDTX != 0 && voice_est > 100 {
 			st.mode = MODE_SILK_ONLY
 		}
@@ -1302,6 +1315,11 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 			if bandwidth <= OPUS_BANDWIDTH_NARROWBAND {
 				break
 			}
+		}
+		// We don't use mediumband anymore, except when explicitly requested or during
+		// mode transitions.
+		if bandwidth == OPUS_BANDWIDTH_MEDIUMBAND {
+			bandwidth = OPUS_BANDWIDTH_WIDEBAND
 		}
 		st.bandwidth = bandwidth
 		st.auto_bandwidth = bandwidth
@@ -1419,7 +1437,8 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 		redundancy = 1
 		celt_to_silk = 1
 		st.silk_bw_switch = 0
-		prefill = 1
+		// Do a prefill without reseting the sampling rate control.
+		prefill = 2
 	}
 
 	// If we decided to go with CELT, make sure redundancy is off, no matter what
@@ -1469,14 +1488,22 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	HB_gain = celt.Q15ONE
 	if st.mode != MODE_CELT_ONLY {
 		var total_bitRate, celt_rate int32
+		var activity int
 		var pcm_silk []int16
+
+		activity = silk.VAD_NO_DECISION
+		if analysis_info.Valid != 0 {
+			// Inform SILK about the Opus VAD decision
+			activity = b2i(analysis_info.Activity_probability >= silk.DTX_ACTIVITY_THRESHOLD)
+		}
 
 		// Distribute bits between SILK and CELT
 		total_bitRate = int32(8 * bytes_target * frame_rate)
 		if st.mode == MODE_HYBRID {
 			// Base rate for SILK
 			st.silk_mode.BitRate = int32(compute_silk_rate_for_hybrid(int(total_bitRate),
-				curr_bandwidth, b2i(st.Fs == 50*int32(frame_size)), st.use_vbr, st.silk_mode.LBRR_coded))
+				curr_bandwidth, b2i(st.Fs == 50*int32(frame_size)), st.use_vbr, st.silk_mode.LBRR_coded,
+				st.stream_channels))
 			if st.energy_masking == nil {
 				// Increasingly attenuate high band when it gets allocated fewer bits
 				celt_rate = total_bitRate - st.silk_mode.BitRate
@@ -1534,7 +1561,7 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 		} else if curr_bandwidth == OPUS_BANDWIDTH_MEDIUMBAND {
 			st.silk_mode.DesiredInternalSampleRate = 12000
 		} else {
-			silk.Assert(st.mode == MODE_HYBRID || curr_bandwidth == OPUS_BANDWIDTH_WIDEBAND)
+			celt.Assert(st.mode == MODE_HYBRID || curr_bandwidth == OPUS_BANDWIDTH_WIDEBAND)
 			st.silk_mode.DesiredInternalSampleRate = 16000
 		}
 		if st.mode == MODE_HYBRID {
@@ -1582,7 +1609,8 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 			if st.mode == MODE_HYBRID {
 				// Compute SILK bitrate corresponding to the max total bits available
 				var maxBitRate int32 = int32(compute_silk_rate_for_hybrid(int(int32(st.silk_mode.MaxBits)*st.Fs/int32(frame_size)),
-					curr_bandwidth, b2i(st.Fs == 50*int32(frame_size)), st.use_vbr, st.silk_mode.LBRR_coded))
+					curr_bandwidth, b2i(st.Fs == 50*int32(frame_size)), st.use_vbr, st.silk_mode.LBRR_coded,
+					st.stream_channels))
 				st.silk_mode.MaxBits = int(maxBitRate * int32(frame_size) / st.Fs)
 			}
 		}
@@ -1601,11 +1629,13 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 				0, celt.Q15ONE, celt_mode.Overlap(), int(st.Fs/400), st.channels, celt_mode.Window(), st.Fs)
 			clear(st.delay_buffer[:prefill_offset])
 			pcm_silk = st.delay_buffer[:] // FIXED_POINT
-			silk_enc.Encode(&st.silk_mode, pcm_silk, st.encoder_buffer, nil, &zero, 1)
+			silk_enc.Encode(&st.silk_mode, pcm_silk, st.encoder_buffer, nil, &zero, prefill, activity)
+			// Prevent a second switch in the real encode call.
+			st.silk_mode.OpusCanSwitch = 0
 		}
 
 		pcm_silk = pcm_buf[total_buffer*st.channels:] // FIXED_POINT
-		ret = silk_enc.Encode(&st.silk_mode, pcm_silk, frame_size, &enc, &nBytes, 0)
+		ret = silk_enc.Encode(&st.silk_mode, pcm_silk, frame_size, &enc, &nBytes, 0, activity)
 		if ret != 0 {
 			// fprintf (stderr, "SILK encode error: %d\n", ret);
 			// Handle error
@@ -1622,7 +1652,7 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 				curr_bandwidth = OPUS_BANDWIDTH_WIDEBAND
 			}
 		} else {
-			silk.Assert(st.silk_mode.InternalSampleRate == 16000)
+			celt.Assert(st.silk_mode.InternalSampleRate == 16000)
 		}
 
 		st.silk_mode.OpusCanSwitch = b2i(st.silk_mode.SwitchReady != 0 && st.nonfinal_frame == 0)
@@ -1703,7 +1733,13 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 	}
 	st.prev_HB_gain = HB_gain
 	if st.mode != MODE_HYBRID || st.stream_channels == 1 {
-		st.silk_mode.StereoWidth_Q14 = int(IMIN(int32(1<<14), 2*IMAX(0, equiv_rate-24000)))
+		if equiv_rate > 32000 {
+			st.silk_mode.StereoWidth_Q14 = 16384
+		} else if equiv_rate < 16000 {
+			st.silk_mode.StereoWidth_Q14 = 0
+		} else {
+			st.silk_mode.StereoWidth_Q14 = int(16384 - 2048*int32(32000-equiv_rate)/(equiv_rate-14000))
+		}
 	}
 	if st.energy_masking == nil && st.channels == 2 {
 		// Apply stereo width reduction (at low bitrates)
@@ -1780,8 +1816,6 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 		info.SignalType = int(st.silk_mode.SignalType)
 		info.Offset = int(st.silk_mode.Offset)
 		celt_enc.Ctl(celt.CELT_SET_SILK_INFO_REQUEST, &info)
-	} else {
-		celt_enc.Ctl(celt.CELT_SET_SILK_INFO_REQUEST, (*celt.SILKInfo)(nil))
 	}
 
 	// 5 ms redundant frame for CELT->SILK
@@ -1881,6 +1915,8 @@ func (st *OpusEncoder) EncodeNative(pcm []int16, frame_size int,
 			data[0] = gen_toc(st.mode, int(st.Fs)/frame_size, curr_bandwidth, st.stream_channels)
 			return 1
 		}
+	} else {
+		st.nb_no_activity_frames = 0
 	}
 
 	// In the unlikely case that the SILK encoder busted its target, tell
@@ -2201,7 +2237,6 @@ func (st *OpusEncoder) Ctl(request int, args ...any) int {
 			return OPUS_BAD_ARG
 		}
 		st.variable_duration = int(value)
-		celt_enc.Ctl(celt.OPUS_SET_EXPERT_FRAME_DURATION_REQUEST, value)
 	case OPUS_GET_EXPERT_FRAME_DURATION_REQUEST:
 		value, ok := args[0].(*int32)
 		if !ok || value == nil {
@@ -2297,6 +2332,25 @@ func (st *OpusEncoder) Ctl(request int, args ...any) int {
 		}
 		st.energy_masking = value
 		ret = celt_enc.Ctl(celt.OPUS_SET_ENERGY_MASK_REQUEST, value)
+	case OPUS_GET_IN_DTX_REQUEST:
+		value, ok := args[0].(*int32)
+		if !ok || value == nil {
+			return OPUS_BAD_ARG
+		}
+		if st.silk_mode.UseDTX != 0 && (st.prev_mode == MODE_SILK_ONLY || st.prev_mode == MODE_HYBRID) {
+			// DTX determined by Silk.
+			var n int
+			silk_enc := &st.silk_enc
+			*value = 1
+			for n = 0; n < int(st.silk_mode.NChannelsInternal); n++ {
+				*value = int32(b2i(*value != 0 && silk_enc.NoSpeechCounter(n) >= silk.NB_SPEECH_FRAMES_BEFORE_DTX))
+			}
+		} else if st.use_dtx != 0 {
+			// DTX determined by Opus.
+			*value = int32(b2i(st.nb_no_activity_frames >= silk.NB_SPEECH_FRAMES_BEFORE_DTX))
+		} else {
+			*value = 0
+		}
 	case celt.CELT_GET_MODE_REQUEST:
 		value, ok := args[0].(**celt.CELTMode)
 		if !ok || value == nil {

@@ -28,19 +28,21 @@ each supported minor has its own branch.
 
 ## Status
 
-Tracks libopus **1.2.1** on `master` (fixed-point build); each ported
+Tracks libopus **1.3.1** on `master` (fixed-point build); each ported
 minor keeps a `release/X.Y` branch and a `vX.Y.0` tag. Encoder and decoder
 (SILK, CELT, hybrid, mode switching with redundancy, PLC, in-band FEC, DTX,
-multistream/surround, repacketizer, packet padding, packet helpers, the
-tonality analysis, 80/100/120 ms frames, phase-inversion control) are
-bit-exact against the upstream build on all cases of the committed corpus
-and on the extended 30-second corpus, on both 64-bit and 32-bit
-(`GOARCH=386`) builds. The module has no dependencies outside the standard
-library and builds with `CGO_ENABLED=0`.
+multistream/surround, ambisonics (mapping families 2 and 3 with the
+projection encoder/decoder), repacketizer, packet padding, packet
+helpers, the RNN tonality analysis, 80/100/120 ms frames, phase-inversion
+control, RFC 8251 fixes) are bit-exact against the upstream build on all
+cases of the committed corpus and on the extended 30-second corpus, on
+both 64-bit and 32-bit (`GOARCH=386`) builds. The module has no
+dependencies outside the standard library and builds with `CGO_ENABLED=0`.
 
 | Branch / tag | libopus | Corpus cases |
 |--------------|---------|--------------|
-| `master`, `release/1.2`, `v1.2.0` | 1.2.1 | 968 |
+| `master`, `release/1.3`, `v1.3.0` | 1.3.1 | 1023 |
+| `release/1.2`, `v1.2.0` | 1.2.1 | 968 |
 | `release/1.1`, `v1.1.0` | 1.1.5 | 899 |
 | `release/1.0`, `v1.0.0` | 1.0.3 | 790 |
 

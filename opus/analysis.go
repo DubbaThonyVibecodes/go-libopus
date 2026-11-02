@@ -44,30 +44,19 @@ type TonalityAnalysisState struct {
 	mem                [32]float32
 	cmean              [8]float32
 	std                [9]float32
-	music_prob         float32
-	vad_prob           float32
 	Etracker           float32
 	lowECount          float32
 	E_count            int
-	last_music         int
 	count              int
 	analysis_offset    int
-	// Probability of having speech for time i to DETECT_SIZE-1 (and music before).
-	// pspeech[0] is the probability that all frames in the window are speech.
-	pspeech [DETECT_SIZE]float32
-	// Probability of having music for time i to DETECT_SIZE-1 (and speech before).
-	// pmusic[0] is the probability that all frames in the window are music.
-	pmusic                  [DETECT_SIZE]float32
-	speech_confidence       float32
-	music_confidence        float32
-	speech_confidence_count int
-	music_confidence_count  int
-	write_pos               int
-	read_pos                int
-	read_subframe           int
-	hp_ener_accum           float32
-	downmix_state           [3]int32
-	info                    [DETECT_SIZE]celt.AnalysisInfo
+	write_pos          int
+	read_pos           int
+	read_subframe      int
+	hp_ener_accum      float32
+	initialized        int
+	rnn_state          [MAX_NEURONS]float32
+	downmix_state      [3]int32
+	info               [DETECT_SIZE]celt.AnalysisInfo
 }
 
 // MIN16/MAX16/MIN32/MAX32/ABS16 applied to C floats (arch.h defines them as
@@ -92,6 +81,8 @@ func absf(x float32) float32 {
 	}
 	return x
 }
+
+const TRANSITION_PENALTY = 10
 
 var dct_table = [128]float32{
 	0.250000, 0.250000, 0.250000, 0.250000, 0.250000, 0.250000, 0.250000, 0.250000,
@@ -264,24 +255,37 @@ func (tonal *TonalityAnalysisState) TonalityAnalysisReset() {
 	tonal.arch = arch
 	tonal.application = application
 	tonal.Fs = Fs
-	tonal.music_confidence = .9
-	tonal.speech_confidence = .1
 }
 
 // C: void tonality_get_info(TonalityAnalysisState *tonal, AnalysisInfo *info_out, int len)
 func (tonal *TonalityAnalysisState) TonalityGetInfo(info_out *celt.AnalysisInfo, length int) {
 	var pos int
 	var curr_lookahead int
-	var psum float32
 	var tonality_max float32
 	var tonality_avg float32
 	var tonality_count int
 	var i int
+	var pos0 int
+	var prob_avg float32
+	var prob_count float32
+	var prob_min, prob_max float32
+	var vad_prob float32
+	var mpos, vpos int
+	var bandwidth_span int
 
 	pos = tonal.read_pos
 	curr_lookahead = tonal.write_pos - tonal.read_pos
 	if curr_lookahead < 0 {
 		curr_lookahead += DETECT_SIZE
+	}
+
+	tonal.read_subframe += length / int(tonal.Fs/400)
+	for tonal.read_subframe >= 8 {
+		tonal.read_subframe -= 8
+		tonal.read_pos++
+	}
+	if tonal.read_pos >= DETECT_SIZE {
+		tonal.read_pos -= DETECT_SIZE
 	}
 
 	// On long frames, look at the second analysis window rather than the first.
@@ -297,10 +301,16 @@ func (tonal *TonalityAnalysisState) TonalityGetInfo(info_out *celt.AnalysisInfo,
 	if pos < 0 {
 		pos = DETECT_SIZE - 1
 	}
+	pos0 = pos
 	*info_out = tonal.info[pos]
+	if info_out.Valid == 0 {
+		return
+	}
 	tonality_max = info_out.Tonality
 	tonality_avg = info_out.Tonality
 	tonality_count = 1
+	// Look at the neighbouring frames and pick largest bandwidth found (to be safe).
+	bandwidth_span = 6
 	// If possible, look ahead for a tone to compensate for the delay in the tone detector.
 	for i = 0; i < 3; i++ {
 		pos++
@@ -313,33 +323,126 @@ func (tonal *TonalityAnalysisState) TonalityGetInfo(info_out *celt.AnalysisInfo,
 		tonality_max = maxf(tonality_max, tonal.info[pos].Tonality)
 		tonality_avg += tonal.info[pos].Tonality
 		tonality_count++
+		info_out.Bandwidth = IMAX(info_out.Bandwidth, tonal.info[pos].Bandwidth)
+		bandwidth_span--
+	}
+	pos = pos0
+	// Look back in time to see if any has a wider bandwidth than the current frame.
+	for i = 0; i < bandwidth_span; i++ {
+		pos--
+		if pos < 0 {
+			pos = DETECT_SIZE - 1
+		}
+		if pos == tonal.write_pos {
+			break
+		}
+		info_out.Bandwidth = IMAX(info_out.Bandwidth, tonal.info[pos].Bandwidth)
 	}
 	info_out.Tonality = maxf(tonality_avg/float32(tonality_count), tonality_max-.2)
-	tonal.read_subframe += length / int(tonal.Fs/400)
-	for tonal.read_subframe >= 8 {
-		tonal.read_subframe -= 8
-		tonal.read_pos++
-	}
-	if tonal.read_pos >= DETECT_SIZE {
-		tonal.read_pos -= DETECT_SIZE
+
+	mpos = pos0
+	vpos = pos0
+	// If we have enough look-ahead, compensate for the ~5-frame delay in the music prob and
+	// ~1 frame delay in the VAD prob.
+	if curr_lookahead > 15 {
+		mpos += 5
+		if mpos >= DETECT_SIZE {
+			mpos -= DETECT_SIZE
+		}
+		vpos += 1
+		if vpos >= DETECT_SIZE {
+			vpos -= DETECT_SIZE
+		}
 	}
 
-	// The -1 is to compensate for the delay in the features themselves.
-	curr_lookahead = IMAX(curr_lookahead-1, 0)
-
-	psum = 0
-	// Summing the probability of transition patterns that involve music at
-	// time (DETECT_SIZE-curr_lookahead-1)
-	for i = 0; i < DETECT_SIZE-curr_lookahead; i++ {
-		psum += tonal.pmusic[i]
+	// The following calculations attempt to minimize a "badness function"
+	// for the transition. When switching from speech to music, the badness
+	// of switching at frame k is
+	// b_k = S*v_k + \sum_{i=0}^{k-1} v_i*(p_i - T)
+	// where
+	// v_i is the activity probability (VAD) at frame i,
+	// p_i is the music probability at frame i
+	// T is the probability threshold for switching
+	// S is the penalty for switching during active audio rather than silence
+	// the current frame has index i=0
+	//
+	// Rather than apply badness to directly decide when to switch, what we compute
+	// instead is the threshold for which the optimal switching point is now. When
+	// considering whether to switch now (frame 0) or at frame k, we have:
+	// S*v_0 = S*v_k + \sum_{i=0}^{k-1} v_i*(p_i - T)
+	// which gives us:
+	// T = ( \sum_{i=0}^{k-1} v_i*p_i + S*(v_k-v_0) ) / ( \sum_{i=0}^{k-1} v_i )
+	// We take the min threshold across all positive values of k (up to the maximum
+	// amount of lookahead we have) to give us the threshold for which the current
+	// frame is the optimal switch point.
+	//
+	// The last step is that we need to consider whether we want to switch at all.
+	// For that we use the average of the music probability over the entire window.
+	// If the threshold is higher than that average we're not going to
+	// switch, so we compute a min with the average as well. The result of all these
+	// min operations is music_prob_min, which gives the threshold for switching to music
+	// if we're currently encoding for speech.
+	//
+	// We do the exact opposite to compute music_prob_max which is used for switching
+	// from music to speech.
+	prob_min = 1
+	prob_max = 0
+	vad_prob = tonal.info[vpos].Activity_probability
+	prob_count = maxf(.1, vad_prob)
+	prob_avg = maxf(.1, vad_prob) * tonal.info[mpos].Music_prob
+	for {
+		var pos_vad float32
+		mpos++
+		if mpos == DETECT_SIZE {
+			mpos = 0
+		}
+		if mpos == tonal.write_pos {
+			break
+		}
+		vpos++
+		if vpos == DETECT_SIZE {
+			vpos = 0
+		}
+		if vpos == tonal.write_pos {
+			break
+		}
+		pos_vad = tonal.info[vpos].Activity_probability
+		prob_min = minf((prob_avg-float32(TRANSITION_PENALTY*(vad_prob-pos_vad)))/prob_count, prob_min)
+		prob_max = maxf((prob_avg+float32(TRANSITION_PENALTY*(vad_prob-pos_vad)))/prob_count, prob_max)
+		prob_count += maxf(.1, pos_vad)
+		prob_avg += float32(maxf(.1, pos_vad) * tonal.info[mpos].Music_prob)
 	}
-	for ; i < DETECT_SIZE; i++ {
-		psum += tonal.pspeech[i]
-	}
-	psum = float32(psum*tonal.music_confidence) + float32((1-psum)*tonal.speech_confidence)
-	// printf("%f %f %f %f %f\n", psum, info_out->music_prob, info_out->vad_prob, info_out->activity_probability, info_out->tonality);
+	info_out.Music_prob = prob_avg / prob_count
+	prob_min = minf(prob_avg/prob_count, prob_min)
+	prob_max = maxf(prob_avg/prob_count, prob_max)
+	prob_min = maxf(prob_min, 0)
+	prob_max = minf(prob_max, 1)
 
-	info_out.Music_prob = psum
+	// If we don't have enough look-ahead, do our best to make a decent decision.
+	if curr_lookahead < 10 {
+		var pmin, pmax float32
+		pmin = prob_min
+		pmax = prob_max
+		pos = pos0
+		// Look for min/max in the past.
+		for i = 0; i < IMIN(tonal.count-1, 15); i++ {
+			pos--
+			if pos < 0 {
+				pos = DETECT_SIZE - 1
+			}
+			pmin = minf(pmin, tonal.info[pos].Music_prob)
+			pmax = maxf(pmax, tonal.info[pos].Music_prob)
+		}
+		// Bias against switching on active audio.
+		pmin = maxf(0, pmin-float32(.1*vad_prob))
+		pmax = minf(1, pmax+float32(.1*vad_prob))
+		prob_min += float32((1 - float32(.1*float32(curr_lookahead))) * (pmin - prob_min))
+		prob_max += float32((1 - float32(.1*float32(curr_lookahead))) * (pmax - prob_max))
+	}
+	info_out.Music_prob_min = prob_min
+	info_out.Music_prob_max = prob_max
+
+	// printf("%f %f %f %f %f\n", prob_min, prob_max, prob_avg/prob_count, vad_prob, info_out->music_prob);
 }
 
 var std_feature_bias = [9]float32{
@@ -358,6 +461,17 @@ const SCALE_COMPENS float32 = 1.0 / float32(int32(1)<<(15+celt.SIG_SHIFT))
 
 // C: #define SCALE_ENER(e) ((SCALE_COMPENS*SCALE_COMPENS)*(e))   (FIXED_POINT)
 func SCALE_ENER(e float32) float32 { return float32(SCALE_COMPENS*SCALE_COMPENS) * e }
+
+// C: static int is_digital_silence32(const opus_val32* pcm, int frame_size, int channels, int lsb_depth)   (FIXED_POINT)
+func is_digital_silence32(pcm []int32, frame_size int, channels int, lsb_depth int) int {
+	var silence int = 0
+	var sample_max int32 = 0
+	sample_max = celt.Maxabs32(pcm, frame_size*channels)
+
+	silence = b2i(sample_max == 0)
+	_ = lsb_depth
+	return silence
+}
 
 // C: static void tonality_analysis(TonalityAnalysisState *tonal, const CELTMode *celt_mode, const void *x, int len, int offset, int c1, int c2, int C, int lsb_depth, downmix_func downmix)
 func (tonal *TonalityAnalysisState) tonality_analysis(celt_mode *celt.CELTMode, x any, length int, offset int, c1 int, c2 int, C int, lsb_depth int, downmix downmix_func) {
@@ -383,6 +497,7 @@ func (tonal *TonalityAnalysisState) tonality_analysis(celt_mode *celt.CELTMode, 
 	var alpha, alphaE, alphaE2 float32
 	var frame_loudness float32
 	var bandwidth_mask float32
+	var is_masked [NB_TBANDS + 1]int
 	var bandwidth int = 0
 	var maxE float32 = 0
 	var noise_floor float32
@@ -395,10 +510,22 @@ func (tonal *TonalityAnalysisState) tonality_analysis(celt_mode *celt.CELTMode, 
 	var band_log2 [NB_TBANDS + 1]float32
 	var leakage_from [NB_TBANDS + 1]float32
 	var leakage_to [NB_TBANDS + 1]float32
+	var layer_out [MAX_NEURONS]float32
+	var below_max_pitch float32
+	var above_max_pitch float32
+	var is_silence int
 
+	if tonal.initialized == 0 {
+		tonal.mem_fill = 240
+		tonal.initialized = 1
+	}
 	alpha = 1.0 / float32(IMIN(10, 1+tonal.count))
 	alphaE = 1.0 / float32(IMIN(25, 1+tonal.count))
-	alphaE2 = 1.0 / float32(IMIN(500, 1+tonal.count))
+	// Noise floor related decay for bandwidth detection: -2.2 dB/second
+	alphaE2 = 1.0 / float32(IMIN(100, 1+tonal.count))
+	if tonal.count <= 1 {
+		alphaE2 = 1
+	}
 
 	if tonal.Fs == 48000 {
 		// len and offset are now at 24 kHz.
@@ -409,17 +536,7 @@ func (tonal *TonalityAnalysisState) tonality_analysis(celt_mode *celt.CELTMode, 
 		offset = 3 * offset / 2
 	}
 
-	if tonal.count < 4 {
-		if tonal.application == OPUS_APPLICATION_VOIP {
-			tonal.music_prob = .1
-		} else {
-			tonal.music_prob = .625
-		}
-	}
 	kfft := celt_mode.Kfft(0)
-	if tonal.count == 0 {
-		tonal.mem_fill = 240
-	}
 	tonal.hp_ener_accum += float32(downmix_and_resample(downmix, x,
 		tonal.inmem[tonal.mem_fill:], tonal.downmix_state[:],
 		IMIN(length, ANALYSIS_BUF_SIZE-tonal.mem_fill), offset, c1, c2, C, int(tonal.Fs)))
@@ -434,6 +551,8 @@ func (tonal *TonalityAnalysisState) tonality_analysis(celt_mode *celt.CELTMode, 
 	if tonal.write_pos >= DETECT_SIZE {
 		tonal.write_pos -= DETECT_SIZE
 	}
+
+	is_silence = is_digital_silence32(tonal.inmem[:], ANALYSIS_BUF_SIZE, 1, lsb_depth)
 
 	in := make([]celt.KissFftCpx, 480)
 	out := make([]celt.KissFftCpx, 480)
@@ -452,6 +571,15 @@ func (tonal *TonalityAnalysisState) tonality_analysis(celt_mode *celt.CELTMode, 
 		tonal.inmem[240:], tonal.downmix_state[:], remaining,
 		offset+ANALYSIS_BUF_SIZE-tonal.mem_fill, c1, c2, C, int(tonal.Fs)))
 	tonal.mem_fill = 240 + remaining
+	if is_silence != 0 {
+		// On silence, copy the previous analysis.
+		var prev_pos int = tonal.write_pos - 2
+		if prev_pos < 0 {
+			prev_pos += DETECT_SIZE
+		}
+		*info = tonal.info[prev_pos]
+		return
+	}
 	celt.Fft(kfft, in, out, tonal.arch)
 
 	for i = 1; i < N2; i++ {
@@ -563,7 +691,7 @@ func (tonal *TonalityAnalysisState) tonality_analysis(celt_mode *celt.CELTMode, 
 			tonal.lowE[b] = logE[b]
 			tonal.highE[b] = minf(tonal.lowE[b]+15, tonal.highE[b])
 		}
-		relativeE += (logE[b] - tonal.lowE[b]) / (1e-15 + (tonal.highE[b] - tonal.lowE[b]))
+		relativeE += (logE[b] - tonal.lowE[b]) / (1e-5 + (tonal.highE[b] - tonal.lowE[b]))
 
 		L1 = 0
 		L2 = 0
@@ -639,8 +767,11 @@ func (tonal *TonalityAnalysisState) tonality_analysis(celt_mode *celt.CELTMode, 
 	maxE = 0
 	noise_floor = 5.7e-4 / float32(int(1)<<uint(IMAX(0, lsb_depth-8)))
 	noise_floor *= noise_floor
+	below_max_pitch = 0
+	above_max_pitch = 0
 	for b = 0; b < NB_TBANDS; b++ {
 		var E float32 = 0
+		var Em float32
 		var band_start, band_end int
 		// Keep a margin of 300 Hz for aliasing
 		band_start = tbands[b]
@@ -652,44 +783,74 @@ func (tonal *TonalityAnalysisState) tonality_analysis(celt_mode *celt.CELTMode, 
 		}
 		E = SCALE_ENER(E)
 		maxE = maxf(maxE, E)
+		if band_start < 64 {
+			below_max_pitch += E
+		} else {
+			above_max_pitch += E
+		}
 		tonal.meanE[b] = maxf(float32((1-alphaE2)*tonal.meanE[b]), E)
-		E = maxf(E, tonal.meanE[b])
-		// Use a simple follower with 13 dB/Bark slope for spreading function
-		bandwidth_mask = maxf(float32(.05*bandwidth_mask), E)
+		Em = maxf(E, tonal.meanE[b])
 		// Consider the band "active" only if all these conditions are met:
-		// 1) less than 10 dB below the simple follower
-		// 2) less than 90 dB below the peak band (maximal masking possible considering
+		// 1) less than 90 dB below the peak band (maximal masking possible considering
 		//    both the ATH and the loudness-dependent slope of the spreading function)
-		// 3) above the PCM quantization noise floor
+		// 2) above the PCM quantization noise floor
 		// We use b+1 because the first CELT band isn't included in tbands[]
-		if float64(E) > .1*float64(bandwidth_mask) && float32(E*1e9) > maxE && E > float32(noise_floor*float32(band_end-band_start)) {
+		if float32(E*1e9) > maxE && (Em > float32(float32(3*noise_floor)*float32(band_end-band_start)) || E > float32(noise_floor*float32(band_end-band_start))) {
 			bandwidth = b + 1
 		}
+		// Check if the band is masked (see below).
+		{
+			var r float32 = .05
+			if tonal.prev_bandwidth >= b+1 {
+				r = .01
+			}
+			is_masked[b] = b2i(E < float32(r*bandwidth_mask))
+		}
+		// Use a simple follower with 13 dB/Bark slope for spreading function.
+		bandwidth_mask = maxf(float32(.05*bandwidth_mask), E)
 	}
 	// Special case for the last two bands, for which we don't have spectrum but only
-	// the energy above 12 kHz.
+	// the energy above 12 kHz. The difficulty here is that the high-pass we use
+	// leaks some LF energy, so we need to increase the threshold without accidentally cutting
+	// off the band.
 	if tonal.Fs == 48000 {
-		var ratio float32
-		var E float32 = hp_ener * float32(1.0/(240*240))
+		var noise_ratio float32
+		var Em float32
+		var E float32 = hp_ener * float32(1.0/(60*60))
 		if tonal.prev_bandwidth == 20 {
-			ratio = 0.03
+			noise_ratio = 10
 		} else {
-			ratio = 0.07
+			noise_ratio = 30
 		}
+
 		// silk_resampler_down2_hp() shifted right by an extra 8 bits.   (FIXED_POINT)
 		E *= float32(float32(256.0*float32(1.0/float32(celt.Q15ONE))) * float32(1.0/float32(celt.Q15ONE)))
-		maxE = maxf(maxE, E)
+		above_max_pitch += E
 		tonal.meanE[b] = maxf(float32((1-alphaE2)*tonal.meanE[b]), E)
-		E = maxf(E, tonal.meanE[b])
-		// Use a simple follower with 13 dB/Bark slope for spreading function
-		bandwidth_mask = maxf(float32(.05*bandwidth_mask), E)
-		if E > float32(ratio*bandwidth_mask) && float32(E*1e9) > maxE && E > float32(noise_floor*160) {
+		Em = maxf(E, tonal.meanE[b])
+		if Em > float32(float32(float32(3*noise_ratio)*noise_floor)*160) || E > float32(float32(noise_ratio*noise_floor)*160) {
 			bandwidth = 20
 		}
-		// This detector is unreliable, so if the bandwidth is close to SWB, assume it's FB.
-		if bandwidth >= 17 {
-			bandwidth = 20
+		// Check if the band is masked (see below).
+		{
+			var r float32 = .05
+			if tonal.prev_bandwidth == 20 {
+				r = .01
+			}
+			is_masked[b] = b2i(E < float32(r*bandwidth_mask))
 		}
+	}
+	if above_max_pitch > below_max_pitch {
+		info.Max_pitch_ratio = below_max_pitch / above_max_pitch
+	} else {
+		info.Max_pitch_ratio = 1
+	}
+	// In some cases, resampling aliasing can create a small amount of energy in the first band
+	// being cut. So if the last band is masked, we don't include it.
+	if bandwidth == 20 && is_masked[NB_TBANDS] != 0 {
+		bandwidth -= 2
+	} else if bandwidth > 0 && bandwidth <= NB_TBANDS && is_masked[bandwidth-1] != 0 {
+		bandwidth--
 	}
 	if tonal.count <= 2 {
 		bandwidth = 20
@@ -774,138 +935,15 @@ func (tonal *TonalityAnalysisState) tonality_analysis(celt_mode *celt.CELTMode, 
 	features[23] = info.Tonality_slope + 0.069216
 	features[24] = tonal.lowECount - 0.067930
 
-	mlp_process(&net, features[:], frame_probs[:])
-	frame_probs[0] = .5 * (frame_probs[0] + 1)
-	// Curve fitting between the MLP probability and the actual probability
-	// frame_probs[0] = .01f + 1.21f*frame_probs[0]*frame_probs[0] - .23f*(float)pow(frame_probs[0], 10);
-	// Probability of active audio (as opposed to silence)
-	frame_probs[1] = float32(.5*frame_probs[1]) + .5
-	frame_probs[1] *= frame_probs[1]
+	compute_dense(&layer0, layer_out[:], features[:])
+	compute_gru(&layer1, tonal.rnn_state[:], layer_out[:])
+	compute_dense(&layer2, frame_probs[:], tonal.rnn_state[:])
 
 	// Probability of speech or music vs noise
 	info.Activity_probability = frame_probs[1]
+	info.Music_prob = frame_probs[0]
 
-	// printf("%f %f\n", frame_probs[0], frame_probs[1]);
-	{
-		// Probability of state transition
-		var tau float32
-		// Represents independence of the MLP probabilities, where
-		// beta=1 means fully independent.
-		var beta float32
-		// Denormalized probability of speech (p0) and music (p1) after update
-		var p0, p1 float32
-		// Probabilities for "all speech" and "all music"
-		var s0, m0 float32
-		// Probability sum for renormalisation
-		var psum float32
-		// Instantaneous probability of speech and music, with beta pre-applied.
-		var speech0 float32
-		var music0 float32
-		var p, q float32
-
-		// More silence transitions for speech than for music.
-		tau = float32(.001*tonal.music_prob) + float32(.01*(1-tonal.music_prob))
-		p = maxf(.05, minf(.95, frame_probs[1]))
-		q = maxf(.05, minf(.95, tonal.vad_prob))
-		beta = .02 + float32(.05*absf(p-q))/(float32(p*(1-q))+float32(q*(1-p)))
-		// p0 and p1 are the probabilities of speech and music at this frame
-		// using only information from previous frame and applying the
-		// state transition model
-		p0 = float32((1-tonal.vad_prob)*(1-tau)) + float32(tonal.vad_prob*tau)
-		p1 = float32(tonal.vad_prob*(1-tau)) + float32((1-tonal.vad_prob)*tau)
-		// We apply the current probability with exponent beta to work around
-		// the fact that the probability estimates aren't independent.
-		p0 *= float32(math.Pow(float64(1-frame_probs[1]), float64(beta)))
-		p1 *= float32(math.Pow(float64(frame_probs[1]), float64(beta)))
-		// Normalise the probabilities to get the Marokv probability of music.
-		tonal.vad_prob = p1 / (p0 + p1)
-		info.Vad_prob = tonal.vad_prob
-		// Consider that silence has a 50-50 probability of being speech or music.
-		frame_probs[0] = float32(tonal.vad_prob*frame_probs[0]) + float32((1-tonal.vad_prob)*.5)
-
-		// One transition every 3 minutes of active audio
-		tau = .0001
-		// Adapt beta based on how "unexpected" the new prob is
-		p = maxf(.05, minf(.95, frame_probs[0]))
-		q = maxf(.05, minf(.95, tonal.music_prob))
-		beta = .02 + float32(.05*absf(p-q))/(float32(p*(1-q))+float32(q*(1-p)))
-		// p0 and p1 are the probabilities of speech and music at this frame
-		// using only information from previous frame and applying the
-		// state transition model
-		p0 = float32((1-tonal.music_prob)*(1-tau)) + float32(tonal.music_prob*tau)
-		p1 = float32(tonal.music_prob*(1-tau)) + float32((1-tonal.music_prob)*tau)
-		// We apply the current probability with exponent beta to work around
-		// the fact that the probability estimates aren't independent.
-		p0 *= float32(math.Pow(float64(1-frame_probs[0]), float64(beta)))
-		p1 *= float32(math.Pow(float64(frame_probs[0]), float64(beta)))
-		// Normalise the probabilities to get the Marokv probability of music.
-		tonal.music_prob = p1 / (p0 + p1)
-		info.Music_prob = tonal.music_prob
-
-		// printf("%f %f %f %f\n", frame_probs[0], frame_probs[1], tonal->music_prob, tonal->vad_prob);
-		// This chunk of code deals with delayed decision.
-		psum = 1e-20
-		// Instantaneous probability of speech and music, with beta pre-applied.
-		speech0 = float32(math.Pow(float64(1-frame_probs[0]), float64(beta)))
-		music0 = float32(math.Pow(float64(frame_probs[0]), float64(beta)))
-		if tonal.count == 1 {
-			if tonal.application == OPUS_APPLICATION_VOIP {
-				tonal.pmusic[0] = .1
-			} else {
-				tonal.pmusic[0] = .625
-			}
-			tonal.pspeech[0] = 1 - tonal.pmusic[0]
-		}
-		// Updated probability of having only speech (s0) or only music (m0),
-		// before considering the new observation.
-		s0 = tonal.pspeech[0] + tonal.pspeech[1]
-		m0 = tonal.pmusic[0] + tonal.pmusic[1]
-		// Updates s0 and m0 with instantaneous probability.
-		tonal.pspeech[0] = s0 * (1 - tau) * speech0
-		tonal.pmusic[0] = m0 * (1 - tau) * music0
-		// Propagate the transition probabilities
-		for i = 1; i < DETECT_SIZE-1; i++ {
-			tonal.pspeech[i] = tonal.pspeech[i+1] * speech0
-			tonal.pmusic[i] = tonal.pmusic[i+1] * music0
-		}
-		// Probability that the latest frame is speech, when all the previous ones were music.
-		tonal.pspeech[DETECT_SIZE-1] = m0 * tau * speech0
-		// Probability that the latest frame is music, when all the previous ones were speech.
-		tonal.pmusic[DETECT_SIZE-1] = s0 * tau * music0
-
-		// Renormalise probabilities to 1
-		for i = 0; i < DETECT_SIZE; i++ {
-			psum += tonal.pspeech[i] + tonal.pmusic[i]
-		}
-		psum = 1.0 / psum
-		for i = 0; i < DETECT_SIZE; i++ {
-			tonal.pspeech[i] *= psum
-			tonal.pmusic[i] *= psum
-		}
-		psum = tonal.pmusic[0]
-		for i = 1; i < DETECT_SIZE; i++ {
-			psum += tonal.pspeech[i]
-		}
-
-		// Estimate our confidence in the speech/music decisions
-		if float64(frame_probs[1]) > .75 {
-			if float64(tonal.music_prob) > .9 {
-				var adapt float32
-				tonal.music_confidence_count++
-				adapt = 1.0 / float32(tonal.music_confidence_count)
-				tonal.music_confidence_count = IMIN(tonal.music_confidence_count, 500)
-				tonal.music_confidence += float32(adapt * maxf(-.2, frame_probs[0]-tonal.music_confidence))
-			}
-			if float64(tonal.music_prob) < .1 {
-				var adapt float32
-				tonal.speech_confidence_count++
-				adapt = 1.0 / float32(tonal.speech_confidence_count)
-				tonal.speech_confidence_count = IMIN(tonal.speech_confidence_count, 500)
-				tonal.speech_confidence += float32(adapt * minf(.2, frame_probs[0]-tonal.speech_confidence))
-			}
-		}
-	}
-	tonal.last_music = b2i(tonal.music_prob > .5)
+	// printf("%f %f %f\n", frame_probs[0], frame_probs[1], info->music_prob);
 	/*#ifdef MLP_TRAINING
 	for (i=0;i<25;i++)
 	   printf("%f ", features[i]);
@@ -946,6 +984,5 @@ func (analysis *TonalityAnalysisState) RunAnalysis(celt_mode *celt.CELTMode, ana
 		analysis.analysis_offset -= frame_size
 	}
 
-	analysis_info.Valid = 0
 	analysis.TonalityGetInfo(analysis_info, frame_size)
 }

@@ -39,10 +39,10 @@ func BitexactCos(x int16) int16 {
 	var tmp int32
 	var x2 int16
 	tmp = (4096 + int32(x)*int32(x)) >> 13
-	celt_assert(tmp <= 32767)
+	celt_sig_assert(tmp <= 32767)
 	x2 = int16(tmp)
 	x2 = int16((32767 - int32(x2)) + FRAC_MUL16(x2, (-7651+FRAC_MUL16(x2, (8277+FRAC_MUL16(-626, x2))))))
-	celt_assert(x2 <= 32766)
+	celt_sig_assert(x2 <= 32766)
 	return 1 + x2
 }
 
@@ -249,7 +249,7 @@ func AntiCollapse(m *CELTMode, X_ []int16, collapse_masks []uint8, LM, C, size i
 
 		N0 = int(m.eBands[i+1] - m.eBands[i])
 		// depth in 1/8 bits
-		celt_assert(pulses[i] >= 0)
+		celt_sig_assert(pulses[i] >= 0)
 		depth = int(Udiv(uint32(1+pulses[i]), uint32(m.eBands[i+1]-m.eBands[i]))) >> uint(LM)
 
 		thresh32 = SHR32(Exp2(-SHL16(depth, 10-BITRES)), 1)
@@ -424,10 +424,10 @@ func stereo_merge(X, Y []int16, mid int16, N int, arch int) {
 // C: int spreading_decision(const CELTMode *m, const celt_norm *X, int *average,
 //
 //	int last_decision, int *hf_average, int *tapset_decision, int update_hf,
-//	int end, int C, int M)
+//	int end, int C, int M, const int *spread_weight)
 func SpreadingDecision(m *CELTMode, X []int16, average *int,
 	last_decision int, hf_average, tapset_decision *int, update_hf int,
-	end, C, M int) int {
+	end, C, M int, spread_weight []int) int {
 	var i, c, N0 int
 	var sum, nbBands int = 0, 0
 	eBands := m.eBands
@@ -472,8 +472,8 @@ func SpreadingDecision(m *CELTMode, X []int16, average *int,
 				hf_sum += int(Udiv(uint32(32*(tcount[1]+tcount[0])), uint32(N)))
 			}
 			tmp = b2i(2*tcount[2] >= N) + b2i(2*tcount[1] >= N) + b2i(2*tcount[0] >= N)
-			sum += tmp * 256
-			nbBands++
+			sum += tmp * spread_weight[i]
+			nbBands += spread_weight[i]
 		}
 		c++
 		if c >= C {
@@ -503,7 +503,7 @@ func SpreadingDecision(m *CELTMode, X []int16, average *int,
 	// printf("%d %d %d\n", hf_sum, *hf_average, *tapset_decision);
 	celt_assert(nbBands > 0) // end has to be non-zero
 	celt_assert(sum >= 0)
-	sum = int(Udiv(uint32(sum), uint32(nbBands)))
+	sum = int(Udiv(uint32(int32(sum)<<8), uint32(nbBands)))
 	// Recursive averaging
 	sum = (sum + *average) >> 1
 	*average = sum
@@ -1496,6 +1496,7 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 			Y = nil
 		}
 		N = M*int(eBands[i+1]) - M*int(eBands[i])
+		celt_assert(N > 0)
 		tell = int32(ec.TellFrac())
 
 		// Compute how many bits we want to allocate to this band
@@ -1511,8 +1512,12 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 			b = 0
 		}
 
-		if resynth != 0 && M*int(eBands[i])-N >= M*int(eBands[start]) && (update_lowband != 0 || lowband_offset == 0) {
+		// DISABLE_UPDATE_DRAFT is not defined (RFC 8251 behaviour).
+		if resynth != 0 && (M*int(eBands[i])-N >= M*int(eBands[start]) || i == start+1) && (update_lowband != 0 || lowband_offset == 0) {
 			lowband_offset = i
+		}
+		if i == start+1 {
+			special_hybrid_folding(m, norm, norm2, start, M, dual_stereo)
 		}
 
 		tf_change = tf_res[i]
@@ -1544,9 +1549,10 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 				}
 			}
 			fold_end = lowband_offset - 1
+			// DISABLE_UPDATE_DRAFT is not defined (RFC 8251 behaviour).
 			for {
 				fold_end++
-				if !(M*int(eBands[fold_end]) < effective_lowband+norm_offset+N) {
+				if !(fold_end < i && M*int(eBands[fold_end]) < effective_lowband+norm_offset+N) {
 					break
 				}
 			}
@@ -1644,6 +1650,7 @@ func QuantAllBands(encode int, m *CELTMode, start, end int,
 					ctx = ctx_save
 					copy(X[:N], X_save[:N])
 					copy(Y[:N], Y_save[:N])
+					// DISABLE_UPDATE_DRAFT is not defined (RFC 8251 behaviour).
 					if i == start+1 {
 						special_hybrid_folding(m, norm, norm2, start, M, dual_stereo)
 					}

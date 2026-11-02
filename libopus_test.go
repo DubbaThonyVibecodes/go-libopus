@@ -157,3 +157,59 @@ func TestFrameDurationAndPadding(t *testing.T) {
 		t.Fatalf("soft clip: %v", f[100])
 	}
 }
+
+// TestProjection round-trips a first-order ambisonics signal through the
+// projection (mapping family 3) encoder and decoder (libopus 1.3+).
+func TestProjection(t *testing.T) {
+	const rate, ch, frame = 48000, 4, 960
+	enc, err := NewProjectionEncoder(rate, ch, Audio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := enc.SetBitrate(128000); err != nil {
+		t.Fatal(err)
+	}
+	streams, coupled := enc.Streams()
+	matrix, err := enc.DemixingMatrix()
+	if err != nil || len(matrix) != (streams+coupled)*ch*2 {
+		t.Fatalf("matrix: %v len %d", err, len(matrix))
+	}
+	dec, err := NewProjectionDecoder(rate, ch, streams, coupled, matrix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pcm := make([]int16, frame*ch)
+	out := make([]int16, 5760*ch)
+	pkt := make([]byte, 4*MaxPacket)
+	var energy float64
+	for f := 0; f < 20; f++ {
+		for i := 0; i < frame; i++ {
+			pcm[i*ch] = int16(8000 * math.Sin(float64(f*frame+i)*2*math.Pi*440/rate))
+		}
+		n, err := enc.Encode(pcm, pkt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, err := dec.Decode(pkt[:n], out, false)
+		if err != nil || m != frame {
+			t.Fatalf("decode: m=%d err=%v", m, err)
+		}
+		for i := 0; i < m*ch; i++ {
+			energy += float64(out[i]) * float64(out[i])
+		}
+	}
+	if energy == 0 {
+		t.Fatal("silent output")
+	}
+	if l, err := AmbisonicsLayout(6); err != nil || l.Streams != 5 || l.CoupledStreams != 1 {
+		t.Fatalf("ambisonics layout: %+v %v", l, err)
+	}
+	e2, err := NewSurroundEncoder(rate, 9, 2, Audio)
+	if err != nil || e2.Layout().Streams != 9 {
+		t.Fatalf("family 2 encoder: %v", err)
+	}
+	e, _ := NewEncoder(rate, 1, VoIP)
+	if e.InDTX() {
+		t.Fatal("fresh encoder reports DTX")
+	}
+}

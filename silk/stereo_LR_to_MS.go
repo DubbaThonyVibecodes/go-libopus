@@ -97,7 +97,7 @@ func (state *StereoEncState) StereoLRToMS(x1 []int16, x2 []int16, ix *[2][3]int8
 	if total_rate_bps < 1 {
 		total_rate_bps = 1
 	}
-	min_mid_rate_bps = SMLABB(2000, fs_kHz, 900)
+	min_mid_rate_bps = SMLABB(2000, fs_kHz, 600)
 	silk_assert(min_mid_rate_bps < 32767)
 	/* Default bitrate distribution: 8 parts for Mid and (5+3*frac) parts for Side. so: mid_rate = ( 8 / ( 13 + 3 * frac ) ) * total_ rate */
 	frac_3_Q16 = MUL(3, frac_Q16)

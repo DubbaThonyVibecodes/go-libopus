@@ -53,6 +53,7 @@ func Lpc(_lpc []int16, ac []int32, p int) {
 // minus ord, and the C x[k] is the Go x[ord+k].
 func Fir(x []int16, num []int16, y []int16, N, ord int, arch int) {
 	var i, j int
+	celt_assert(&x[ord] != &y[0]) // C: celt_assert(x != y); the Go x starts ord samples before the C x
 	rnum := make([]int16, ord)
 	for i = 0; i < ord; i++ {
 		rnum[i] = num[ord-i-1]

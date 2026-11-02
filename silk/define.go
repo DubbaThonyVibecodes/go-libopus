@@ -13,7 +13,6 @@ const (
 	// Limits on bitrate
 	MIN_TARGET_RATE_BPS = 5000
 	MAX_TARGET_RATE_BPS = 80000
-	TARGET_RATE_TAB_SZ  = 8
 
 	// LBRR thresholds
 	LBRR_NB_MIN_RATE_BPS = 12000
@@ -24,6 +23,11 @@ const (
 	NB_SPEECH_FRAMES_BEFORE_DTX         = 10 // eq 200 ms
 	MAX_CONSECUTIVE_DTX                 = 20 // eq 400 ms
 	DTX_ACTIVITY_THRESHOLD      float32 = 0.1
+
+	// VAD decision
+	VAD_NO_DECISION = -1
+	VAD_NO_ACTIVITY = 0
+	VAD_ACTIVITY    = 1
 
 	// Maximum sampling frequency
 	MAX_FS_KHZ     = 16

@@ -7,9 +7,15 @@ package silk
 // C: opus_int silk_control_audio_bandwidth(silk_encoder_state *psEncC, silk_EncControlStruct *encControl)
 func (psEncC *EncoderState) ControlAudioBandwidth(encControl *EncControlStruct) int {
 	var fs_kHz int
+	var orig_kHz int
 	var fs_Hz int32
 
-	fs_kHz = psEncC.fs_kHz
+	orig_kHz = psEncC.fs_kHz
+	/* Handle a bandwidth-switching reset where we need to be aware what the last sampling rate was. */
+	if orig_kHz == 0 {
+		orig_kHz = int(psEncC.sLP.saved_fs_kHz)
+	}
+	fs_kHz = orig_kHz
 	fs_Hz = SMULBB(fs_kHz, 1000)
 	if fs_Hz == 0 {
 		/* Encoder has just been initialized */
@@ -29,7 +35,7 @@ func (psEncC *EncoderState) ControlAudioBandwidth(encControl *EncControlStruct) 
 		}
 		if psEncC.allow_bandwidth_switch != 0 || encControl.OpusCanSwitch != 0 {
 			/* Check if we should switch down */
-			if int(SMULBB(psEncC.fs_kHz, 1000)) > psEncC.desiredInternal_fs_Hz {
+			if int(SMULBB(orig_kHz, 1000)) > psEncC.desiredInternal_fs_Hz {
 				/* Switch down */
 				if psEncC.sLP.mode == 0 {
 					/* New transition */
@@ -43,7 +49,7 @@ func (psEncC *EncoderState) ControlAudioBandwidth(encControl *EncControlStruct) 
 					psEncC.sLP.mode = 0
 
 					/* Switch to a lower sample frequency */
-					if psEncC.fs_kHz == 16 {
+					if orig_kHz == 16 {
 						fs_kHz = 12
 					} else {
 						fs_kHz = 8
@@ -58,12 +64,12 @@ func (psEncC *EncoderState) ControlAudioBandwidth(encControl *EncControlStruct) 
 						psEncC.sLP.mode = -2
 					}
 				}
-			} else if int(SMULBB(psEncC.fs_kHz, 1000)) < psEncC.desiredInternal_fs_Hz {
+			} else if int(SMULBB(orig_kHz, 1000)) < psEncC.desiredInternal_fs_Hz {
 				/* Check if we should switch up */
 				/* Switch up */
 				if encControl.OpusCanSwitch != 0 {
 					/* Switch to a higher sample frequency */
-					if psEncC.fs_kHz == 8 {
+					if orig_kHz == 8 {
 						fs_kHz = 12
 					} else {
 						fs_kHz = 16

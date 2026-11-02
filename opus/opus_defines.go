@@ -69,7 +69,12 @@ const (
 	/* Don't use 4045, it's already taken by OPUS_GET_GAIN_REQUEST */
 	OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST = 4046
 	OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST = 4047
+	OPUS_GET_IN_DTX_REQUEST                   = 4049
 )
+
+// Defines for the presence of extended APIs.
+// C: #define OPUS_HAVE_OPUS_PROJECTION_H
+const OPUS_HAVE_OPUS_PROJECTION_H = true
 
 // Values for the various encoder CTLs
 const (
@@ -108,6 +113,16 @@ const (
 const (
 	OPUS_MULTISTREAM_GET_ENCODER_STATE_REQUEST = 5120
 	OPUS_MULTISTREAM_GET_DECODER_STATE_REQUEST = 5122
+)
+
+// C: include/opus_projection.h
+//
+// OPUS_PROJECTION_GET_DEMIXING_MATRIX(x,y) takes a []byte and its size
+// (opus_int32) as two Ctl arguments; the other two take an *int32.
+const (
+	OPUS_PROJECTION_GET_DEMIXING_MATRIX_GAIN_REQUEST = 6001
+	OPUS_PROJECTION_GET_DEMIXING_MATRIX_SIZE_REQUEST = 6003
+	OPUS_PROJECTION_GET_DEMIXING_MATRIX_REQUEST      = 6005
 )
 
 // C: src/opus_private.h

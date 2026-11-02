@@ -68,3 +68,7 @@ type Encoder struct {
 // VariableHPSmth1Q15 returns state_Fxx[0].sCmn.variable_HP_smth1_Q15 (read
 // directly by the Opus encoder in C).
 func (e *Encoder) VariableHPSmth1Q15() int32 { return e.state_Fxx[0].sCmn.variable_HP_smth1_Q15 }
+
+// NoSpeechCounter returns state_Fxx[n].sCmn.noSpeechCounter (read by
+// opus_encoder_ctl(OPUS_GET_IN_DTX) in src/opus_encoder.c).
+func (e *Encoder) NoSpeechCounter(n int) int { return e.state_Fxx[n].sCmn.noSpeechCounter }

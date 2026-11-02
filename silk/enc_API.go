@@ -98,10 +98,10 @@ func queryEncoder(encState *Encoder, encStatus *EncControlStruct) int {
 /* Note: if prefillFlag is set, the input must contain 10 ms of audio, irrespective of what                     */
 /* encControl->payloadSize_ms is set to                                                                         */
 //
-// C: opus_int silk_Encode(void *encState, silk_EncControlStruct *encControl, const opus_int16 *samplesIn, opus_int nSamplesIn, ec_enc *psRangeEnc, opus_int32 *nBytesOut, const opus_int prefillFlag)
+// C: opus_int silk_Encode(void *encState, silk_EncControlStruct *encControl, const opus_int16 *samplesIn, opus_int nSamplesIn, ec_enc *psRangeEnc, opus_int32 *nBytesOut, const opus_int prefillFlag, opus_int activity)
 //
 // O    Returns error code
-func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16, nSamplesIn int, psRangeEnc *celt.EcEnc, nBytesOut *int32, prefillFlag int) int {
+func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16, nSamplesIn int, psRangeEnc *celt.EcEnc, nBytesOut *int32, prefillFlag int, activity int) int {
 	var n, i, nBits, flags int
 	var tmp_payloadSize_ms, tmp_complexity, ret int = 0, 0, 0
 	var nSamplesToBuffer, nSamplesToBufferMax, nBlocksOf10ms int
@@ -158,14 +158,24 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 	}
 	curr_block = 0
 	if prefillFlag != 0 {
+		var save_LP LPState
 		/* Only accept input length of 10 ms */
 		if nBlocksOf10ms != 1 {
 			silk_assert(false)
 			return SILK_ENC_INPUT_INVALID_NO_OF_SAMPLES
 		}
+		if prefillFlag == 2 {
+			save_LP = psEnc.state_Fxx[0].sCmn.sLP
+			/* Save the sampling rate so the bandwidth switching code can keep handling transitions. */
+			save_LP.saved_fs_kHz = int32(psEnc.state_Fxx[0].sCmn.fs_kHz)
+		}
 		/* Reset Encoder */
 		for n = 0; n < int(encControl.NChannelsInternal); n++ {
 			ret = psEnc.state_Fxx[n].InitEncoder(psEnc.state_Fxx[n].sCmn.arch)
+			/* Restore the variable LP state. */
+			if prefillFlag == 2 {
+				psEnc.state_Fxx[n].sCmn.sLP = save_LP
+			}
 			silk_assert(ret == 0)
 		}
 		tmp_payloadSize_ms = encControl.PayloadSize_ms
@@ -390,7 +400,7 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 						psEnc.state_Fxx[1].sCmn.sNSQ.prev_gain_Q16 = 65536
 						psEnc.state_Fxx[1].sCmn.first_frame_after_reset = 1
 					}
-					psEnc.state_Fxx[1].EncodeDoVADFIX()
+					psEnc.state_Fxx[1].EncodeDoVADFIX(activity)
 				} else {
 					psEnc.state_Fxx[1].sCmn.VAD_flags[psEnc.state_Fxx[0].sCmn.nFramesEncoded] = 0
 				}
@@ -405,7 +415,7 @@ func (encState *Encoder) Encode(encControl *EncControlStruct, samplesIn []int16,
 				copy(psEnc.state_Fxx[0].sCmn.inputBuf[:2], psEnc.sStereo.sMid[:2])
 				copy(psEnc.sStereo.sMid[:2], psEnc.state_Fxx[0].sCmn.inputBuf[psEnc.state_Fxx[0].sCmn.frame_length:psEnc.state_Fxx[0].sCmn.frame_length+2])
 			}
-			psEnc.state_Fxx[0].EncodeDoVADFIX()
+			psEnc.state_Fxx[0].EncodeDoVADFIX(activity)
 
 			/* Encode */
 			for n = 0; n < int(encControl.NChannelsInternal); n++ {
