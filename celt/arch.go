@@ -93,3 +93,6 @@ const (
 // C: SCALEIN(a) / SCALEOUT(a) are identities in the fixed-point build.
 func SCALEIN[T integer](a T) T  { return a }
 func SCALEOUT[T integer](a T) T { return a }
+
+// Assert is celt_assert for other packages.
+func Assert(cond bool) { celt_assert(cond) }

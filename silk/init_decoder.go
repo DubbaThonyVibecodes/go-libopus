@@ -1,0 +1,25 @@
+package silk
+
+// C: silk/init_decoder.c
+
+/************************/
+/* Init Decoder State   */
+/************************/
+//
+// C: opus_int silk_init_decoder(silk_decoder_state *psDec)
+func (psDec *DecoderState) InitDecoder() int {
+	/* Clear the entire encoder state, except anything copied */
+	*psDec = DecoderState{}
+
+	/* Used to deactivate LSF interpolation */
+	psDec.first_frame_after_reset = 1
+	psDec.prev_gain_Q16 = 65536
+
+	/* Reset CNG state */
+	psDec.CNGReset()
+
+	/* Reset PLC state */
+	psDec.PLCReset()
+
+	return 0
+}

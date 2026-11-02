@@ -95,3 +95,12 @@ func CustomModeCreate(Fs int32, frame_size int, error *int) *CELTMode {
 	}
 	return nil
 }
+
+// Window returns the MDCT window (C: mode->window).
+func (m *CELTMode) Window() []int16 { return m.window }
+
+// Fs returns the sampling rate (C: mode->Fs).
+func (m *CELTMode) SampleRate() int32 { return m.Fs }
+
+// Preemph returns the pre-emphasis coefficients (C: mode->preemph).
+func (m *CELTMode) Preemph() [4]int16 { return m.preemph }

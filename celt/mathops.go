@@ -1,5 +1,7 @@
 package celt
 
+import "math"
+
 // C: celt/mathops.h, celt/mathops.c — various math functions (fixed-point build).
 
 // C: FRAC_MUL16(a,b) ((16384+((opus_int32)(opus_int16)(a)*(opus_int16)(b)))>>15)
@@ -277,4 +279,10 @@ func Atan2p(y, x int16) int16 {
 		arg = 32767
 	}
 	return int16(25736 - SHR16(atan01(EXTRACT16(arg)), 1))
+}
+
+// Float2int is the C float2int (float_cast.h): lrintf, i.e. round to
+// nearest with ties to even.
+func Float2int(x float32) int32 {
+	return int32(math.RoundToEven(float64(x)))
 }

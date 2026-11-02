@@ -111,3 +111,16 @@ func (e *EcCtx) TellFrac() uint32 {
 	}
 	return nbits - uint32(l)
 }
+
+// Storage returns the buffer size (the C code reads _this->storage directly,
+// e.g. the Opus decoder for redundancy handling).
+func (e *EcCtx) Storage() uint32 { return e.storage }
+
+// SetStorage sets the buffer size (C: dec.storage -= redundancy_bytes).
+func (e *EcCtx) SetStorage(v uint32) { e.storage = v }
+
+// NbitsTotal returns nbits_total (the C code adjusts it directly).
+func (e *EcCtx) NbitsTotal() int { return e.nbits_total }
+
+// SetNbitsTotal sets nbits_total.
+func (e *EcCtx) SetNbitsTotal(v int) { e.nbits_total = v }

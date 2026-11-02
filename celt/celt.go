@@ -1702,7 +1702,12 @@ func (st *CELTDecoder) CustomDecoderInit(mode *CELTMode, channels int) int {
 	st.channels = channels
 	st.stream_channels = channels
 
-	st._decode_mem = make([]int32, channels*(DECODE_BUFFER_SIZE+mode.overlap))
+	// Two extra samples: celt_decode_lost() runs comb_filter() with the raw
+	// postfilter_period, which is 0 before the first packet, and the taps at
+	// x[i-T+2] then read two samples past the last channel's buffer (a
+	// harmless out-of-bounds read in C since the gain is 0; in Go it needs
+	// real memory).
+	st._decode_mem = make([]int32, channels*(DECODE_BUFFER_SIZE+mode.overlap)+2)
 	st.lpc = make([]int16, channels*LPC_ORDER)
 	st.oldEBands = make([]int16, 2*mode.nbEBands)
 	st.oldLogE = make([]int16, 2*mode.nbEBands)
