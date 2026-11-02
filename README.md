@@ -28,9 +28,26 @@ each supported minor has its own branch.
 
 ## Status
 
-Tracks libopus **1.0.3**. The decoder (SILK, CELT, hybrid, PLC, FEC,
-multistream, repacketizer) is bit-exact against the upstream fixed-point
-build on every corpus case; the encoder is being verified.
+Tracks libopus **1.0.3** (fixed-point build). Encoder and decoder (SILK,
+CELT, hybrid, mode switching with redundancy, PLC, in-band FEC, DTX,
+multistream/surround, repacketizer, packet helpers) are bit-exact against
+the upstream build on all 790 cases of the committed corpus and on the
+extended 30-second corpus, on both 64-bit and 32-bit (`GOARCH=386`) builds.
+The module has no dependencies outside the standard library and builds with
+`CGO_ENABLED=0`.
+
+Quick start:
+
+```go
+enc, _ := libopus.NewEncoder(48000, 2, libopus.Audio)
+enc.SetBitrate(96000)
+pkt := make([]byte, libopus.MaxPacket)
+n, err := enc.Encode(pcm, pkt)          // pcm: 20 ms of interleaved int16
+
+dec, _ := libopus.NewDecoder(48000, 2)
+out := make([]int16, 5760*2)            // room for 120 ms
+m, err := dec.Decode(pkt[:n], out, false) // m samples per channel
+```
 
 ## Testing
 

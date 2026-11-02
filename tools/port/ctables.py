@@ -71,7 +71,7 @@ def main():
     text = strip_comments(open(src).read())
     body = []
     decls = re.finditer(
-        r'(?:static\s+)?(?:silk_DWORD_ALIGN\s+)?const\s+(?P<type>opus_u?int(?:8|16|32)|silk_NLSF_CB_struct)\s*(?P<ptr>\*\s*const\s+)?(?P<name>silk_\w+)\s*(?P<dims>(?:\[[^\]]*\])*)\s*=\s*(?P<init>\{.*?\}|[^;{]+);',
+        r'(?:static\s+)?(?:silk_DWORD_ALIGN\s+)?const\s+(?P<type>opus_u?int(?:8|16|32)|silk_NLSF_CB_struct)\s*(?P<ptr>\*\s*const\s+)?(?P<name>silk_\w+)\s*(?P<dims>(?:\s*\[[^\]]*\])*)\s*=\s*(?P<init>\{.*?\}|[^;{]+);',
         text, flags=re.S)
     for m in decls:
         ctype, ptr, name, dims, init = m.group('type'), m.group('ptr'), m.group('name'), m.group('dims'), m.group('init').strip()

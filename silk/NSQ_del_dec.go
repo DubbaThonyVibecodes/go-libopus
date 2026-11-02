@@ -367,9 +367,9 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 			psDD.sAR2_Q14[shapingLPCOrder-1] = tmp1
 			n_AR_Q14 = SMLAWB(n_AR_Q14, tmp1, AR_shp_Q13[shapingLPCOrder-1])
 
-			n_AR_Q14 = LSHIFT(n_AR_Q14, 1)                          /* Q11 -> Q12 */
+			n_AR_Q14 = LSHIFT(n_AR_Q14, 1)                        /* Q11 -> Q12 */
 			n_AR_Q14 = SMLAWB(n_AR_Q14, psDD.LF_AR_Q14, Tilt_Q14) /* Q12 */
-			n_AR_Q14 = LSHIFT(n_AR_Q14, 2)                          /* Q12 -> Q14 */
+			n_AR_Q14 = LSHIFT(n_AR_Q14, 2)                        /* Q12 -> Q14 */
 
 			n_LF_Q14 = SMULWB(psDD.Shape_Q14[*smpl_buf_idx], LF_shp_Q14) /* Q12 */
 			n_LF_Q14 = SMLAWT(n_LF_Q14, psDD.LF_AR_Q14, LF_shp_Q14)      /* Q12 */
@@ -377,10 +377,10 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 
 			/* Input minus prediction plus noise feedback                       */
 			/* r = x[ i ] - LTP_pred - LPC_pred + n_AR + n_Tilt + n_LF + n_LTP  */
-			tmp1 = ADD32(n_AR_Q14, n_LF_Q14)       /* Q14 */
-			tmp2 = ADD32(n_LTP_Q14, LPC_pred_Q14)  /* Q13 */
-			tmp1 = SUB32(tmp2, tmp1)               /* Q13 */
-			tmp1 = RSHIFT_ROUND(tmp1, 4)           /* Q10 */
+			tmp1 = ADD32(n_AR_Q14, n_LF_Q14)      /* Q14 */
+			tmp2 = ADD32(n_LTP_Q14, LPC_pred_Q14) /* Q13 */
+			tmp1 = SUB32(tmp2, tmp1)              /* Q13 */
+			tmp1 = RSHIFT_ROUND(tmp1, 4)          /* Q10 */
 
 			r_Q10 = SUB32(x_Q10[i], tmp1) /* residual error Q10 */
 
@@ -472,7 +472,7 @@ func noiseShapeQuantizerDelDec(NSQ *NsqState, psDelDec []nsqDelDecStruct, signal
 			psSS[1].xq_Q14 = xq_Q14
 		}
 
-		*smpl_buf_idx = (*smpl_buf_idx - 1) & DECISION_DELAY_MASK                  /* Index to newest samples              */
+		*smpl_buf_idx = (*smpl_buf_idx - 1) & DECISION_DELAY_MASK              /* Index to newest samples              */
 		last_smple_idx = (*smpl_buf_idx + decisionDelay) & DECISION_DELAY_MASK /* Index to decisionDelay old samples   */
 
 		/* Find winner */

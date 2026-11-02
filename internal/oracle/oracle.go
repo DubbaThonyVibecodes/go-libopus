@@ -647,6 +647,10 @@ func RunEnc(args []string, in []int16) (*EncResult, error) {
 			}
 		}
 		if randomFec && lcg.Next()%30 == 0 {
+			// gen.c writes OPUS_SET_INBAND_FEC(lcg()%4 == 0); the C macro
+			// __opus_check_int(x) evaluates x twice (once in a discarded
+			// type check, once for the value), so the oracle draws twice.
+			lcg.Next()
 			v := int32(0)
 			if lcg.Next()%4 == 0 {
 				v = 1

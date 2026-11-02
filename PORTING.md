@@ -67,3 +67,19 @@ conversions in Go, which have identical semantics.
   request constants and the same big switch.
 * Error codes stay negative ints in the low-level packages; the wrapper turns
   them into `error` values.
+
+## Known deviations from a literal translation
+
+* `silk.StereoLRToMS` / `silk.StereoMSToLR`: the C code indexes two samples
+  before the `x1`/`x2` pointers. The Go slices start two samples *before*
+  the frame (callers pass `inputBuf[:]`, not `inputBuf[2:]`); see the doc
+  comments.
+* `silk.LTPAnalysisFilterFIX` takes an explicit `x_idx` because the C reads
+  up to `max(pitchL)+2` samples behind `x`.
+* `celt.CELTDecoder` allocates two extra samples of decode memory because
+  `celt_decode_lost` runs the comb filter with a zero period before the first
+  packet and the C reads (harmlessly) past the buffer.
+* The oracle twin (`internal/oracle`) mirrors two quirks of the C driver:
+  the `__opus_check_int` macro evaluates its argument twice (an extra LCG
+  draw in `--random-fec`), and `gen info` prints the previous packet's TOC
+  when parsing fails.

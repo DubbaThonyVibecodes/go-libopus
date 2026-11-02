@@ -67,6 +67,51 @@ var CB_lags_stage3 = [PE_MAX_NB_SUBFR][PE_NB_CBKS_STAGE3_MAX]int8{
 	},
 }
 
+var Lag_range_stage3 = [SILK_PE_MAX_COMPLEX + 1][PE_MAX_NB_SUBFR][2]int8{
+	{
+		{
+			-5, 8,
+		},
+		{
+			-1, 6,
+		},
+		{
+			-1, 6,
+		},
+		{
+			-4, 10,
+		},
+	},
+	{
+		{
+			-6, 10,
+		},
+		{
+			-2, 6,
+		},
+		{
+			-1, 6,
+		},
+		{
+			-5, 10,
+		},
+	},
+	{
+		{
+			-9, 12,
+		},
+		{
+			-3, 7,
+		},
+		{
+			-2, 7,
+		},
+		{
+			-7, 13,
+		},
+	},
+}
+
 var nb_cbk_searchs_stage3 = [SILK_PE_MAX_COMPLEX + 1]int8{
 	PE_NB_CBKS_STAGE3_MIN, PE_NB_CBKS_STAGE3_MID, PE_NB_CBKS_STAGE3_MAX,
 }
