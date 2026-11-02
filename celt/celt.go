@@ -4,7 +4,7 @@ package celt
 // (celt_encoder.go) and the decoder (celt_decoder.go).
 
 // PACKAGE_VERSION mirrors the upstream version this port tracks.
-const PACKAGE_VERSION = "1.3.1"
+const PACKAGE_VERSION = "1.5.2"
 
 // AnalysisInfo is the C struct AnalysisInfo (celt.h). It is filled by the
 // opus package's analysis code (analysis.c) and passed to the CELT encoder
